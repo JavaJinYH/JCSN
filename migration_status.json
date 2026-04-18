@@ -1,9 +1,9 @@
 {
-  "version": "v2.12",
+  "version": "v2.13",
   "lastUpdated": "2026-04-18",
   "currentPhase": "Phase 8",
-  "currentTask": "业务规则实现",
-  "currentAction": "完成BIZ-1利润率警告和BIZ-2价格波动标记",
+  "currentTask": "进货退货功能",
+  "currentAction": "添加PurchaseReturn/PurchaseReturnItem模型，支持特殊商品按当日市场价退货",
   "completedPhases": ["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5", "Phase 6", "Phase 7", "Phase 8"],
   "completedTasks": [
     "P1-T1", "P1-T2", "P1-T3", "P1-T4", "P1-T5", "P1-T6", "P1-T7", "P1-T8", "P1-T9",
@@ -16,19 +16,10 @@
     "P8-T1", "P8-T2", "P8-T3",
     "CODE-REVIEW-1", "CODE-REVIEW-2", "CODE-REVIEW-3", "CODE-REVIEW-4",
     "BIZ-DOC-1", "BIZ-DOC-2", "BIZ-DOC-3", "BIZ-DOC-4",
-    "BIZ-1", "BIZ-2"
+    "BIZ-1", "BIZ-2", "BIZ-3"
   ],
   "inProgressFiles": [],
-  "nextSteps": ["Phase 9: 集成测试", "BIZ-3: 特殊商品退货按市场价处理（需先实现进货退货功能）"],
-  "pendingChanges": [
-    {
-      "id": "BIZ-3",
-      "task": "特殊商品退货按市场价处理",
-      "description": "退货时如果是特殊商品（isPriceVolatile=true），弹出对话框输入当日市场价格。需要先实现进货退货功能。",
-      "files": ["待定"],
-      "priority": "medium",
-      "dependsOn": "进货退货功能（PurchaseReturn）"
-    }
-  ],
-  "notes": "Phase 1-8全部完成。BIZ-1(利润率警告)和BIZ-2(isPriceVolatile)已完成。BIZ-3待实现进货退货功能后完成。"
+  "nextSteps": ["Phase 9: 集成测试"],
+  "pendingChanges": [],
+  "notes": "Phase 1-8全部完成。BIZ-1/2/3全部完成。SPEC.md更新至v4.7，MIGRATION_PLAN已同步进货退货规则。"
 }

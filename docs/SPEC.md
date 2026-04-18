@@ -2047,6 +2047,10 @@ supplier
 40. **SaleReturnItem** - 退货明细
 41. **BadDebtWriteOff** - 坏账处理记录
 
+### 29.6 进货退货模型（v4.7 新增）
+42. **PurchaseReturn** - 进货退货记录
+43. **PurchaseReturnItem** - 退货明细（含 marketPrice 字段用于价格波动商品）
+
 ---
 
 ## 30. 核心经营规则（v4.6 新增）
@@ -2114,6 +2118,7 @@ supplier
 
 | 版本 | 日期 | 更新内容 | 变更人 |
 |------|------|----------|--------|
+| v4.7 | 2026-04-18 | **进货退货功能**：<br>1. 新增PurchaseReturn/PurchaseReturnItem模型<br>2. 支持特殊商品按当日市场价退货<br>3. Product.isPriceVolatile标记字段<br>4. ProductEdit页面支持价格波动标记 | 系统 |
 | v4.6 | 2026-04-18 | **代码审查修复**：<br>1. SaleNew.tsx CartItem添加costPrice/salePrice字段，修复亏本警告计算<br>2. SaleOrder添加needDelivery/deliveryAddress/deliveryFee配送字段<br>3. Reports.tsx商品统计改用saleDate而非createdAt<br>4. Prisma迁移添加delivery字段 | 系统 |
 | v4.5 | 2026-04-18 | **商品体系与高级功能**：<br>1. 新增Brand/ProductSpec/CustomerPrice商品多规格体系<br>2. 新增SaleReturn/SaleReturnItem退货管理<br>3. 新增BadDebtWriteOff坏账处理<br>4. 新增应付金额直接编辑和亏本警告机制<br>5. 新增AuditLogs操作日志页面<br>6. 新增PurchaseHistory进货历史页面<br>7. 新增Contact.valueScore客户评分字段<br>8. 新增Products.tsx初始库存导入功能<br>9. 新增LegacyBills.tsx历史账单迁移页面<br>10. 新增backup.ts/restore.ts数据备份恢复脚本<br>11. 照片存储路径修复（findProjectRoot自动查找） | 系统 |
 | v4.4 | 2026-04-18 | 文档同步优化：<br>1. 补充 Contact.contactType 枚举定义<br>2. 统一 Entity 称为"结账主体"<br>3. 补充 Supplier 供应商模块设计<br>4. 更新导航菜单（新增 Contacts、Entities）<br>5. 更新 IPC 模型列表 | 系统 |
@@ -2124,7 +2129,7 @@ supplier
 
 ---
 
-*文档版本: 4.6*
+*文档版本: 4.7*
 *创建日期: 2024-01-15*
 *最后更新: 2026-04-18*
-*更新说明: v4.6更新 - 代码审查修复：CartItem添加costPrice/salePrice、SaleOrder添加配送字段、Reports统计逻辑修复*
+*更新说明: v4.7更新 - 进货退货功能PurchaseReturn/PurchaseReturnItem、价格波动商品标记*

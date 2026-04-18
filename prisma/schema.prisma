@@ -39,6 +39,7 @@ model Product {
   favoriteProducts CustomerFavoriteProduct[]
   productSpecs     ProductSpec[]
   returnItems      SaleReturnItem[]
+  purchaseReturns  PurchaseReturnItem[]
   createdAt        DateTime                  @default(now())
   updatedAt        DateTime                  @updatedAt
 }
@@ -96,6 +97,34 @@ model Purchase {
   batchNo      String?
   photos       PurchasePhoto[]
   createdAt    DateTime        @default(now())
+
+  returns      PurchaseReturn[]
+}
+
+model PurchaseReturn {
+  id            String   @id @default(cuid())
+  purchaseId    String
+  purchase      Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  returnDate    DateTime @default(now())
+  totalAmount   Float
+  remark        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  items         PurchaseReturnItem[]
+}
+
+model PurchaseReturnItem {
+  id               String   @id @default(cuid())
+  purchaseReturnId String
+  purchaseReturn   PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  returnQuantity   Float
+  unitPrice        Float
+  amount           Float
+  marketPrice      Float?
+  createdAt        DateTime @default(now())
 }
 
 model Customer {
