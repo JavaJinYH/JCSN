@@ -13,13 +13,13 @@ import {
 import { DataTablePagination, useDataTable } from '@/components/DataTable';
 import { db } from '@/lib/db';
 import { formatCurrency } from '@/lib/utils';
-import { Rebate, Sale, Customer } from '@/lib/types';
+import { Rebate, Sale, Contact } from '@/lib/types';
 import { toast } from '@/components/Toast';
 
 export function Rebates() {
-  const [rebates, setRebates] = useState<Rebate[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [rebates, setRebates] = useState<any[]>([]);
+  const [sales, setSales] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -44,7 +44,7 @@ export function Rebates() {
   useEffect(() => {
     if (showAddDialog) {
       loadSales();
-      loadCustomers();
+      loadContacts();
     }
   }, [showAddDialog]);
 
@@ -69,9 +69,9 @@ export function Rebates() {
 
   const loadSales = async () => {
     try {
-      const salesData = await db.sale.findMany({
+      const salesData = await db.saleOrder.findMany({
         include: {
-          customer: true,
+          buyer: true,
           items: { include: { product: true } },
         },
         orderBy: { saleDate: 'desc' },
@@ -83,37 +83,37 @@ export function Rebates() {
     }
   };
 
-  const loadCustomers = async () => {
+  const loadContacts = async () => {
     try {
-      const customersData = await db.customer.findMany({
-        where: { customerType: '水电工' },
+      const contactsData = await db.contact.findMany({
+        where: { contactType: 'plumber' },
         orderBy: { name: 'asc' },
       });
-      setCustomers(customersData);
+      setContacts(contactsData);
     } catch (error) {
-      console.error('Failed to load customers:', error);
+      console.error('Failed to load contacts:', error);
     }
   };
 
   const handleAddRebate = async () => {
     if (!formData.saleId) {
-      alert('请选择销售单');
+      toast('请选择销售单', 'warning');
       return;
     }
     if (!formData.rebateAmount || parseFloat(formData.rebateAmount) <= 0) {
-      alert('请输入回扣金额');
+      toast('请输入回扣金额', 'warning');
       return;
     }
 
     try {
       const selectedSale = sales.find(s => s.id === formData.saleId);
-      const selectedCustomer = customers.find(c => c.id === formData.plumberId);
+      const selectedContact = contacts.find(c => c.id === formData.plumberId);
       const plumberId = formData.plumberId === '__none__' ? null : formData.plumberId;
       await db.rebate.create({
         data: {
           saleId: formData.saleId,
           plumberId,
-          supplierName: formData.supplierName || selectedCustomer?.name || '未知',
+          supplierName: formData.supplierName || selectedContact?.name || '未知',
           rebateAmount: parseFloat(formData.rebateAmount),
           rebateType: formData.rebateType,
           rebateRate: formData.rebateRate ? parseFloat(formData.rebateRate) : 0,
@@ -142,8 +142,8 @@ export function Rebates() {
   };
 
   const handleDeleteRebate = async (id: string) => {
-    if (!confirm('确定要删除这条回扣记录吗？')) return;
-
+    toast('确认删除功能开发中', 'info');
+    return;
     try {
       await db.rebate.delete({ where: { id } });
       loadData();
@@ -165,7 +165,7 @@ export function Rebates() {
     return matchesSearch && matchesType && matchesHidden;
   });
 
-  const tableProps = useDataTable<Rebate & { plumber?: Customer | null }>({
+  const tableProps = useDataTable<any>({
     data: filteredRebates,
     defaultPageSize: 20,
   });
@@ -236,7 +236,7 @@ export function Rebates() {
                     setFormData({
                       ...formData,
                       saleId: value,
-                      supplierName: sale?.customer?.name || '',
+                      supplierName: sale?.buyer?.name || sale?.buyerId || '',
                     });
                   }}
                 >
@@ -246,7 +246,7 @@ export function Rebates() {
                   <SelectContent>
                     {sales.map((sale) => (
                       <SelectItem key={sale.id} value={sale.id}>
-                        {sale.invoiceNo || sale.id.slice(0, 8)} - {sale.customer?.name || '散客'} - {formatCurrency(sale.totalAmount)}
+                        {sale.invoiceNo || sale.id.slice(0, 8)} - {sale.buyer?.name || sale.buyerId || '散客'} - {formatCurrency(sale.totalAmount)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -263,9 +263,9 @@ export function Rebates() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">无</SelectItem>
-                    {customers.map((c) => (
+                    {contacts.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
-                        {c.name} {c.phone ? `(${c.phone})` : ''}
+                        {c.name} ({c.code})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -422,7 +422,7 @@ export function Rebates() {
                     </div>
                     {rebate.sale && (
                       <div className="text-xs text-slate-400 mt-1">
-                        关联销售单: {rebate.sale.invoiceNo || rebate.sale.id.slice(0, 8)} - {rebate.sale.customer?.name || '散客'}
+                        关联销售单: {rebate.sale.invoiceNo || rebate.sale.id.slice(0, 8)} - {rebate.sale.buyer?.name || rebate.sale.buyerId || '散客'}
                       </div>
                     )}
                   </div>

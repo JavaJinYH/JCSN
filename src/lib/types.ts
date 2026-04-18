@@ -30,6 +30,18 @@ export interface Product {
   updatedAt: Date;
 }
 
+export interface Supplier {
+  id: string;
+  code: string;
+  name: string;
+  contactId: string | null;
+  phone: string | null;
+  address: string | null;
+  remark: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface Purchase {
   id: string;
   productId: string;
@@ -37,7 +49,9 @@ export interface Purchase {
   quantity: number;
   unitPrice: number;
   totalAmount: number;
-  supplier: string | null;
+  supplierId: string | null;
+  supplier?: Supplier | null;
+  supplierName: string | null;
   purchaseDate: Date;
   remark: string | null;
   batchNo: string | null;
@@ -183,9 +197,9 @@ export interface SystemSetting {
 export interface Rebate {
   id: string;
   saleId: string;
-  sale?: Sale;
+  sale?: SaleOrder;
   plumberId: string | null;
-  plumber?: Customer | null;
+  plumber?: Contact | null;
   supplierName: string;
   rebateAmount: number;
   rebateType: string;
@@ -426,10 +440,12 @@ export interface InventoryCheckItem {
 
 export interface Contact {
   id: string;
+  code: string;
   name: string;
   primaryPhone: string;
   address: string | null;
   remark: string | null;
+  contactType: string;
   createdAt: Date;
   updatedAt: Date;
   phones?: ContactPhone[];

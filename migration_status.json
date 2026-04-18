@@ -1,16 +1,21 @@
 {
   "version": "v2.1",
   "lastUpdated": "2026-04-18",
-  "currentPhase": "Phase 2",
+  "currentPhase": "Phase 3",
   "currentTask": "已完成",
-  "currentAction": "Phase 2 测试数据创建已完成",
-  "completedPhases": ["Phase 1", "Phase 2"],
-  "completedTasks": ["P1-T1", "P1-T2", "P1-T3", "P1-T4", "P1-T5", "P1-T6", "P1-T7", "P1-T8", "P1-T9", "P2-T1", "P2-T2", "P2-T3", "P2-T4", "P2-T5", "P2-T6", "P2-T7"],
+  "currentAction": "Phase 3 前端基础改造已完成",
+  "completedPhases": ["Phase 1", "Phase 2", "Phase 3"],
+  "completedTasks": ["P1-T1", "P1-T2", "P1-T3", "P1-T4", "P1-T5", "P1-T6", "P1-T7", "P1-T8", "P1-T9", "P2-T1", "P2-T2", "P2-T3", "P2-T4", "P2-T5", "P2-T6", "P2-T7", "P3-T1", "P3-T2", "P3-T3", "P3-T4"],
   "inProgressFiles": [],
   "nextSteps": [
-    "Phase 3: 前端基础改造",
-    "P3-T1: Contacts.tsx添加类型筛选"
+    "Phase 4: 核心业务页面",
+    "P4-T1: 欠款统计Tab1-按联系人",
+    "P4-T2: 欠款统计Tab1-按公司",
+    "P4-T3: 欠款统计Tab1-按项目",
+    "P4-T4: 欠款统计Tab2-我应付",
+    "P4-T5: Projects.tsx项目关联公司",
+    "P4-T6: Entities.tsx公司管理"
   ],
   "pendingChanges": [],
-  "notes": "Phase 2完成。新建seed.js适配新架构，创建了Contact、Entity、BizProject、Supplier测试数据。Rebate.sale改为关联SaleOrder。Sale.rebates移除，SaleOrder.rebates添加。"
+  "notes": "Phase 3完成。Contacts.tsx添加了类型筛选（客户/水电工/公司）和编号显示。Rebates.tsx改为Contact选择。Purchases.tsx改为Supplier选择。alert改为toast。"
 }

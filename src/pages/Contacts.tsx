@@ -33,11 +33,13 @@ import type { Contact, ContactPhone, Entity, BizProject } from '@/lib/types';
 
 interface PersonInfo {
   id: string;
+  code: string;
   name: string;
   primaryPhone: string;
   otherPhones: string[];
   address: string | null;
   remark: string | null;
+  contactType: string;
   totalSpent: number;
   orderCount: number;
   lastOrderDate: Date | null;
@@ -49,6 +51,7 @@ export function Contacts() {
   const [persons, setPersons] = useState<PersonInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('__all__');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editContact, setEditContact] = useState<Contact | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
@@ -59,9 +62,11 @@ export function Contacts() {
   const [detailProjects, setDetailProjects] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     name: '',
+    code: '',
     primaryPhone: '',
     address: '',
     remark: '',
+    contactType: 'customer',
   });
 
   useEffect(() => {
@@ -94,11 +99,13 @@ export function Contacts() {
 
           return {
             id: contact.id,
+            code: contact.code,
             name: contact.name,
             primaryPhone: contact.primaryPhone,
             otherPhones: contact.phones?.filter(p => !p.isPrimary).map(p => p.phone) || [],
             address: contact.address,
             remark: contact.remark,
+            contactType: contact.contactType,
             totalSpent,
             orderCount: orders.length,
             lastOrderDate: lastOrder?.saleDate || null,
@@ -121,9 +128,11 @@ export function Contacts() {
     const matchesSearch =
       !searchTerm ||
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.primaryPhone.includes(searchTerm) ||
       p.otherPhones.some(phone => phone.includes(searchTerm));
-    return matchesSearch;
+    const matchesType = typeFilter === '__all__' || p.contactType === typeFilter;
+    return matchesSearch && matchesType;
   });
 
   const tableProps = useDataTable<PersonInfo>({
@@ -150,17 +159,22 @@ export function Contacts() {
         return;
       }
 
+      const contactCount = await db.contact.count();
+      const newCode = `C${String(contactCount + 1).padStart(3, '0')}`;
+
       await db.contact.create({
         data: {
+          code: newCode,
           name: formData.name.trim(),
           primaryPhone: formData.primaryPhone.trim(),
           address: formData.address.trim() || null,
           remark: formData.remark.trim() || null,
+          contactType: formData.contactType,
         },
       });
 
       setShowAddDialog(false);
-      setFormData({ name: '', primaryPhone: '', address: '', remark: '' });
+      setFormData({ name: '', code: '', primaryPhone: '', address: '', remark: '', contactType: 'customer' });
       loadData();
       toast('添加成功', 'success');
     } catch (error) {
@@ -174,9 +188,11 @@ export function Contacts() {
     if (!contact) return;
     setFormData({
       name: contact.name,
+      code: contact.code,
       primaryPhone: contact.primaryPhone,
       address: contact.address || '',
       remark: contact.remark || '',
+      contactType: contact.contactType,
     });
     setEditContact(contact);
   };
@@ -210,6 +226,7 @@ export function Contacts() {
           primaryPhone: formData.primaryPhone.trim(),
           address: formData.address.trim() || null,
           remark: formData.remark.trim() || null,
+          contactType: formData.contactType,
         },
       });
 
@@ -313,11 +330,23 @@ export function Contacts() {
         <CardHeader>
           <div className="flex items-center gap-3 flex-wrap">
             <Input
-              placeholder="搜索姓名、手机号..."
+              placeholder="搜索姓名、编号、手机号..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-64 h-8"
             />
+
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-32 h-8">
+                <SelectValue placeholder="选择类型" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">全部类型</SelectItem>
+                <SelectItem value="customer">客户</SelectItem>
+                <SelectItem value="plumber">水电工</SelectItem>
+                <SelectItem value="company">公司联系人</SelectItem>
+              </SelectContent>
+            </Select>
 
             {searchTerm && (
               <Button
@@ -337,7 +366,9 @@ export function Contacts() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>编号</TableHead>
                 <TableHead>姓名</TableHead>
+                <TableHead>类型</TableHead>
                 <TableHead>主手机号</TableHead>
                 <TableHead>其他电话</TableHead>
                 <TableHead>关联主体</TableHead>
@@ -357,7 +388,13 @@ export function Contacts() {
               ) : (
                 tableProps.data.map((person) => (
                   <TableRow key={person.id}>
+                    <TableCell className="font-mono text-slate-500">{person.code}</TableCell>
                     <TableCell className="font-medium">{person.name}</TableCell>
+                    <TableCell>
+                      {person.contactType === 'customer' && <Badge variant="outline" className="bg-blue-50">客户</Badge>}
+                      {person.contactType === 'plumber' && <Badge variant="outline" className="bg-green-50">水电工</Badge>}
+                      {person.contactType === 'company' && <Badge variant="outline" className="bg-purple-50">公司</Badge>}
+                    </TableCell>
                     <TableCell className="text-orange-600">{person.primaryPhone}</TableCell>
                     <TableCell className="text-slate-500 text-sm">
                       {person.otherPhones.length > 0 ? person.otherPhones.join(', ') : '-'}
@@ -441,6 +478,21 @@ export function Contacts() {
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">
+                联系人类型
+              </label>
+              <Select value={formData.contactType} onValueChange={(v) => setFormData({ ...formData, contactType: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="customer">客户</SelectItem>
+                  <SelectItem value="plumber">水电工</SelectItem>
+                  <SelectItem value="company">公司联系人</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">
                 主手机号 <span className="text-red-500">*</span>
               </label>
               <Input
@@ -490,6 +542,21 @@ export function Contacts() {
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="输入联系人姓名"
               />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">
+                联系人类型
+              </label>
+              <Select value={formData.contactType} onValueChange={(v) => setFormData({ ...formData, contactType: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="customer">客户</SelectItem>
+                  <SelectItem value="plumber">水电工</SelectItem>
+                  <SelectItem value="company">公司联系人</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">

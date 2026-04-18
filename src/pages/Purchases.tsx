@@ -29,7 +29,7 @@ import { PhotoUpload } from '@/components/PhotoUpload';
 import { DataTablePagination, useDataTable } from '@/components/DataTable';
 import { db } from '@/lib/db';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
-import type { Purchase, Product, Category } from '@/lib/types';
+import type { Purchase, Product, Category, Supplier } from '@/lib/types';
 import { PhotoViewer } from '@/components/PhotoViewer';
 import { PhotoThumbnail } from '@/components/PhotoThumbnail';
 import { toast } from '@/components/Toast';
@@ -43,6 +43,7 @@ export function Purchases() {
   const [purchases, setPurchases] = useState<(Purchase & { product: Product })[]>([]);
   const [products, setProducts] = useState<(Product & { category: Category })[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<string>('');
@@ -54,7 +55,7 @@ export function Purchases() {
     productId: '',
     quantity: '',
     unitPrice: '',
-    supplier: '',
+    supplierId: '',
     batchNo: '',
     remark: '',
   });
@@ -72,6 +73,7 @@ export function Purchases() {
   useEffect(() => {
     if (showAddDialog) {
       loadProducts();
+      loadSuppliers();
     }
   }, [showAddDialog]);
 
@@ -84,6 +86,17 @@ export function Purchases() {
       setProducts(productsData);
     } catch (error) {
       console.error('Failed to load products:', error);
+    }
+  };
+
+  const loadSuppliers = async () => {
+    try {
+      const suppliersData = await db.supplier.findMany({
+        orderBy: { name: 'asc' },
+      });
+      setSuppliers(suppliersData);
+    } catch (error) {
+      console.error('Failed to load suppliers:', error);
     }
   };
 
@@ -141,7 +154,8 @@ export function Purchases() {
     const matchesSearch =
       !searchTerm ||
       p.product?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.supplier?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p as any).supplier?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.supplierName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.batchNo?.toLowerCase().includes(searchTerm.toLowerCase());
     const purchaseDate = new Date(p.purchaseDate);
     const matchesDateStart = !dateRange.start || purchaseDate >= new Date(dateRange.start);
@@ -170,7 +184,8 @@ export function Purchases() {
           quantity,
           unitPrice,
           totalAmount: quantity * unitPrice,
-          supplier: formData.supplier || null,
+          supplierId: formData.supplierId === '__none__' ? null : formData.supplierId,
+          supplierName: formData.supplierId === '__none__' ? null : suppliers.find(s => s.id === formData.supplierId)?.name,
           batchNo: formData.batchNo || null,
           purchaseDate: new Date(),
           remark: formData.remark || null,
@@ -219,16 +234,16 @@ export function Purchases() {
         productId: '',
         quantity: '',
         unitPrice: '',
-        supplier: '',
+        supplierId: '',
         batchNo: '',
         remark: '',
       });
       setPhotos([]);
       loadData();
-      alert('进货记录添加成功！');
+      toast('进货记录添加成功！', 'success');
     } catch (error) {
       console.error('Failed to add purchase:', error);
-      alert('添加失败，请重试');
+      toast('添加失败，请重试', 'error');
     }
   };
 
@@ -368,7 +383,7 @@ export function Purchases() {
                     <TableCell className="text-right font-mono">{purchase.quantity}</TableCell>
                     <TableCell className="text-right font-mono">{formatCurrency(purchase.unitPrice)}</TableCell>
                     <TableCell className="text-right font-mono text-green-600">{formatCurrency(purchase.totalAmount)}</TableCell>
-                    <TableCell className="text-slate-500">{purchase.supplier || '-'}</TableCell>
+                    <TableCell className="text-slate-500">{(purchase as any).supplier?.name || purchase.supplierName || '-'}</TableCell>
                     <TableCell>
                       <Button variant="ghost" size="sm" onClick={() => handleViewPurchase(purchase.id)}>
                         查看
@@ -472,11 +487,19 @@ export function Purchases() {
 
             <div>
               <label className="text-sm font-medium mb-2 block">供应商</label>
-              <Input
-                value={formData.supplier}
-                onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                placeholder="可选"
-              />
+              <Select value={formData.supplierId} onValueChange={(v) => setFormData({ ...formData, supplierId: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择供应商（可选）" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">无</SelectItem>
+                  {suppliers.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name} ({s.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
@@ -542,7 +565,7 @@ export function Purchases() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <div className="text-sm text-slate-500">供应商</div>
-                  <div>{selectedPurchase.supplier || '-'}</div>
+                  <div>{selectedPurchase.supplier?.name || selectedPurchase.supplierName || '-'}</div>
                 </div>
                 <div>
                   <div className="text-sm text-slate-500">进货数量</div>
