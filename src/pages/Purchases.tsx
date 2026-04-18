@@ -66,6 +66,74 @@ export function Purchases() {
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
   const [photoViewerIndex, setPhotoViewerIndex] = useState(0);
 
+  const [showReturnDialog, setShowReturnDialog] = useState(false);
+  const [returnPurchase, setReturnPurchase] = useState<PurchaseWithDetails | null>(null);
+  const [returnQuantity, setReturnQuantity] = useState('');
+  const [showMarketPriceDialog, setShowMarketPriceDialog] = useState(false);
+  const [marketPrice, setMarketPrice] = useState('');
+
+  const handleOpenReturnDialog = (purchase: PurchaseWithDetails) => {
+    setReturnPurchase(purchase);
+    setReturnQuantity('');
+    setMarketPrice('');
+    setShowReturnDialog(true);
+  };
+
+  const handleReturnConfirm = async () => {
+    if (!returnPurchase || !returnQuantity) {
+      toast('请填写退货数量', 'warning');
+      return;
+    }
+
+    const qty = parseFloat(returnQuantity);
+    if (qty <= 0 || qty > returnPurchase.quantity) {
+      toast('退货数量必须大于0且不超过原进货数量', 'warning');
+      return;
+    }
+
+    if (returnPurchase.product.isPriceVolatile && !marketPrice) {
+      setShowMarketPriceDialog(true);
+      return;
+    }
+
+    await createReturnRecord(qty, returnPurchase.product.isPriceVolatile ? parseFloat(marketPrice) : returnPurchase.unitPrice);
+  };
+
+  const createReturnRecord = async (qty: number, unitPrice: number) => {
+    try {
+      await db.purchaseReturn.create({
+        data: {
+          purchaseId: returnPurchase!.id,
+          totalAmount: qty * unitPrice,
+          items: {
+            create: {
+              productId: returnPurchase!.productId,
+              returnQuantity: qty,
+              unitPrice: unitPrice,
+              amount: qty * unitPrice,
+              marketPrice: returnPurchase!.product.isPriceVolatile ? unitPrice : null,
+            },
+          },
+        },
+      });
+
+      await db.product.update({
+        where: { id: returnPurchase!.productId },
+        data: { stock: { decrement: qty } },
+      });
+
+      setShowReturnDialog(false);
+      setShowMarketPriceDialog(false);
+      setReturnQuantity('');
+      setMarketPrice('');
+      loadData();
+      toast('退货记录创建成功！', 'success');
+    } catch (error) {
+      console.error('Failed to create return:', error);
+      toast('退货失败，请重试', 'error');
+    }
+  };
+
   useEffect(() => {
     loadData();
   }, []);
@@ -616,6 +684,18 @@ export function Purchases() {
                   <div className="bg-slate-50 p-3 rounded-lg text-slate-600">{selectedPurchase.remark}</div>
                 </div>
               )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setViewDialogOpen(false);
+                    handleOpenReturnDialog(selectedPurchase);
+                  }}
+                >
+                  退货
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
@@ -629,6 +709,127 @@ export function Purchases() {
           initialIndex={photoViewerIndex}
         />
       )}
+
+      <Dialog open={showReturnDialog} onOpenChange={setShowReturnDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>进货退货</DialogTitle>
+          </DialogHeader>
+          {returnPurchase && (
+            <div className="space-y-4 py-4">
+              <div className="bg-slate-50 p-3 rounded-lg">
+                <div className="text-sm text-slate-500">商品名称</div>
+                <div className="font-bold">{returnPurchase.product.name}</div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm text-slate-500">原进货数量</div>
+                  <div className="font-bold">{returnPurchase.quantity}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-500">原进货单价</div>
+                  <div className="font-bold font-mono">{formatCurrency(returnPurchase.unitPrice)}</div>
+                </div>
+              </div>
+
+              {returnPurchase.product.isPriceVolatile && (
+                <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg text-sm">
+                  <span className="text-yellow-700">⚠️ 这是价格波动商品，退货时需要输入当日市场价格</span>
+                </div>
+              )}
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  退货数量 <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="number"
+                  value={returnQuantity}
+                  onChange={(e) => setReturnQuantity(e.target.value)}
+                  placeholder="0"
+                  min="1"
+                  max={returnPurchase.quantity}
+                />
+                <div className="text-xs text-slate-500 mt-1">
+                  最多可退: {returnPurchase.quantity} {returnPurchase.product.unit}
+                </div>
+              </div>
+
+              {returnQuantity && (
+                <div className="bg-orange-50 p-3 rounded-lg">
+                  <div className="text-sm text-slate-500">退货金额</div>
+                  <div className="text-xl font-bold text-orange-600">
+                    {returnPurchase.product.isPriceVolatile
+                      ? marketPrice
+                        ? formatCurrency(parseFloat(returnQuantity) * parseFloat(marketPrice))
+                        : '需输入市场价'
+                      : formatCurrency(parseFloat(returnQuantity) * returnPurchase.unitPrice)}
+                  </div>
+                  {returnPurchase.product.isPriceVolatile && !marketPrice && (
+                    <div className="text-xs text-orange-600 mt-1">请在下方输入今日的市场价</div>
+                  )}
+                </div>
+              )}
+
+              {returnPurchase.product.isPriceVolatile && (
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    今日市场价 (元) <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="number"
+                    value={marketPrice}
+                    onChange={(e) => setMarketPrice(e.target.value)}
+                    placeholder="请输入今日市场价格"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReturnDialog(false)}>取消</Button>
+            <Button onClick={handleReturnConfirm}>确认退货</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showMarketPriceDialog} onOpenChange={setShowMarketPriceDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>输入今日市场价格</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-slate-600 mb-4">
+              <span className="font-bold">{returnPurchase?.product.name}</span> 是价格波动商品，请输入今日的市场价格：
+            </p>
+            <Input
+              type="number"
+              value={marketPrice}
+              onChange={(e) => setMarketPrice(e.target.value)}
+              placeholder="今日市场价格"
+              min="0"
+              step="0.01"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowMarketPriceDialog(false)}>取消</Button>
+            <Button
+              onClick={() => {
+                setShowMarketPriceDialog(false);
+                if (returnPurchase && returnQuantity && marketPrice) {
+                  createReturnRecord(parseFloat(returnQuantity), parseFloat(marketPrice));
+                }
+              }}
+            >
+              确认市场价
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
