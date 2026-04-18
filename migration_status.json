@@ -1,10 +1,10 @@
 {
-  "version": "v2.13",
+  "version": "v2.15",
   "lastUpdated": "2026-04-18",
-  "currentPhase": "Phase 8",
-  "currentTask": "进货退货功能",
-  "currentAction": "添加PurchaseReturn/PurchaseReturnItem模型，支持特殊商品按当日市场价退货",
-  "completedPhases": ["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5", "Phase 6", "Phase 7", "Phase 8"],
+  "currentPhase": "Phase 9",
+  "currentTask": "集成测试完成",
+  "currentAction": "Phase 9 集成测试验证通过",
+  "completedPhases": ["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5", "Phase 6", "Phase 7", "Phase 8", "Phase 9"],
   "completedTasks": [
     "P1-T1", "P1-T2", "P1-T3", "P1-T4", "P1-T5", "P1-T6", "P1-T7", "P1-T8", "P1-T9",
     "P2-T1", "P2-T2", "P2-T3", "P2-T4", "P2-T5", "P2-T6",
@@ -14,12 +14,41 @@
     "P6-T1", "P6-T2", "P6-T3", "P6-T4", "P6-T5", "P6-T6",
     "P7-T1", "P7-T2", "P7-T3", "P7-T4", "P7-T5",
     "P8-T1", "P8-T2", "P8-T3",
+    "P9-T1", "P9-T2", "P9-T3",
     "CODE-REVIEW-1", "CODE-REVIEW-2", "CODE-REVIEW-3", "CODE-REVIEW-4",
     "BIZ-DOC-1", "BIZ-DOC-2", "BIZ-DOC-3", "BIZ-DOC-4",
-    "BIZ-1", "BIZ-2", "BIZ-3"
+    "BIZ-1", "BIZ-2", "BIZ-3",
+    "BUG-FIX-1"
+  ],
+  "pendingTasks": [
+    {
+      "id": "PENDING-1",
+      "name": "进货单完整流程",
+      "description": "库存预警→勾选商品→一键生成进货单草稿→编辑→发送供应商→配送跟踪→到货核对→缺货/退货/换货处理",
+      "phase": "Phase 10",
+      "subTasks": [
+        "P10-T1: Purchase模型添加status字段(draft/sent/delivered/completed)",
+        "P10-T2: 库存预警页面添加'生成进货单'按钮",
+        "P10-T3: 创建PurchaseDraft编辑页面",
+        "P10-T4: 进货单配送状态管理",
+        "P10-T5: 到货核对功能",
+        "P10-T6: 供应商退货/换货处理"
+      ]
+    },
+    {
+      "id": "PENDING-2",
+      "name": "息屏自动锁定",
+      "description": "N分钟无操作后自动弹出登录框，界面模糊化，需输入密码解锁",
+      "phase": "Phase 11",
+      "subTasks": [
+        "P11-T1: 添加息屏时间设置(可在系统设置中配置)",
+        "P11-T2: 实现息屏检测逻辑(监听鼠标键盘事件)",
+        "P11-T3: 登录弹窗组件",
+        "P11-T4: 界面模糊化效果"
+      ]
+    }
   ],
   "inProgressFiles": [],
-  "nextSteps": ["Phase 9: 集成测试"],
-  "pendingChanges": [],
-  "notes": "Phase 1-8全部完成。BIZ-1/2/3全部完成。SPEC.md更新至v4.7，MIGRATION_PLAN已同步进货退货规则。"
+  "nextSteps": ["P11-T1: 实现息屏自动锁定功能"],
+  "notes": "Phase 1-9全部完成！PENDING-1: 进货单完整流程(大任务), PENDING-2: 息屏自动锁定功能(即将实现)"
 }

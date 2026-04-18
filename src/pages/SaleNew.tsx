@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,10 +26,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Combobox } from '@/components/Combobox';
 import { PhotoUpload } from '@/components/PhotoUpload';
 import { db } from '@/lib/db';
-import { formatCurrency, generateInvoiceNo } from '@/lib/utils';
+import { formatCurrency, generateInvoiceNo, formatProductName } from '@/lib/utils';
 import { toast } from '@/components/Toast';
+import { sortByFrequency, recordFrequency } from '@/lib/frequency';
 import type { Product, Category, Contact, Entity, BizProject } from '@/lib/types';
 
 interface CartItem {
@@ -38,6 +40,9 @@ interface CartItem {
   unitPrice: number;
   costPrice: number;
   salePrice: number;
+  purchaseUnit: string | null;
+  saleUnit: string;
+  unitRatio: number;
 }
 
 interface PaymentInfo {
@@ -66,6 +71,12 @@ export function SaleNew() {
   const [pickerName, setPickerName] = useState('');
   const [pickerPhone, setPickerPhone] = useState('');
 
+  const [needsDelivery, setNeedsDelivery] = useState(false);
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryFee, setDeliveryFee] = useState('0');
+
+  const [deliverySuggestion, setDeliverySuggestion] = useState<string>('');
+
   const [discount, setDiscount] = useState(0);
   const [discountRate, setDiscountRate] = useState(100);
   const [remark, setRemark] = useState('');
@@ -75,8 +86,13 @@ export function SaleNew() {
   const [showLossConfirm, setShowLossConfirm] = useState(false);
 
   const [showBuyerDialog, setShowBuyerDialog] = useState(false);
-  const [newBuyerName, setNewBuyerName] = useState('');
-  const [newBuyerPhone, setNewBuyerPhone] = useState('');
+  const [newBuyer, setNewBuyer] = useState({
+    name: '',
+    primaryPhone: '',
+    address: '',
+    remark: '',
+    contactType: 'customer',
+  });
 
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [payments, setPayments] = useState<PaymentInfo[]>([
@@ -94,7 +110,7 @@ export function SaleNew() {
 
   const loadData = async () => {
     try {
-      const [productsData, categoriesData, contactsData, entitiesData] = await Promise.all([
+      let [productsData, categoriesData, contactsData, entitiesData] = await Promise.all([
         db.product.findMany({
           include: { category: true },
           orderBy: { name: 'asc' },
@@ -104,10 +120,24 @@ export function SaleNew() {
         db.entity.findMany({ orderBy: { name: 'asc' } }),
       ]);
 
+      let walkInCustomer = contactsData.find(c => c.name === '散客');
+      if (!walkInCustomer) {
+        const randomCode = 'SK' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6).toUpperCase();
+        walkInCustomer = await db.contact.create({
+          data: {
+            name: '散客',
+            code: randomCode,
+            primaryPhone: '0000000000',
+            manualTag: '○',
+          },
+        });
+        contactsData = [...contactsData, walkInCustomer];
+      }
+
       setProducts(productsData);
       setCategories(categoriesData);
-      setContacts(contactsData);
-      setEntities(entitiesData);
+      setContacts(sortByFrequency(contactsData, 'contact'));
+      setEntities(sortByFrequency(entitiesData, 'entity'));
     } catch (error) {
       console.error('[SaleNew] 加载数据失败:', error);
       toast('数据加载失败，请刷新页面重试', 'error');
@@ -115,7 +145,7 @@ export function SaleNew() {
   };
 
   const loadProjects = async () => {
-    if (!selectedEntity) {
+    if (!selectedEntity || selectedEntity === '__cash__') {
       setProjects([]);
       return;
     }
@@ -124,11 +154,32 @@ export function SaleNew() {
         where: { entityId: selectedEntity, status: '进行中' },
         orderBy: { createdAt: 'desc' },
       });
-      setProjects(projectsData);
+      setProjects(sortByFrequency(projectsData, 'project'));
     } catch (error) {
       console.error('[SaleNew] 加载项目失败:', error);
     }
   };
+
+  const contactOptions = useMemo(() => {
+    return contacts.map(c => ({
+      value: c.id,
+      label: `${c.name} (${c.primaryPhone || '无电话'})`,
+    }));
+  }, [contacts]);
+
+  const entityOptions = useMemo(() => {
+    return entities.map(e => ({
+      value: e.id,
+      label: `${e.name} ${e.entityType === 'personal' ? '(个人)' : e.entityType === 'company' ? '(公司)' : e.entityType === 'team' ? '(施工队)' : ''}`,
+    }));
+  }, [entities]);
+
+  const projectOptions = useMemo(() => {
+    return projects.map(p => ({
+      value: p.id,
+      label: `${p.name} ${p.address ? `- ${p.address}` : ''}`,
+    }));
+  }, [projects]);
 
   const loadHistoricalPrices = async (contactId: string) => {
     try {
@@ -172,17 +223,21 @@ export function SaleNew() {
     }
   }, [selectedBuyer]);
 
-  const filteredProducts = products.filter((p) => {
-    const matchesCategory =
-      selectedCategory === 'all' || p.categoryId === selectedCategory;
-    const matchesSearch =
-      !searchTerm ||
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.specification?.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const filteredProducts = sortByFrequency(
+    products.filter((p) => {
+      const matchesCategory =
+        selectedCategory === 'all' || p.categoryId === selectedCategory;
+      const matchesSearch =
+        !searchTerm ||
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.specification?.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesCategory && matchesSearch;
+    }),
+    'product'
+  );
 
   const addToCart = (product: Product) => {
+    recordFrequency('product', product.id);
     const existing = cart.find((item) => item.product.id === product.id);
     if (existing) {
       if (existing.quantity < product.stock) {
@@ -196,6 +251,7 @@ export function SaleNew() {
       }
     } else {
       const historicalPrice = historicalPrices.get(product.id);
+      const hasUnitConversion = product.purchaseUnit && product.unitRatio && product.unitRatio > 1;
       setCart([
         ...cart,
         {
@@ -204,6 +260,9 @@ export function SaleNew() {
           unitPrice: historicalPrice || product.referencePrice || 0,
           costPrice: product.lastPurchasePrice || 0,
           salePrice: product.referencePrice || 0,
+          purchaseUnit: product.purchaseUnit || null,
+          saleUnit: product.unit,
+          unitRatio: product.unitRatio || 1,
         },
       ]);
     }
@@ -228,6 +287,14 @@ export function SaleNew() {
     setCart(cart.filter((item) => item.product.id !== productId));
   };
 
+  const updateCartItem = (productId: string, updates: Partial<CartItem>) => {
+    setCart(
+      cart.map((item) =>
+        item.product.id === productId ? { ...item, ...updates } : item
+      )
+    );
+  };
+
   const subtotal = cart.reduce(
     (sum, item) => sum + item.unitPrice * item.quantity,
     0
@@ -249,42 +316,63 @@ export function SaleNew() {
   const showLowProfitWarning = profitRate < 10 && profitRate >= 0 && finalAmount > 0;
   const showLossWarning = finalAmount < costTotal && finalAmount > 0;
 
+  const totalProfit = finalAmount - costTotal;
+  useEffect(() => {
+    if (finalAmount <= 0) {
+      setDeliverySuggestion('');
+      return;
+    }
+    if (totalProfit < 10) {
+      setDeliverySuggestion('⚠️ 利润较低，建议加收配送费或由客户自提');
+    } else if (totalProfit < 50) {
+      setDeliverySuggestion('💡 利润适中，建议根据距离酌情收取配送费');
+    } else {
+      setDeliverySuggestion('✅ 利润充足，可考虑免费配送');
+    }
+  }, [totalProfit, finalAmount]);
+
   const handleMoli = () => {
     const moliAmount = Math.floor(subtotal - totalDiscount);
     setDiscount(moliAmount);
   };
 
   const handleAddBuyer = async () => {
-    if (!newBuyerName.trim()) {
+    if (!newBuyer.name.trim()) {
       toast('请输入联系人姓名', 'warning');
       return;
     }
-    if (!newBuyerPhone.trim()) {
+    if (!newBuyer.primaryPhone.trim()) {
       toast('请输入手机号', 'warning');
       return;
     }
 
     try {
-      const existing = await db.contact.findUnique({
-        where: { primaryPhone: newBuyerPhone.trim() },
+      const existing = await db.contact.findFirst({
+        where: { primaryPhone: newBuyer.primaryPhone.trim() },
       });
       if (existing) {
         toast('该手机号已被使用', 'warning');
         return;
       }
 
+      const contactCount = await db.contact.count();
+      const newCode = `C${String(contactCount + 1).padStart(3, '0')}`;
+
       const contact = await db.contact.create({
         data: {
-          name: newBuyerName.trim(),
-          primaryPhone: newBuyerPhone.trim(),
+          code: newCode,
+          name: newBuyer.name.trim(),
+          primaryPhone: newBuyer.primaryPhone.trim(),
+          address: newBuyer.address.trim() || null,
+          remark: newBuyer.remark.trim() || null,
+          contactType: newBuyer.contactType,
         },
       });
 
       setContacts([...contacts, contact]);
       setSelectedBuyer(contact.id);
       setShowBuyerDialog(false);
-      setNewBuyerName('');
-      setNewBuyerPhone('');
+      setNewBuyer({ name: '', primaryPhone: '', address: '', remark: '', contactType: 'customer' });
       toast('添加成功', 'success');
     } catch (error) {
       console.error('[SaleNew] 添加联系人失败:', error);
@@ -298,13 +386,8 @@ export function SaleNew() {
       return;
     }
 
-    if (!selectedBuyer || selectedBuyer === '__none__') {
-      toast('请选择购货人', 'warning');
-      return;
-    }
-
     if (!selectedEntity) {
-      toast('请选择付款主体', 'warning');
+      toast('请选择挂靠主体', 'warning');
       return;
     }
 
@@ -318,24 +401,45 @@ export function SaleNew() {
       return;
     }
 
+    if (writtenInvoiceNo) {
+      const existing = await db.saleOrder.findFirst({
+        where: { writtenInvoiceNo },
+      });
+      if (existing) {
+        toast('该手写单号已存在，请使用其他单号或留空', 'error');
+        return;
+      }
+    }
+
     setLoading(true);
     try {
+      const buyerId = selectedBuyer === '__none__'
+        ? contacts.find(c => c.name === '散客')?.id
+        : selectedBuyer;
+
+      const entityId = selectedEntity === '__cash__'
+        ? entities.find(e => e.entityType === 'cash')?.id || entities[0]?.id
+        : selectedEntity;
+
       const sale = await db.saleOrder.create({
         data: {
           invoiceNo: generateInvoiceNo(),
-          buyerId: selectedBuyer,
+          buyerId: buyerId!,
           payerId: selectedPayer === '__none__' ? null : selectedPayer,
           introducerId: selectedIntroducer === '__none__' ? null : selectedIntroducer,
           pickerName: pickerName || null,
           pickerPhone: pickerPhone || null,
           projectId: selectedProject === '__none__' ? null : selectedProject,
-          paymentEntityId: selectedEntity,
+          paymentEntityId: entityId!,
           totalAmount: finalAmount,
           discount: totalDiscount,
           paidAmount,
           saleDate: new Date(),
           writtenInvoiceNo: writtenInvoiceNo || null,
           remark: remark || null,
+          needDelivery: needsDelivery,
+          deliveryAddress: needsDelivery ? deliveryAddress : null,
+          deliveryFee: needsDelivery ? parseFloat(deliveryFee) || 0 : 0,
           items: {
             create: cart.map((item) => ({
               productId: item.product.id,
@@ -367,6 +471,20 @@ export function SaleNew() {
           remainingAmount: remainingAmount,
         },
       });
+
+      if (needsDelivery) {
+        await db.deliveryRecord.create({
+          data: {
+            saleOrderId: sale.id,
+            recipientName: selectedBuyer !== '__none__' ? contacts.find(c => c.id === selectedBuyer)?.name || pickerName || '客户' : pickerName || '客户',
+            recipientPhone: selectedBuyer !== '__none__' ? contacts.find(c => c.id === selectedBuyer)?.primaryPhone || pickerPhone : pickerPhone,
+            deliveryAddress: deliveryAddress,
+            totalFee: parseFloat(deliveryFee) || 0,
+            deliveryStatus: 'pending',
+            zoneName: '默认区域',
+          },
+        });
+      }
 
       for (const item of cart) {
         await db.product.update({
@@ -524,13 +642,18 @@ export function SaleNew() {
                       key={product.id}
                       onClick={() => addToCart(product)}
                       disabled={product.stock === 0}
-                      className={`p-3 border rounded-lg text-left transition-colors ${
+                      className={`p-3 border rounded-lg text-left transition-colors relative ${
                         product.stock === 0
                           ? 'border-slate-200 opacity-50 cursor-not-allowed'
                           : 'border-slate-200 hover:border-orange-300 hover:bg-orange-50'
                       }`}
                     >
-                      <div className="font-medium text-slate-800 truncate">
+                      {product.brand && (
+                        <span className="absolute top-1 right-1 text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                          {product.brand}
+                        </span>
+                      )}
+                      <div className="font-medium text-slate-800 truncate pr-12">
                         {product.name}
                       </div>
                       <div className="text-sm text-slate-500 truncate">
@@ -568,31 +691,27 @@ export function SaleNew() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">购货人信息</CardTitle>
+              <CardTitle className="text-base">联系人信息</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-4">
-                <Select
-                  value={selectedBuyer}
-                  onValueChange={setSelectedBuyer}
-                >
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="选择购货人（必选）" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">无</SelectItem>
-                    {contacts.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name} ({c.primaryPhone})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex-1">
+                  <Combobox
+                    value={selectedBuyer === '__none__' ? '' : selectedBuyer}
+                    onValueChange={(v) => {
+                      setSelectedBuyer(v || '__none__');
+                      if (v) recordFrequency('contact', v);
+                    }}
+                    options={contactOptions}
+                    placeholder="选择联系人（散客可跳过）"
+                    emptyText="没有找到匹配的联系人"
+                  />
+                </div>
                 <Button
                   variant="outline"
                   onClick={() => setShowBuyerDialog(true)}
                 >
-                  + 新购货人
+                  + 新联系人
                 </Button>
               </div>
 
@@ -601,35 +720,23 @@ export function SaleNew() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs text-slate-500 mb-1 block">付款人</label>
-                    <Select value={selectedPayer} onValueChange={setSelectedPayer}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="选择付款人" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">无</SelectItem>
-                        {contacts.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name} ({c.primaryPhone})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Combobox
+                      value={selectedPayer === '__none__' ? '' : selectedPayer}
+                      onValueChange={(v) => setSelectedPayer(v || '__none__')}
+                      options={contactOptions}
+                      placeholder="选择付款人"
+                      emptyText="没有找到匹配的联系人"
+                    />
                   </div>
                   <div>
                     <label className="text-xs text-slate-500 mb-1 block">介绍人(水电工)</label>
-                    <Select value={selectedIntroducer} onValueChange={setSelectedIntroducer}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="选择介绍人" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">无</SelectItem>
-                        {contacts.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name} ({c.primaryPhone})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Combobox
+                      value={selectedIntroducer === '__none__' ? '' : selectedIntroducer}
+                      onValueChange={(v) => setSelectedIntroducer(v || '__none__')}
+                      options={contactOptions}
+                      placeholder="选择介绍人"
+                      emptyText="没有找到匹配的联系人"
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 mt-3">
@@ -650,45 +757,84 @@ export function SaleNew() {
                     />
                   </div>
                 </div>
+
+                <div className="border-t pt-4 mt-4">
+                  <div className="flex items-center gap-4 mb-3">
+                    <label className="text-sm font-medium text-slate-600 flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={needsDelivery}
+                        onChange={(e) => setNeedsDelivery(e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                      需要配送
+                    </label>
+                    {deliverySuggestion && (
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        totalProfit < 10 ? 'bg-red-50 text-red-600' :
+                        totalProfit < 50 ? 'bg-yellow-50 text-yellow-600' :
+                        'bg-green-50 text-green-600'
+                      }`}>
+                        {deliverySuggestion}
+                      </span>
+                    )}
+                  </div>
+                  {needsDelivery && (
+                    <div className="space-y-3 pl-2 border-l-2 border-orange-200">
+                      <div>
+                        <label className="text-xs text-slate-500 mb-1 block">配送地址</label>
+                        <Input
+                          placeholder="输入配送地址"
+                          value={deliveryAddress}
+                          onChange={(e) => setDeliveryAddress(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-500 mb-1 block">配送费 (元)</label>
+                        <Input
+                          type="number"
+                          placeholder="0.00"
+                          value={deliveryFee}
+                          onChange={(e) => setDeliveryFee(e.target.value)}
+                          min="0"
+                          step="0.01"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">结账主体与项目</CardTitle>
+              <CardTitle className="text-base">挂靠主体</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <label className="text-xs text-slate-500 mb-1 block">
-                  付款主体 <span className="text-red-500">*</span>
+                  挂靠主体 <span className="text-red-500">*</span>
                 </label>
-                <Select
+                <Combobox
                   value={selectedEntity}
                   onValueChange={(v) => {
                     setSelectedEntity(v);
-                    setSelectedProject('__none__');
+                    if (v && v !== '__cash__') recordFrequency('entity', v);
                   }}
-                >
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="选择付款主体（必选）" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {entities.map((e) => (
-                      <SelectItem key={e.id} value={e.id}>
-                        {e.name} {e.entityType === 'personal' ? '(个人)' : e.entityType === 'company' ? '(公司)' : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  options={[{ value: '__cash__', label: '散客（无挂靠）' }, ...entityOptions]}
+                  placeholder="选择挂靠主体（必选）"
+                  emptyText="没有找到匹配的挂靠主体"
+                  allowCustom={false}
+                />
               </div>
 
-              {selectedEntity && projects.length > 0 && (
+              {selectedEntity && selectedEntity !== '__cash__' && (
                 <div>
                   <label className="text-xs text-slate-500 mb-1 block">关联项目（可选）</label>
                   <Select
                     value={selectedProject}
-                    onValueChange={setSelectedProject}
+                    onValueChange={(v) => { setSelectedProject(v); if (v && v !== '__none__') recordFrequency('project', v); }}
                   >
                     <SelectTrigger className="flex-1">
                       <SelectValue placeholder="选择项目（可选）" />
@@ -725,44 +871,110 @@ export function SaleNew() {
                   {cart.map((item) => (
                     <div
                       key={item.product.id}
-                      className="flex items-center justify-between p-2 bg-slate-50 rounded-lg"
+                      className="flex flex-col gap-2 p-2 bg-slate-50 rounded-lg relative"
                     >
-                      <div className="flex-1">
-                        <div className="font-medium text-sm">
-                          {item.product.name}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {formatCurrency(item.unitPrice)} × {item.quantity}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() =>
-                            updateCartQuantity(item.product.id, item.quantity - 1)
-                          }
-                          className="w-6 h-6 rounded bg-slate-200 hover:bg-slate-300 text-slate-600"
-                        >
-                          -
-                        </button>
-                        <span className="w-8 text-center font-mono text-sm">
-                          {item.quantity}
+                      {item.product.brand && (
+                        <span className="absolute top-1 right-12 text-xs bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
+                          {item.product.brand}
                         </span>
-                        <button
-                          onClick={() =>
-                            updateCartQuantity(item.product.id, item.quantity + 1)
-                          }
-                          disabled={item.quantity >= item.product.stock}
-                          className="w-6 h-6 rounded bg-slate-200 hover:bg-slate-300 text-slate-600 disabled:opacity-50"
-                        >
-                          +
-                        </button>
+                      )}
+                      <div className="flex items-center justify-between pr-16">
+                        <div className="font-medium text-sm">
+                          {formatProductName(item.product)}
+                        </div>
                         <button
                           onClick={() => removeFromCart(item.product.id)}
-                          className="w-6 h-6 rounded bg-red-100 hover:bg-red-200 text-red-600 ml-2"
+                          className="w-6 h-6 rounded bg-red-100 hover:bg-red-200 text-red-600"
                         >
                           ×
                         </button>
                       </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() =>
+                              updateCartQuantity(item.product.id, item.quantity - 1)
+                            }
+                            className="w-6 h-6 rounded bg-slate-200 hover:bg-slate-300 text-slate-600"
+                          >
+                            -
+                          </button>
+                          <Input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) =>
+                              updateCartQuantity(item.product.id, parseInt(e.target.value) || 1)
+                            }
+                            className="w-16 h-7 text-center text-sm"
+                            min="1"
+                          />
+                          <button
+                            onClick={() =>
+                              updateCartQuantity(item.product.id, item.quantity + 1)
+                            }
+                            disabled={item.quantity >= item.product.stock}
+                            className="w-6 h-6 rounded bg-slate-200 hover:bg-slate-300 text-slate-600 disabled:opacity-50"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <Select
+                          value={item.saleUnit}
+                          onValueChange={(v) => {
+                            const newSaleUnit = v;
+                            const newUnitRatio = item.purchaseUnit && newSaleUnit === item.purchaseUnit ? item.unitRatio : 1;
+                            let newUnitPrice = item.salePrice;
+                            if (item.purchaseUnit && newSaleUnit === item.purchaseUnit) {
+                              newUnitPrice = item.salePrice * item.unitRatio;
+                            } else if (item.purchaseUnit && newSaleUnit === item.product.unit) {
+                              newUnitPrice = item.salePrice / item.unitRatio;
+                            }
+                            updateCartItem(item.product.id, {
+                              saleUnit: newSaleUnit,
+                              unitRatio: newUnitRatio,
+                              unitPrice: newUnitPrice,
+                            });
+                          }}
+                        >
+                          <SelectTrigger className="w-20 h-7 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={item.product.unit}>{item.product.unit}</SelectItem>
+                            {item.purchaseUnit && item.purchaseUnit !== item.product.unit && (
+                              <SelectItem value={item.purchaseUnit}>{item.purchaseUnit}</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+
+                        <div className="flex items-center gap-1 text-xs">
+                          <span className="text-slate-400">¥</span>
+                          <Input
+                            type="number"
+                            value={item.unitPrice}
+                            onChange={(e) =>
+                              updateCartItem(item.product.id, {
+                                unitPrice: parseFloat(e.target.value) || 0,
+                              })
+                            }
+                            className="w-20 h-7 text-sm"
+                            min="0"
+                            step="0.01"
+                          />
+                        </div>
+
+                        <div className="text-xs text-slate-400">
+                          = {formatCurrency(item.unitPrice * item.quantity)}
+                        </div>
+                      </div>
+
+                      {item.purchaseUnit && item.unitRatio > 1 && (
+                        <div className="text-xs text-slate-400">
+                          {item.purchaseUnit} = {item.unitRatio} {item.product.unit}，折合 {formatCurrency(item.salePrice)}/{item.product.unit}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -953,23 +1165,57 @@ export function SaleNew() {
       <Dialog open={showBuyerDialog} onOpenChange={setShowBuyerDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>添加新购货人</DialogTitle>
+            <DialogTitle>添加新联系人</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <label className="text-sm font-medium mb-1 block">姓名 *</label>
+              <label className="text-sm font-medium mb-1 block">
+                姓名 <span className="text-red-500">*</span>
+              </label>
               <Input
-                value={newBuyerName}
-                onChange={(e) => setNewBuyerName(e.target.value)}
+                value={newBuyer.name}
+                onChange={(e) => setNewBuyer({ ...newBuyer, name: e.target.value })}
                 placeholder="输入联系人姓名"
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">主手机号 *</label>
+              <label className="text-sm font-medium mb-1 block">
+                手机号 <span className="text-red-500">*</span>
+              </label>
               <Input
-                value={newBuyerPhone}
-                onChange={(e) => setNewBuyerPhone(e.target.value)}
+                value={newBuyer.primaryPhone}
+                onChange={(e) => setNewBuyer({ ...newBuyer, primaryPhone: e.target.value })}
                 placeholder="输入手机号（唯一标识）"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">联系人类型</label>
+              <Select value={newBuyer.contactType} onValueChange={(v) => setNewBuyer({ ...newBuyer, contactType: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="customer">客户</SelectItem>
+                  <SelectItem value="plumber">水电工</SelectItem>
+                  <SelectItem value="company">装修公司</SelectItem>
+                  <SelectItem value="other">其他</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">地址</label>
+              <Input
+                value={newBuyer.address}
+                onChange={(e) => setNewBuyer({ ...newBuyer, address: e.target.value })}
+                placeholder="输入地址（可选）"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">备注</label>
+              <Input
+                value={newBuyer.remark}
+                onChange={(e) => setNewBuyer({ ...newBuyer, remark: e.target.value })}
+                placeholder="输入备注（可选）"
               />
             </div>
             <div className="flex justify-end gap-3">

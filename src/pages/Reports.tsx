@@ -137,7 +137,7 @@ export function Reports() {
   const loadProductReport = async (start: Date, end: Date) => {
     const orderItems = await db.orderItem.findMany({
       where: {
-        saleOrder: {
+        order: {
           saleDate: { gte: start, lte: end },
         },
       },
@@ -221,7 +221,6 @@ export function Reports() {
     const orders = await db.saleOrder.findMany({
       where: {
         saleDate: { gte: start, lte: end },
-        buyerId: { not: null },
       },
       include: { buyer: true },
     });

@@ -28,14 +28,14 @@ import {
 } from '@/components/ui/dialog';
 import { DataTablePagination, useDataTable } from '@/components/DataTable';
 import { db } from '@/lib/db';
-import { formatCurrency } from '@/lib/utils';
-import type { Product, Category, Brand, ProductSpec } from '@/lib/types';
+import { formatCurrency, formatProductName } from '@/lib/utils';
+import { sortByFrequency, recordFrequency } from '@/lib/frequency';
+import type { Product, Category, ProductSpec } from '@/lib/types';
 import { toast } from '@/components/Toast';
 
 export function Products() {
   const [products, setProducts] = useState<(Product & { category: Category; productSpecs?: ProductSpec[] })[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -55,14 +55,13 @@ export function Products() {
         whereClause.categoryId = selectedCategory;
       }
 
-      const [productsData, categoriesData, brandsData] = await Promise.all([
+      const [productsData, categoriesData] = await Promise.all([
         db.product.findMany({
           where: whereClause,
           include: { category: true, productSpecs: { include: { brand: true } } },
           orderBy: { name: 'asc' },
         }),
         db.category.findMany({ orderBy: { sortOrder: 'asc' } }),
-        db.brand.findMany({ orderBy: { name: 'asc' } }),
       ]);
 
       const filteredProducts = searchTerm
@@ -75,8 +74,7 @@ export function Products() {
         : productsData;
 
       setProducts(filteredProducts);
-      setCategories(categoriesData);
-      setBrands(brandsData);
+      setCategories(sortByFrequency(categoriesData, 'category'));
     } catch (error) {
       console.error('Failed to load products:', error);
       toast('数据加载失败，请刷新页面重试', 'error');
@@ -211,9 +209,6 @@ export function Products() {
           <p className="text-slate-500 mt-1">管理商品信息和价格</p>
         </div>
         <div className="flex gap-2">
-          <Link to="/brands">
-            <Button variant="outline">品牌管理</Button>
-          </Link>
           <Button variant="outline" onClick={() => setShowImportDialog(true)}>
             导入初始库存
           </Button>
@@ -226,7 +221,7 @@ export function Products() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3 flex-wrap">
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <Select value={selectedCategory} onValueChange={(v) => { setSelectedCategory(v); if (v !== 'all') recordFrequency('category', v); }}>
               <SelectTrigger className="w-36 h-8">
                 <SelectValue placeholder="全部分类" />
               </SelectTrigger>
@@ -253,7 +248,7 @@ export function Products() {
             </Select>
 
             <Input
-              placeholder="搜索商品名称、规格、型号..."
+              placeholder="搜索商品名称、规格参数、产品型号..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-48 h-8"
@@ -279,7 +274,7 @@ export function Products() {
               <TableRow>
                 <TableHead>商品名称</TableHead>
                 <TableHead>分类</TableHead>
-                <TableHead>品牌/规格</TableHead>
+                <TableHead>规格参数/产品型号</TableHead>
                 <TableHead>单位</TableHead>
                 <TableHead className="text-right">参考售价</TableHead>
                 <TableHead className="text-right">库存</TableHead>
@@ -296,7 +291,12 @@ export function Products() {
               ) : (
                 tableProps.data.map((product) => (
                   <TableRow key={product.id}>
-                    <TableCell className="font-medium">{product.name}</TableCell>
+                    <TableCell>
+                      <div className="font-medium">{product.name}</div>
+                      {product.brand && (
+                        <div className="text-xs text-slate-400">{product.brand}</div>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{product.category.name}</Badge>
                     </TableCell>
@@ -359,12 +359,6 @@ export function Products() {
                 {categories.length}
               </div>
               <div className="text-sm text-slate-500">商品分类</div>
-            </div>
-            <div className="bg-slate-50 p-4 rounded-lg">
-              <div className="text-2xl font-bold text-slate-800">
-                {brands.length}
-              </div>
-              <div className="text-sm text-slate-500">品牌数量</div>
             </div>
             <div className="bg-slate-50 p-4 rounded-lg">
               <div className="text-2xl font-bold text-slate-800">

@@ -131,7 +131,6 @@ export function Statements() {
           db.contact.findMany({
             where: { contactType: { in: ['customer', 'plumber'] } },
             orderBy: { name: 'asc' },
-            include: { phones: true },
           }),
           db.entity.findMany({
             orderBy: { name: 'asc' },
@@ -473,7 +472,7 @@ export function Statements() {
           '序号': index + 1,
           '联系人': item.contactName,
           '联系电话': item.phone || '-',
-          '结账主体': item.entityName || '-',
+          '挂靠主体': item.entityName || '-',
           '欠款总额': item.totalReceivable,
           '已还金额': item.totalPaid,
           '剩余欠款': item.totalRemaining,
@@ -626,7 +625,7 @@ export function Statements() {
                   <SelectContent>
                     <SelectItem value="summary">汇总视图</SelectItem>
                     <SelectItem value="contact">按联系人</SelectItem>
-                    <SelectItem value="entity">按结账主体</SelectItem>
+                    <SelectItem value="entity">按挂靠主体</SelectItem>
                     <SelectItem value="project">按项目</SelectItem>
                   </SelectContent>
                 </Select>
@@ -819,7 +818,7 @@ export function Statements() {
           {viewMode === 'entity' && (
             <Card>
               <CardHeader>
-                <CardTitle>结账主体欠款汇总</CardTitle>
+                <CardTitle>挂靠主体欠款汇总</CardTitle>
               </CardHeader>
               <CardContent>
                 {entitySummaries.length === 0 ? (
@@ -1064,7 +1063,7 @@ export function Statements() {
                     <p>联系电话: {statementDetailData.contact?.primaryPhone || '-'}</p>
                     <p>类型: {statementDetailData.contact?.contactType === 'plumber' ? '水电工' : '客户'}</p>
                     {selectedStatement.entityName && (
-                      <p>结账主体: {selectedStatement.entityName}</p>
+                      <p>挂靠主体: {selectedStatement.entityName}</p>
                     )}
                   </div>
                 </div>

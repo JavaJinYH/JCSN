@@ -42,6 +42,15 @@ export function generateInvoiceNo(): string {
   return `XS${year}${month}${day}${random}`;
 }
 
+export function generateBatchNo(): string {
+  const now = new Date();
+  const year = now.getFullYear().toString().slice(-2);
+  const month = (now.getMonth() + 1).toString().padStart(2, '0');
+  const day = now.getDate().toString().padStart(2, '0');
+  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  return `JH${year}${month}${day}${random}`;
+}
+
 export function calculateProfit(
   salePrice: number,
   costPrice: number,
@@ -125,4 +134,13 @@ export function getTagDescription(tag: string): string {
     case '×': return '低价值客户';
     default: return '未知';
   }
+}
+
+export function formatProductName(product: { name: string; brand?: string | null; specification?: string | null; model?: string | null } | null | undefined): string {
+  if (!product) return '-';
+  const parts = [product.name];
+  if (product.brand) parts.push(product.brand);
+  if (product.specification) parts.push(product.specification);
+  if (product.model && !product.specification) parts.push(product.model);
+  return parts.join(' - ');
 }

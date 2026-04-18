@@ -97,7 +97,6 @@ export function Entities() {
       const contactsData = await db.contact.findMany({
         where: { contactType: { in: ['customer', 'company'] } },
         orderBy: { name: 'asc' },
-        include: { phones: true },
       });
       setContacts(contactsData);
     } catch (error) {
@@ -278,8 +277,8 @@ export function Entities() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">结账主体管理</h2>
-          <p className="text-slate-500 mt-1">管理公司/单位等结账主体及其销售订单</p>
+          <h2 className="text-2xl font-bold text-slate-800">挂靠主体管理</h2>
+          <p className="text-slate-500 mt-1">管理公司/施工队等挂靠主体及其销售订单</p>
         </div>
         <Button className="bg-orange-500 hover:bg-orange-600" onClick={() => setShowAddDialog(true)}>
           + 添加主体
@@ -351,7 +350,7 @@ export function Entities() {
                     <TableCell>{getEntityTypeBadge(entity.entityType)}</TableCell>
                     <TableCell>{entity.contact?.name || '-'}</TableCell>
                     <TableCell className="text-slate-500">
-                      {entity.contact?.primaryPhone || entity.contact?.phones?.[0]?.phone || '-'}
+                      {entity.contact?.primaryPhone || entity.contact?.phones || '-'}
                     </TableCell>
                     <TableCell className="font-mono">{entityStats[entity.id]?.count || 0}</TableCell>
                     <TableCell className="text-right font-mono text-orange-600">
@@ -392,7 +391,7 @@ export function Entities() {
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>添加结账主体</DialogTitle>
+            <DialogTitle>添加挂靠主体</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>

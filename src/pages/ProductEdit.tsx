@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Combobox } from '@/components/Combobox';
 import { db } from '@/lib/db';
 import type { Product, Category } from '@/lib/types';
 
@@ -18,16 +19,30 @@ export function ProductEdit() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [categories, setCategories] = useState<Category[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const brandOptions = useMemo(() => {
+    const brands = [...new Set(allProducts.map(p => p.brand).filter(Boolean) as string[])];
+    return brands.map(b => ({ value: b, label: b })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [allProducts]);
+
+  const specificationOptions = useMemo(() => {
+    const specs = [...new Set(allProducts.map(p => p.specification).filter(Boolean) as string[])];
+    return specs.map(s => ({ value: s, label: s })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [allProducts]);
+
   const [formData, setFormData] = useState({
     name: '',
     categoryId: '',
+    brand: '',
     specification: '',
     model: '',
     unit: '个',
+    purchaseUnit: '',
+    unitRatio: '1',
     referencePrice: '',
     lastPurchasePrice: '',
     isPriceVolatile: false,
@@ -44,9 +59,10 @@ export function ProductEdit() {
     try {
       if (!id) return;
 
-      const [productData, categoriesData] = await Promise.all([
+      const [productData, categoriesData, productsData] = await Promise.all([
         db.product.findUnique({ where: { id } }),
         db.category.findMany({ orderBy: { sortOrder: 'asc' } }),
+        db.product.findMany({ select: { id: true, name: true, brand: true, specification: true } }),
       ]);
 
       if (productData) {
@@ -54,19 +70,23 @@ export function ProductEdit() {
         setFormData({
           name: productData.name,
           categoryId: productData.categoryId,
+          brand: productData.brand || '',
           specification: productData.specification || '',
           model: productData.model || '',
           unit: productData.unit,
+          purchaseUnit: productData.purchaseUnit || '',
+          unitRatio: productData.unitRatio?.toString() || '1',
           referencePrice: productData.referencePrice?.toString() || '',
           lastPurchasePrice: productData.lastPurchasePrice?.toString() || '',
           isPriceVolatile: productData.isPriceVolatile || false,
           stock: productData.stock.toString(),
           minStock: productData.minStock.toString(),
-          remark: '',
+          remark: productData.remark || '',
         });
       }
 
       setCategories(categoriesData);
+      setAllProducts(productsData);
     } catch (error) {
       console.error('Failed to load product:', error);
     } finally {
@@ -89,9 +109,12 @@ export function ProductEdit() {
         data: {
           name: formData.name,
           categoryId: formData.categoryId,
+          brand: formData.brand || null,
           specification: formData.specification || null,
           model: formData.model || null,
           unit: formData.unit,
+          purchaseUnit: formData.purchaseUnit || null,
+          unitRatio: formData.purchaseUnit ? parseFloat(formData.unitRatio) || 1 : 1,
           referencePrice: formData.referencePrice ? parseFloat(formData.referencePrice) : null,
           lastPurchasePrice: formData.lastPurchasePrice ? parseFloat(formData.lastPurchasePrice) : null,
           isPriceVolatile: formData.isPriceVolatile,
@@ -177,17 +200,29 @@ export function ProductEdit() {
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">规格</label>
-              <Input
-                value={formData.specification}
-                onChange={(e) =>
-                  setFormData({ ...formData, specification: e.target.value })
-                }
+              <label className="text-sm font-medium mb-2 block">品牌</label>
+              <Combobox
+                value={formData.brand}
+                onValueChange={(value) => setFormData({ ...formData, brand: value })}
+                options={brandOptions}
+                placeholder="输入或选择品牌"
+                emptyText="没有找到匹配的品牌，输入后按回车"
               />
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">型号</label>
+              <label className="text-sm font-medium mb-2 block">规格参数</label>
+              <Combobox
+                value={formData.specification}
+                onValueChange={(value) => setFormData({ ...formData, specification: value })}
+                options={specificationOptions}
+                placeholder="输入或选择规格"
+                emptyText="没有找到匹配的规格，输入后按回车"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">产品型号</label>
               <Input
                 value={formData.model}
                 onChange={(e) => setFormData({ ...formData, model: e.target.value })}
@@ -195,25 +230,107 @@ export function ProductEdit() {
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">单位</label>
-              <Select
-                value={formData.unit}
-                onValueChange={(value) => setFormData({ ...formData, unit: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="个">个</SelectItem>
-                  <SelectItem value="米">米</SelectItem>
-                  <SelectItem value="卷">卷</SelectItem>
-                  <SelectItem value="根">根</SelectItem>
-                  <SelectItem value="套">套</SelectItem>
-                  <SelectItem value="箱">箱</SelectItem>
-                  <SelectItem value="千克">千克</SelectItem>
-                  <SelectItem value="吨">吨</SelectItem>
-                </SelectContent>
-              </Select>
+              <label className="text-sm font-medium mb-2 block">进货单位换算</label>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm text-slate-500">1</span>
+                <Select
+                  value={formData.purchaseUnit}
+                  onValueChange={(v) => setFormData({ ...formData, purchaseUnit: v })}
+                >
+                  <SelectTrigger className="w-32">
+                    <SelectValue placeholder="进货单位" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="箱">箱</SelectItem>
+                    <SelectItem value="盘">盘</SelectItem>
+                    <SelectItem value="件">件</SelectItem>
+                    <SelectItem value="卷">卷</SelectItem>
+                    <SelectItem value="捆">捆</SelectItem>
+                    <SelectItem value="袋">袋</SelectItem>
+                    <SelectItem value="桶">桶</SelectItem>
+                    <SelectItem value="罐">罐</SelectItem>
+                    <SelectItem value="瓶">瓶</SelectItem>
+                    <SelectItem value="个">个</SelectItem>
+                    <SelectItem value="套">套</SelectItem>
+                    <SelectItem value="组">组</SelectItem>
+                    <SelectItem value="盒">盒</SelectItem>
+                    <SelectItem value="米">米</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-slate-500">=</span>
+                <Input
+                  type="number"
+                  value={formData.unitRatio}
+                  onChange={(e) => setFormData({ ...formData, unitRatio: e.target.value })}
+                  className="w-20"
+                  min="0.01"
+                  step="0.01"
+                />
+                <Select
+                  value={formData.unit}
+                  onValueChange={(value) => setFormData({ ...formData, unit: value })}
+                >
+                  <SelectTrigger className="w-36">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="个">个</SelectItem>
+                    <SelectItem value="件">件</SelectItem>
+                    <SelectItem value="只">只</SelectItem>
+                    <SelectItem value="支">支</SelectItem>
+                    <SelectItem value="根">根</SelectItem>
+                    <SelectItem value="张">张</SelectItem>
+                    <SelectItem value="片">片</SelectItem>
+                    <SelectItem value="块">块</SelectItem>
+                    <SelectItem value="卷">卷</SelectItem>
+                    <SelectItem value="盘">盘</SelectItem>
+                    <SelectItem value="套">套</SelectItem>
+                    <SelectItem value="组">组</SelectItem>
+                    <SelectItem value="箱">箱</SelectItem>
+                    <SelectItem value="盒">盒</SelectItem>
+                    <SelectItem value="袋">袋</SelectItem>
+                    <SelectItem value="捆">捆</SelectItem>
+                    <SelectItem value="桶">桶</SelectItem>
+                    <SelectItem value="罐">罐</SelectItem>
+                    <SelectItem value="瓶">瓶</SelectItem>
+                    <SelectItem value="米">米</SelectItem>
+                    <SelectItem value="厘米">厘米</SelectItem>
+                    <SelectItem value="分米">分米</SelectItem>
+                    <SelectItem value="千米">千米(km)</SelectItem>
+                    <SelectItem value="英寸">英寸(inch)</SelectItem>
+                    <SelectItem value="英尺">英尺(ft)</SelectItem>
+                    <SelectItem value="平方米">平方米(㎡)</SelectItem>
+                    <SelectItem value="平方厘米">平方厘米(c㎡)</SelectItem>
+                    <SelectItem value="立方米">立方米(m³)</SelectItem>
+                    <SelectItem value="立方厘米">立方厘米(cm³)</SelectItem>
+                    <SelectItem value="升">升(L)</SelectItem>
+                    <SelectItem value="毫升">毫升(mL)</SelectItem>
+                    <SelectItem value="加仑">加仑(gal)</SelectItem>
+                    <SelectItem value="吨">吨(t)</SelectItem>
+                    <SelectItem value="千克">千克(kg)</SelectItem>
+                    <SelectItem value="克">克(g)</SelectItem>
+                    <SelectItem value="毫克">毫克(mg)</SelectItem>
+                    <SelectItem value="磅">磅(lb)</SelectItem>
+                    <SelectItem value="盎司">盎司(oz)</SelectItem>
+                    <SelectItem value="板">板</SelectItem>
+                    <SelectItem value="条">条</SelectItem>
+                    <SelectItem value="节">节</SelectItem>
+                    <SelectItem value="段">段</SelectItem>
+                    <SelectItem value="双">双</SelectItem>
+                    <SelectItem value="对">对</SelectItem>
+                    <SelectItem value="包">包</SelectItem>
+                    <SelectItem value="扎">扎</SelectItem>
+                    <SelectItem value="令">令</SelectItem>
+                    <SelectItem value="码">码(yd)</SelectItem>
+                    <SelectItem value="平方码">平方码(yd²)</SelectItem>
+                    <SelectItem value="亩">亩</SelectItem>
+                    <SelectItem value="公顷">公顷(ha)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                如：1盘 = 100米、1件 = 24个、1箱 = 12瓶
+              </p>
             </div>
 
             <div>

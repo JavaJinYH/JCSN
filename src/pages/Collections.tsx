@@ -22,11 +22,11 @@ import { db } from '@/lib/db';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { getAgingLevel } from '@/lib/customerUtils';
 import { toast } from '@/components/Toast';
-import type { CollectionRecord, Customer, AccountReceivable } from '@/lib/types';
+import type { CollectionRecord, Contact, AccountReceivable } from '@/lib/types';
 
 export function Collections() {
-  const [records, setRecords] = useState<(CollectionRecord & { customer?: Customer })[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [records, setRecords] = useState<(CollectionRecord & { customer?: Contact })[]>([]);
+  const [customers, setCustomers] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -57,7 +57,7 @@ export function Collections() {
           include: { customer: true },
           orderBy: { collectionDate: 'desc' },
         }),
-        db.customer.findMany({ orderBy: { name: 'asc' } }),
+        db.contact.findMany({ orderBy: { name: 'asc' } }),
         db.accountReceivable.findMany({
           where: { remainingAmount: { gt: 0 } },
           include: { contact: true },
@@ -315,7 +315,7 @@ export function Collections() {
                   <option value="">选择客户</option>
                   {customers.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name} {c.phone ? `(${c.phone})` : ''}
+                      {c.name} {c.primaryPhone ? `(${c.primaryPhone})` : ''}
                     </option>
                   ))}
                 </select>

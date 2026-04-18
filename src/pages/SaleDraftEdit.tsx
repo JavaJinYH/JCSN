@@ -27,9 +27,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { db } from '@/lib/db';
-import { formatCurrency, generateInvoiceNo } from '@/lib/utils';
+import { formatCurrency, generateInvoiceNo, formatProductName } from '@/lib/utils';
 import { toast } from '@/components/Toast';
-import type { Product, Category, Customer, Project, SaleSlip } from '@/lib/types';
+import type { Product, Category, Contact, Project, SaleSlip } from '@/lib/types';
 
 interface CartItem {
   product: Product;
@@ -50,7 +50,7 @@ export function SaleDraftEdit() {
   const [slip, setSlip] = useState<SaleSlip | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customers, setCustomers] = useState<Contact[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -91,7 +91,7 @@ export function SaleDraftEdit() {
           orderBy: { name: 'asc' },
         }),
         db.category.findMany({ orderBy: { sortOrder: 'asc' } }),
-        db.customer.findMany({ orderBy: { name: 'asc' } }),
+        db.contact.findMany({ orderBy: { name: 'asc' } }),
       ]);
 
       if (!slipData) {
@@ -584,7 +584,7 @@ export function SaleDraftEdit() {
                   {cart.map((item) => (
                     <div key={item.product.id} className="flex items-center justify-between p-2 bg-slate-50 rounded">
                       <div className="flex-1">
-                        <div className="font-medium text-sm">{item.product.name}</div>
+                        <div className="font-medium text-sm">{formatProductName(item.product)}</div>
                         <div className="text-xs text-slate-500">
                           {formatCurrency(item.unitPrice)} × {item.quantity}
                         </div>

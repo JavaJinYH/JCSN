@@ -78,7 +78,6 @@ export function Contacts() {
   const loadData = async () => {
     try {
       const contactsData = await db.contact.findMany({
-        include: { phones: true },
         orderBy: { name: 'asc' },
       });
 
@@ -104,7 +103,7 @@ export function Contacts() {
             code: contact.code,
             name: contact.name,
             primaryPhone: contact.primaryPhone,
-            otherPhones: contact.phones?.filter(p => !p.isPrimary).map(p => p.phone) || [],
+            otherPhones: contact.phones ? [contact.phones] : [],
             address: contact.address,
             remark: contact.remark,
             contactType: contact.contactType,
@@ -154,7 +153,7 @@ export function Contacts() {
     }
 
     try {
-      const existing = await db.contact.findUnique({
+      const existing = await db.contact.findFirst({
         where: { primaryPhone: formData.primaryPhone.trim() },
       });
       if (existing) {

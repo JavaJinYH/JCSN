@@ -9,7 +9,6 @@ const pageTitles: Record<string, string> = {
   '/sales/new': '新增销售',
   '/products': '商品管理',
   '/products/new': '添加商品',
-  '/customers': '客户管理',
   '/projects': '项目管理',
   '/reports': '报表统计',
   '/settings': '系统设置',

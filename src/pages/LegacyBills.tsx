@@ -245,7 +245,6 @@ export function LegacyBills() {
           ) : (
             <div className="space-y-6">
               {filteredContacts.map((contact) => {
-                const contactBills = useState<AccountReceivable[]>([]);
                 return (
                   <div key={contact.id} className="border rounded-lg p-4">
                     <div className="flex items-center justify-between mb-4">

@@ -2,9 +2,10 @@
 
 | 项目 | 内容 |
 |------|------|
-| **文档版本** | v1.0 |
+| **文档版本** | v2.0 |
 | **创建日期** | 2026-04-16 |
-| **适用版本** | v3.5 及以上 |
+| **最后更新** | 2026-04-18 |
+| **适用版本** | v4.7+ |
 | **文档状态** | 正式发布 |
 
 ---
@@ -327,14 +328,14 @@ Get-FileHash "release\win-unpacked\折柳建材店管理系统.exe" -Algorithm S
 采用 **语义化版本 (Semantic Versioning)**:
 ```
 主版本号.次版本号.修订号
-  v        3        5        0
+  v        4        7        0
 ```
 
 | 级别 | 变化条件 | 示例 |
 |------|---------|------|
-| **主版本号** | 重大架构变更、数据库迁移、不兼容的API变更 | v4.0.0 |
-| **次版本号** | 新增功能模块、较大功能调整 | v3.6.0 |
-| **修订号** | Bug修复、小幅优化、文档更新 | v3.5.1 |
+| **主版本号** | 重大架构变更、数据库迁移、不兼容的API变更 | v5.0.0 |
+| **次版本号** | 新增功能模块、较大功能调整 | v4.8.0 |
+| **修订号** | Bug修复、小幅优化、文档更新 | v4.7.1 |
 
 #### 3.3.2 版本验证方法
 
@@ -382,7 +383,7 @@ Get-FileHash "release\win-unpacked\折柳建材店管理系统.exe" -Algorithm S
 |------|------|
 | **用户权限** | 标准用户或管理员均可 |
 | **安装权限** | 安装时需要管理员权限或用户账户控制(UAC)批准 |
-| **数据目录** | `%APPDATA%\折柳建材店管理系统\` 目录需有写入权限 |
+| **数据目录** | `%APPDATA%\jiancai-manager\` 目录需有写入权限 |
 
 ---
 
@@ -471,20 +472,20 @@ echo %PROCESSOR_ARCHITECTURE%
 
 | 数据类型 | 位置 | 迁移方式 |
 |---------|------|---------|
-| 数据库 | `%APPDATA%\折柳建材店管理系统\prisma.db` | 文件复制 |
-| 照片文件 | `%APPDATA%\折柳建材店管理系统\photos\` | 文件夹复制 |
-| 系统设置 | `%APPDATA%\折柳建材店管理系统\` | 文件夹复制 |
+| 数据库 | `%APPDATA%\jiancai-manager\prisma.db` | 文件复制 |
+| 照片文件 | `%APPDATA%\jiancai-manager\photos\` | 文件夹复制 |
+| 系统设置 | `%APPDATA%\jiancai-manager\` | 文件夹复制 |
 
 #### 5.3.2 迁移操作
 
 ```powershell
 # 1. 在旧电脑上备份数据
-xcopy /E /I /Y "%APPDATA%\折柳建材店管理系统" "D:\Backup\Zheliujiancai\"
+xcopy /E /I /Y "%APPDATA%\jiancai-manager" "D:\Backup\Zheliujiancai\"
 
 # 2. 在新电脑上安装应用后，关闭应用
 
 # 3. 复制数据到新电脑
-xcopy /E /I /Y "D:\Backup\Zheliujiancai\*" "%APPDATA%\折柳建材店管理系统\"
+xcopy /E /I /Y "D:\Backup\Zheliujiancai\*" "%APPDATA%\jiancai-manager\"
 
 # 4. 启动应用验证
 ```
@@ -532,10 +533,10 @@ reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "折柳建材店
 
 ```powershell
 # 应用日志位置
-# %APPDATA%\折柳建材店管理系统\logs\
+# %APPDATA%\jiancai-manager\logs\
 
 # 查看最新日志
-Get-Content "$env:APPDATA\折柳建材店管理系统\logs\*.log" -Tail 50
+Get-Content "$env:APPDATA\jiancai-manager\logs\*.log" -Tail 50
 ```
 
 ### 6.2 核心功能测试用例
@@ -583,7 +584,7 @@ Get-Process -Name "折柳建材店管理系统" | Select-Object WorkingSet64
 #### 6.4.1 日志文件位置
 
 ```
-%APPDATA%\折柳建材店管理系统\logs\
+%APPDATA%\jiancai-manager\logs\
 ├── main.log      # 主进程日志
 ├── error.log     # 错误日志
 └── renderer.log  # 渲染进程日志
@@ -678,7 +679,7 @@ npx prisma generate
 → 勾选"替代高DPI缩放行为"
 ```
 
-#### 7.3.2 Windows  Defender 拦截
+#### 7.3.2 Windows Defender 拦截
 
 如果杀毒软件拦截应用:
 1. 将应用目录添加到白名单
@@ -702,7 +703,7 @@ npx prisma generate
 1. 关闭应用
 2. 备份当前数据 (可选)
 3. 从备份复制数据
-   xcopy /E /I /Y "备份路径\*" "%APPDATA%\折柳建材店管理系统\"
+   xcopy /E /I /Y "备份路径\*" "%APPDATA%\jiancai-manager\"
 4. 启动应用
 ```
 
@@ -715,6 +716,7 @@ npx prisma generate
 | 版本 | 日期 | 变更内容 | 变更人 | 生效版本 |
 |------|------|---------|--------|---------|
 | v1.0 | 2026-04-16 | 初始版本创建 | 系统 | v3.5 |
+| v2.0 | 2026-04-18 | 适配v4.7+版本，更新功能模块清单 | AI | v4.7+ |
 
 ### 8.2 版本号命名规则
 
@@ -728,19 +730,11 @@ npx prisma generate
 
 | 字段 | 说明 | 示例 |
 |------|------|------|
-| 版本 | 当前文档版本号 | v1.0 |
-| 日期 | 变更日期 | 2026-04-16 |
-| 变更内容 | 具体变更描述 | 新增打包步骤说明 |
-| 变更人 | 变更操作人员 | 系统 |
-| 生效版本 | 适用的项目版本 | v3.5 |
-
-### 8.4 文档版本追溯机制
-
-| 追溯方式 | 说明 |
-|---------|------|
-| 版本历史 | 保留所有历史版本的变更记录 |
-| Git提交 | 文档变更通过Git进行版本控制 |
-| 项目关联 | 文档版本与项目版本号绑定 |
+| 版本 | 当前文档版本号 | v2.0 |
+| 日期 | 变更日期 | 2026-04-18 |
+| 变更内容 | 具体变更描述 | 适配v4.7+版本 |
+| 变更人 | 变更操作人员 | AI |
+| 生效版本 | 适用的项目版本 | v4.7+ |
 
 ---
 
@@ -774,17 +768,44 @@ npx prisma generate
 
 | 用途 | Windows 路径 |
 |------|-------------|
-| 应用数据目录 | `%APPDATA%\折柳建材店管理系统\` |
-| 数据库文件 | `%APPDATA%\折柳建材店管理系统\prisma.db` |
-| 照片存储 | `%APPDATA%\折柳建材店管理系统\photos\` |
-| 应用日志 | `%APPDATA%\折柳建材店管理系统\logs\` |
+| 应用数据目录 | `%APPDATA%\jiancai-manager\` |
+| 数据库文件 | `%APPDATA%\jiancai-manager\prisma.db` |
+| 照片存储 | `%APPDATA%\jiancai-manager\photos\` |
+| 应用日志 | `%APPDATA%\jiancai-manager\logs\` |
 | 安装目录 | `C:\Program Files\折柳建材店管理系统\` |
 
-### 附录C: 联系方式
+### 附录C: 功能模块清单 (v4.7+)
 
-如有问题，请联系项目开发人员。
+| 模块 | 文件 | 说明 |
+|------|------|------|
+| 首页仪表盘 | Dashboard.tsx | 统计数据展示 |
+| 库存管理 | Inventory.tsx | 库存列表与预警 |
+| 库存盘点 | InventoryCheck.tsx | 库存盘点功能 |
+| 商品管理 | Products.tsx | 商品列表 |
+| 添加商品 | ProductNew.tsx | 新增商品 |
+| 编辑商品 | ProductEdit.tsx | 编辑商品 |
+| 品牌管理 | Brands.tsx | 品牌维护 |
+| 联系人管理 | Contacts.tsx | 联系人维护 |
+| 结账主体 | Entities.tsx | 主体管理 |
+| 项目管理 | Projects.tsx | 项目管理 |
+| 客户管理 | Customers.tsx | 客户管理 |
+| 进货管理 | Purchases.tsx | 进货记录 |
+| 进货历史 | PurchaseHistory.tsx | 历史进货 |
+| 销售管理 | Sales.tsx | 销售列表 |
+| 新增销售 | SaleNew.tsx | 销售开单 |
+| 销售草稿 | SaleDrafts.tsx | 草稿管理 |
+| 回扣管理 | Rebates.tsx | 回扣记录 |
+| 配送管理 | Deliveries.tsx | 配送管理 |
+| 挂账结算 | Settlements.tsx | 结算管理 |
+| 催账记录 | Collections.tsx | 催账管理 |
+| 对账单 | Statements.tsx | 对账管理 |
+| 照片管理 | PhotoManagement.tsx | 照片管理 |
+| 报表统计 | Reports.tsx | 各类报表 |
+| 审计日志 | AuditLogs.tsx | 操作日志 |
+| 历史账单 | LegacyBills.tsx | 历史账单 |
+| 系统设置 | Settings.tsx | 系统配置 |
 
 ---
 
 *本文档由系统自动生成*
-*最后更新: 2026-04-16*
+*最后更新: 2026-04-18*

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { QuickActions } from '@/components/QuickActions';
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
 import { db } from '@/lib/db';
@@ -414,24 +415,7 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">快捷操作</CardTitle>
-            <span className="text-2xl">⚡</span>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Link to="/sales/new" className="block">
-              <Button variant="outline" className="w-full justify-start text-sm">
-                💰 快速销售
-              </Button>
-            </Link>
-            <Link to="/inventory" className="block">
-              <Button variant="outline" className="w-full justify-start text-sm">
-                📦 查看库存
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
+      <QuickActions />
       </div>
 
       <Card>

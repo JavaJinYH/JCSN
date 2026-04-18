@@ -46,7 +46,7 @@ const statusOptions = [
 
 const filters = [
   { key: 'status', label: '状态', type: 'select' as const, options: statusOptions },
-  { key: 'search', label: '关键词', type: 'text' as const, placeholder: '项目名称/主体/地址...' },
+  { key: 'search', label: '关键词', type: 'text' as const, placeholder: '项目名称/挂靠主体/地址...' },
 ];
 
 export function Projects() {
@@ -201,7 +201,7 @@ export function Projects() {
 
   const handleAddProject = async () => {
     if (!formData.name || !formData.entityId) {
-      toast('请填写必填项（项目名称、关联主体）', 'warning');
+      toast('请填写必填项（项目名称、挂靠主体）', 'warning');
       return;
     }
 
@@ -343,7 +343,7 @@ export function Projects() {
             <TableHeader>
               <TableRow>
                 <TableHead>项目名称</TableHead>
-                <TableHead>关联主体</TableHead>
+                <TableHead>挂靠主体</TableHead>
                 <TableHead>项目地址</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead>开始日期</TableHead>
@@ -416,14 +416,14 @@ export function Projects() {
 
             <div>
               <label className="text-sm font-medium mb-2 block">
-                关联主体 <span className="text-red-500">*</span>
+                挂靠主体 <span className="text-red-500">*</span>
               </label>
               <Select
                 value={formData.entityId || '__none__'}
                 onValueChange={(v) => setFormData({ ...formData, entityId: v === '__none__' ? '' : v })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="选择结账主体" />
+                  <SelectValue placeholder="选择挂靠主体" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">无</SelectItem>
@@ -516,7 +516,7 @@ export function Projects() {
                       <span className="font-medium">{selectedProject.name}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">关联主体:</span>
+                      <span className="text-slate-500">挂靠主体:</span>
                       <span>{selectedProject.entity?.name || '-'}</span>
                     </div>
                     <div className="flex justify-between">
@@ -601,7 +601,7 @@ export function Projects() {
                           <TableHead>单据号</TableHead>
                           <TableHead>日期</TableHead>
                           <TableHead>购货人</TableHead>
-                          <TableHead>结账主体</TableHead>
+                          <TableHead>挂靠主体</TableHead>
                           <TableHead className="text-right">金额</TableHead>
                           <TableHead className="text-right">已付</TableHead>
                           <TableHead>状态</TableHead>

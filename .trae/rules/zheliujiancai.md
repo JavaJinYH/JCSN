@@ -978,3 +978,58 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 - [ ] 窗口最小化到 800x600 时所有表单输入框可操作
 - [ ] 侧边导航菜单有滚动条（如果需要）
 - [ ] 表格横向滚动正常
+
+---
+
+## 十七、通用频率追踪核心规范（分类编号：FRQ-001）
+
+### 17.1 问题背景
+**问题原因**：当多个功能模块需要追踪用户使用频率（如高频客户、高频商品推荐）时，各模块自行实现会导致代码重复、维护困难。
+
+**解决方案**：统一使用 `src/lib/frequency.ts` 提供的频率追踪核心。
+
+### 17.2 频率追踪核心位置
+📁 **文件路径**：`src/lib/frequency.ts`
+
+### 17.3 提供的功能
+
+| 函数 | 用途 |
+|------|------|
+| `recordFrequency(type, id)` | 记录某类型+ID的使用频率 +1 |
+| `getFrequency(type, id)` | 获取某项的频率值 |
+| `sortByFrequency<T>(items, type, limit?)` | 按频率从高到低排序，可选限制返回数量 |
+| `getTopItems<T>(items, type, limit)` | 获取高频前N项 |
+| `getAllFrequency(type)` | 获取该类型所有频率数据 |
+| `resetFrequency(type?)` | 重置频率（可指定类型或全部清空） |
+
+### 17.4 正确用法示例
+
+```typescript
+import { recordFrequency, sortByFrequency } from '@/lib/frequency';
+
+// 记录使用频率（如选择客户时）
+recordFrequency('customer', customerId);
+recordFrequency('product', productId);
+recordFrequency('supplier', supplierId);
+
+// 按频率排序（高频优先）
+const sortedCustomers = sortByFrequency(customers, 'customer', 10);
+const topProducts = getTopItems(products, 'product', 5);
+
+// 获取某项频率
+const freq = getFrequency('customer', someCustomerId);
+```
+
+### 17.5 当前使用位置
+- [src/lib/quickActions.ts](file:///d:/折柳建材/src/lib/quickActions.ts) - 快捷操作排序
+- [src/pages/SaleNew.tsx](file:///d:/折柳建材/src/pages/SaleNew.tsx#L33) - 销售开单
+
+### 17.6 禁止事项
+- **禁止**：为频率追踪功能新建独立代码或工具函数
+- **禁止**：在 frequency.ts 外部自行实现 localStorage 频率存储逻辑
+- **必须**：需要频率追踪功能时，复用现有 frequency.ts 核心
+
+### 17.7 代码审查检查项
+- [ ] 频率追踪功能使用 `src/lib/frequency.ts` 而非自行实现
+- [ ] type 参数命名清晰（如 'customer'、'product'、'supplier'）
+- [ ] 记录频率时使用正确的 id 字段

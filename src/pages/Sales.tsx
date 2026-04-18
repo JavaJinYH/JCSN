@@ -68,7 +68,6 @@ interface SaleListItem {
 
 export function Sales() {
   const [sales, setSales] = useState<SaleListItem[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [entities, setEntities] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -110,7 +109,7 @@ export function Sales() {
       type: 'select' as const,
       options: [
         { value: 'all', label: '全部客户' },
-        ...customers.map((c) => ({ value: c.id, label: c.name })),
+        ...contacts.map((c) => ({ value: c.id, label: c.name })),
       ],
     },
     {
@@ -170,7 +169,7 @@ export function Sales() {
 
   const loadData = async () => {
     try {
-      const [legacySales, newSales, customersData, contactsData, entitiesData, projectsData] = await Promise.all([
+      const [legacySales, newSales, contactsData, entitiesData, projectsData] = await Promise.all([
         db.sale.findMany({
           include: {
             customer: true,
@@ -189,7 +188,6 @@ export function Sales() {
           },
           orderBy: { saleDate: 'desc' },
         }),
-        db.customer.findMany({ orderBy: { name: 'asc' } }),
         db.contact.findMany({ orderBy: { name: 'asc' } }),
         db.entity.findMany({ orderBy: { name: 'asc' } }),
         db.bizProject.findMany({ orderBy: { name: 'asc' } }),
@@ -216,13 +214,13 @@ export function Sales() {
         paymentEntityId: null,
         customerId: s.customerId,
         buyerName: s.customer?.name,
-        buyerPhone: s.customer?.phone,
+        buyerPhone: s.customer?.primaryPhone,
         payerName: undefined,
         introducerName: undefined,
         projectName: s.project?.name,
         entityName: undefined,
         customerName: s.customer?.name,
-        customerType: s.customer?.customerType,
+        customerType: s.customer?.contactType,
         _count: s._count,
       }));
 
@@ -262,7 +260,6 @@ export function Sales() {
       );
 
       setSales(allSales);
-      setCustomers(customersData);
       setContacts(contactsData);
       setEntities(entitiesData);
       setProjects(projectsData);
@@ -506,7 +503,7 @@ export function Sales() {
                 <TableHead>单据号</TableHead>
                 <TableHead>日期</TableHead>
                 <TableHead>购货人</TableHead>
-                <TableHead>结账主体</TableHead>
+                <TableHead>挂靠主体</TableHead>
                 <TableHead>项目</TableHead>
                 <TableHead className="text-right">商品数</TableHead>
                 <TableHead className="text-right">金额</TableHead>
@@ -630,11 +627,11 @@ export function Sales() {
                     <div className="text-xs text-slate-500">
                       {selectedSale.source === 'new'
                         ? selectedSale.buyer?.primaryPhone
-                        : selectedSale.customer?.phone || '-'}
+                        : selectedSale.customer?.primaryPhone || '-'}
                     </div>
                     {selectedSale.source === 'legacy' && (
                       <div className="text-xs text-slate-500">
-                        {selectedSale.customer?.customerType || '普通客户'}
+                        {selectedSale.customer?.contactType || '普通客户'}
                       </div>
                     )}
                   </div>
@@ -653,7 +650,7 @@ export function Sales() {
                     ) : selectedSale.payerCustomer ? (
                       <>
                         <div className="font-medium">{selectedSale.payerCustomer.name}</div>
-                        <div className="text-xs text-slate-500">{selectedSale.payerCustomer.phone}</div>
+                        <div className="text-xs text-slate-500">{selectedSale.payerCustomer?.primaryPhone}</div>
                       </>
                     ) : (
                       <div className="text-slate-400">同购货人</div>
@@ -718,7 +715,7 @@ export function Sales() {
 
               {selectedSale.source === 'new' && selectedSale.paymentEntity && (
                 <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
-                  <h3 className="font-bold text-indigo-700 mb-2">结账主体信息</h3>
+                  <h3 className="font-bold text-indigo-700 mb-2">挂靠主体信息</h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <div>
                       <div className="text-sm text-indigo-600">主体名称</div>
@@ -905,7 +902,7 @@ export function Sales() {
                         <TableRow key={index}>
                           <TableCell>
                             <div className="font-medium">{rebate.plumber?.name || '未知'}</div>
-                            <div className="text-xs text-slate-500">{rebate.plumber?.phone || '-'}</div>
+                            <div className="text-xs text-slate-500">{rebate.plumber?.primaryPhone || '-'}</div>
                           </TableCell>
                           <TableCell className="text-right font-mono text-purple-600">
                             {formatCurrency(rebate.rebateAmount)}

@@ -9,10 +9,8 @@ import { SaleDraftEdit } from './pages/SaleDraftEdit';
 import { Products } from './pages/Products';
 import { ProductNew } from './pages/ProductNew';
 import { ProductEdit } from './pages/ProductEdit';
-import { Brands } from './pages/Brands';
-import { Customers } from './pages/Customers';
-import { Contacts } from './pages/Contacts';
 import { Entities } from './pages/Entities';
+import { Contacts } from './pages/Contacts';
 import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
 import { Purchases } from './pages/Purchases';
@@ -25,7 +23,6 @@ import { Statements } from './pages/Statements';
 import { AuditLogs } from './pages/AuditLogs';
 import { InventoryCheckPage } from './pages/InventoryCheck';
 import { PhotoManagement } from './pages/PhotoManagement';
-import { PurchaseHistory } from './pages/PurchaseHistory';
 import { LegacyBills } from './pages/LegacyBills';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastContainer } from './components/Toast';
@@ -47,10 +44,8 @@ function App() {
           <Route path="products" element={<Products />} />
           <Route path="products/new" element={<ErrorBoundary><ProductNew /></ErrorBoundary>} />
           <Route path="products/:id/edit" element={<ErrorBoundary><ProductEdit /></ErrorBoundary>} />
-          <Route path="brands" element={<Brands />} />
-          <Route path="customers" element={<ErrorBoundary><Customers /></ErrorBoundary>} />
+          <Route path="entities" element={<Entities />} />
           <Route path="contacts" element={<ErrorBoundary><Contacts /></ErrorBoundary>} />
-          <Route path="entities" element={<ErrorBoundary><Entities /></ErrorBoundary>} />
           <Route path="projects" element={<ErrorBoundary><Projects /></ErrorBoundary>} />
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />
@@ -60,7 +55,6 @@ function App() {
           <Route path="collections" element={<Collections />} />
           <Route path="statements" element={<Statements />} />
           <Route path="audit-logs" element={<AuditLogs />} />
-          <Route path="purchase-history" element={<PurchaseHistory />} />
           <Route path="legacy-bills" element={<LegacyBills />} />
           <Route path="inventory/check" element={<InventoryCheckPage />} />
           <Route path="photos" element={<PhotoManagement />} />

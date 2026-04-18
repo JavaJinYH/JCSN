@@ -13,6 +13,7 @@ export interface Product {
   name: string;
   categoryId: string;
   category?: Category;
+  brand: string | null;
   specification: string | null;
   model: string | null;
   unit: string;
@@ -93,41 +94,10 @@ export interface Purchase {
   createdAt: Date;
 }
 
-export interface Customer {
-  id: string;
-  name: string;
-  phone: string | null;
-  phones: string | null;
-  customerType: string;
-  customerCategoryId: string | null;
-  customerCategory?: CustomerCategory | null;
-  valueScore: number | null;
-  autoTag: string | null;
-  manualTag: string | null;
-  address: string | null;
-  remark: string | null;
-  creditLimit: number;
-  creditUsed: number;
-  creditLevel: string;
-  lastCreditReviewDate: Date | null;
-  riskLevel: string;
-  blacklist: boolean;
-  blacklistReason: string | null;
-  sales?: Sale[];
-  rebates?: Rebate[];
-  projects?: Project[];
-  accountReceivables?: AccountReceivable[];
-  collectionRecords?: CollectionRecord[];
-  phoneRecords?: CustomerPhone[];
-  creditRecords?: CreditRecord[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 export interface CreditRecord {
   id: string;
   customerId: string;
-  customer?: Customer;
+  customer?: Contact;
   recordType: string;
   creditLimit: number;
   creditUsed: number;
@@ -143,7 +113,7 @@ export interface CustomerCategory {
   name: string;
   description: string | null;
   discount: number;
-  customers?: Customer[];
+  contacts?: Contact[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -152,7 +122,7 @@ export interface Project {
   id: string;
   name: string;
   customerId: string;
-  customer?: Customer;
+  customer?: Contact;
   address: string | null;
   status: string;
   startDate: Date | null;
@@ -168,13 +138,15 @@ export interface Sale {
   invoiceNo: string | null;
   writtenInvoiceNo: string | null;
   customerId: string | null;
-  customer?: Customer | null;
+  customer?: Contact | null;
   projectId: string | null;
   project?: Project | null;
-  buyerCustomerId: string | null;
   payerCustomerId: string | null;
+  payerCustomer?: Contact | null;
   introducerCustomerId: string | null;
+  introducerCustomer?: Contact | null;
   pickerCustomerId: string | null;
+  pickerCustomer?: Contact | null;
   pickerName: string | null;
   pickerPhone: string | null;
   pickerType: string | null;
@@ -311,7 +283,7 @@ export interface SettlementAdjustment {
   saleId: string;
   sale?: Sale;
   customerId: string;
-  customer?: Customer;
+  customer?: Contact;
   adjustType: string;
   adjustMethod: string;
   adjustValue: number;
@@ -328,7 +300,7 @@ export interface SettlementAdjustment {
 export interface PaymentPlan {
   id: string;
   customerId: string;
-  customer?: Customer;
+  customer?: Contact;
   projectId: string | null;
   planAmount: number;
   actualAmount: number;
@@ -375,7 +347,7 @@ export interface PurchasePhoto {
 export interface CollectionRecord {
   id: string;
   customerId: string;
-  customer?: Customer;
+  customer?: Contact;
   receivableId: string | null;
   collectionDate: Date;
   collectionTime: string | null;
@@ -393,7 +365,7 @@ export interface CollectionRecord {
 export interface CustomerPhone {
   id: string;
   customerId: string;
-  customer?: Customer;
+  customer?: Contact;
   phone: string;
   phoneType: string;
   isPrimary: boolean;
@@ -405,12 +377,16 @@ export interface CustomerPhone {
 export interface SaleSlip {
   id: string;
   customerId: string | null;
-  customer?: { id: string; name: string } | null;
+  customer?: Contact | null;
   projectId: string | null;
   buyerCustomerId: string | null;
+  buyerCustomer?: Contact | null;
   payerCustomerId: string | null;
+  payerCustomer?: Contact | null;
   introducerCustomerId: string | null;
+  introducerCustomer?: Contact | null;
   pickerCustomerId: string | null;
+  pickerCustomer?: Contact | null;
   pickerName: string | null;
   pickerPhone: string | null;
   pickerType: string | null;
@@ -478,17 +454,34 @@ export interface Contact {
   id: string;
   code: string;
   name: string;
-  primaryPhone: string;
+  primaryPhone: string | null;
+  phones: string | null;
   address: string | null;
   remark: string | null;
   contactType: string;
   valueScore: number | null;
+  autoTag: string | null;
+  manualTag: string | null;
+  creditLimit: number;
+  creditUsed: number;
+  creditLevel: string;
+  lastCreditReviewDate: Date | null;
+  riskLevel: string;
+  blacklist: boolean;
+  blacklistReason: string | null;
+  customerCategoryId: string | null;
+  customerCategory?: CustomerCategory | null;
   createdAt: Date;
   updatedAt: Date;
-  phones?: ContactPhone[];
+  phonesObj?: ContactPhone[];
   entityRoles?: ContactEntityRole[];
   projectRoles?: ContactProjectRole[];
   personalEntity?: Entity | null;
+  saleSlips?: SaleSlip[];
+  saleSlipsAsBuyer?: SaleSlip[];
+  saleSlipsAsPayer?: SaleSlip[];
+  saleSlipsAsIntroducer?: SaleSlip[];
+  saleSlipsAsPicker?: SaleSlip[];
 }
 
 export interface ContactPhone {

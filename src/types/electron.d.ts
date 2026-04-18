@@ -17,6 +17,15 @@ declare global {
         count: (model: string, args?: any) => Promise<any>;
         updateMany: (model: string, args?: any) => Promise<any>;
       };
+      photo: {
+        save: (fileName: string, dataUrl: string, subDir?: string) => Promise<any>;
+        read: (photoPath: string) => Promise<any>;
+        delete: (photoPath: string) => Promise<any>;
+        export: (photos: { photoPath: string }[], defaultFileName?: string) => Promise<any>;
+        stats: () => Promise<{ success: boolean; data?: { totalSize: number; fileCount: number; path: string } }>;
+        scan: () => Promise<{ success: boolean; data?: { relativePath: string; fullPath: string; size: number; modifiedAt: string }[] }>;
+        getDbPaths: () => Promise<{ success: boolean; data?: Record<string, { id: string; photoPath: string }[]> }>;
+      };
     };
   }
 }
