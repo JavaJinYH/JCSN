@@ -36,6 +36,8 @@ interface CartItem {
   product: Product;
   quantity: number;
   unitPrice: number;
+  costPrice: number;
+  salePrice: number;
 }
 
 interface PaymentInfo {
@@ -200,6 +202,8 @@ export function SaleNew() {
           product,
           quantity: 1,
           unitPrice: historicalPrice || product.referencePrice || 0,
+          costPrice: product.lastPurchasePrice || 0,
+          salePrice: product.referencePrice || 0,
         },
       ]);
     }
@@ -229,7 +233,7 @@ export function SaleNew() {
     0
   );
   const costTotal = cart.reduce(
-    (sum, item) => sum + (item.product.costPrice || 0) * item.quantity,
+    (sum, item) => sum + item.costPrice * item.quantity,
     0
   );
   const rateDiscount = subtotal * (100 - discountRate) / 100;
@@ -330,8 +334,8 @@ export function SaleNew() {
               productId: item.product.id,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
-              costPriceSnapshot: item.product.costPrice,
-              sellingPriceSnapshot: item.product.salePrice,
+              costPriceSnapshot: item.costPrice,
+              sellingPriceSnapshot: item.salePrice,
               subtotal: item.unitPrice * item.quantity,
             })),
           },

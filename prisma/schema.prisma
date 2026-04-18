@@ -649,6 +649,10 @@ model SaleOrder {
   pickerName       String?
   pickerPhone      String?
 
+  needDelivery     Boolean  @default(false)
+  deliveryAddress  String?
+  deliveryFee      Float    @default(0)
+
   projectId        String?
   project          BizProject? @relation(fields: [projectId], references: [id])
 

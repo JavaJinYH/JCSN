@@ -137,7 +137,9 @@ export function Reports() {
   const loadProductReport = async (start: Date, end: Date) => {
     const orderItems = await db.orderItem.findMany({
       where: {
-        createdAt: { gte: start, lte: end },
+        saleOrder: {
+          saleDate: { gte: start, lte: end },
+        },
       },
       include: { product: true },
     });
