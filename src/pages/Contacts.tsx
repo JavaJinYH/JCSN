@@ -78,6 +78,7 @@ export function Contacts() {
   const loadData = async () => {
     try {
       const contactsData = await db.contact.findMany({
+        include: { phonesObj: true },
         orderBy: { name: 'asc' },
       });
 
@@ -103,7 +104,7 @@ export function Contacts() {
             code: contact.code,
             name: contact.name,
             primaryPhone: contact.primaryPhone,
-            otherPhones: contact.phones ? [contact.phones] : [],
+            otherPhones: contact.phonesObj?.filter(p => !p.isPrimary).map(p => p.phone) || [],
             address: contact.address,
             remark: contact.remark,
             contactType: contact.contactType,
