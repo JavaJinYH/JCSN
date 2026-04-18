@@ -12,6 +12,7 @@ const menuItems = [
   { path: '/purchases', label: '进货管理', icon: '📥' },
   { path: '/sales', label: '销售管理', icon: '💰' },
   { path: '/products', label: '商品管理', icon: '🏷️' },
+  { path: '/brands', label: '品牌管理', icon: '🏷️' },
   { path: '/customers', label: '客户管理', icon: '👥' },
   { path: '/contacts', label: '联系人管理', icon: '🧑' },
   { path: '/entities', label: '结账主体', icon: '🏢' },
@@ -23,6 +24,9 @@ const menuItems = [
   { path: '/statements', label: '对账单', icon: '📄' },
   { path: '/photos', label: '照片管理', icon: '📷' },
   { path: '/reports', label: '报表统计', icon: '📈' },
+  { path: '/purchase-history', label: '进货价格历史', icon: '📊' },
+  { path: '/legacy-bills', label: '历史账单迁移', icon: '📋' },
+  { path: '/audit-logs', label: '操作日志', icon: '📝' },
   { path: '/settings', label: '系统设置', icon: '⚙️' },
 ];
 

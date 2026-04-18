@@ -29,17 +29,20 @@ import {
 import { DataTablePagination, useDataTable } from '@/components/DataTable';
 import { db } from '@/lib/db';
 import { formatCurrency } from '@/lib/utils';
-import type { Product, Category } from '@/lib/types';
+import type { Product, Category, Brand, ProductSpec } from '@/lib/types';
 import { toast } from '@/components/Toast';
 
 export function Products() {
-  const [products, setProducts] = useState<(Product & { category: Category })[]>([]);
+  const [products, setProducts] = useState<(Product & { category: Category; productSpecs?: ProductSpec[] })[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<string>('all');
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importItems, setImportItems] = useState<{ productId: string; productName: string; quantity: number; price?: number }[]>([]);
 
   useEffect(() => {
     loadData();
@@ -52,13 +55,14 @@ export function Products() {
         whereClause.categoryId = selectedCategory;
       }
 
-      const [productsData, categoriesData] = await Promise.all([
+      const [productsData, categoriesData, brandsData] = await Promise.all([
         db.product.findMany({
           where: whereClause,
-          include: { category: true },
+          include: { category: true, productSpecs: { include: { brand: true } } },
           orderBy: { name: 'asc' },
         }),
         db.category.findMany({ orderBy: { sortOrder: 'asc' } }),
+        db.brand.findMany({ orderBy: { name: 'asc' } }),
       ]);
 
       const filteredProducts = searchTerm
@@ -72,8 +76,10 @@ export function Products() {
 
       setProducts(filteredProducts);
       setCategories(categoriesData);
+      setBrands(brandsData);
     } catch (error) {
       console.error('Failed to load products:', error);
+      toast('数据加载失败，请刷新页面重试', 'error');
     } finally {
       setLoading(false);
     }
@@ -90,7 +96,7 @@ export function Products() {
     return true;
   });
 
-  const tableProps = useDataTable<Product & { category: Category }>({
+  const tableProps = useDataTable<Product & { category: Category; productSpecs?: ProductSpec[] }>({
     data: filteredProducts,
     defaultPageSize: 20,
   });
@@ -109,6 +115,86 @@ export function Products() {
     }
   };
 
+  const handleAddImportRow = () => {
+    const select = document.getElementById('import-product-select') as HTMLSelectElement;
+    const quantityInput = document.getElementById('import-quantity') as HTMLInputElement;
+    const priceInput = document.getElementById('import-price') as HTMLInputElement;
+
+    if (!select.value) {
+      toast('请选择商品', 'warning');
+      return;
+    }
+    if (!quantityInput.value || parseInt(quantityInput.value) <= 0) {
+      toast('请输入正确的数量', 'warning');
+      return;
+    }
+
+    const product = products.find(p => p.id === select.value);
+    if (!product) return;
+
+    setImportItems([
+      ...importItems,
+      {
+        productId: select.value,
+        productName: product.name,
+        quantity: parseInt(quantityInput.value),
+        price: priceInput.value ? parseFloat(priceInput.value) : undefined,
+      },
+    ]);
+
+    select.value = '';
+    quantityInput.value = '';
+    priceInput.value = '';
+  };
+
+  const removeImportItem = (index: number) => {
+    setImportItems(importItems.filter((_, i) => i !== index));
+  };
+
+  const handleImportStock = async () => {
+    if (importItems.length === 0) return;
+
+    try {
+      for (const item of importItems) {
+        await db.product.update({
+          where: { id: item.productId },
+          data: {
+            stock: {
+              increment: item.quantity,
+            },
+            referencePrice: item.price,
+          },
+        });
+      }
+      toast(`成功导入 ${importItems.length} 项库存`, 'success');
+      setImportItems([]);
+      setShowImportDialog(false);
+      loadData();
+    } catch (error) {
+      console.error('[Products] 导入库存失败:', error);
+      toast('导入失败，请重试', 'error');
+    }
+  };
+
+  const getSpecSummary = (specs?: ProductSpec[]) => {
+    if (!specs || specs.length === 0) return '-';
+    const brandGroups = new Map<string, string[]>();
+    specs.forEach(spec => {
+      const brandName = spec.brand?.name || '未知';
+      if (!brandGroups.has(brandName)) {
+        brandGroups.set(brandName, []);
+      }
+      brandGroups.get(brandName)!.push(spec.name);
+    });
+    const summary: string[] = [];
+    brandGroups.forEach((specNames, brandName) => {
+      summary.push(`${brandName}: ${specNames.join(', ')}`);
+    });
+    return summary.map((s, i) => (
+      <div key={i} className="text-xs">{s}</div>
+    ));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -124,9 +210,17 @@ export function Products() {
           <h2 className="text-2xl font-bold text-slate-800">商品管理</h2>
           <p className="text-slate-500 mt-1">管理商品信息和价格</p>
         </div>
-        <Link to="/products/new">
-          <Button className="bg-orange-500 hover:bg-orange-600">+ 添加商品</Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link to="/brands">
+            <Button variant="outline">品牌管理</Button>
+          </Link>
+          <Button variant="outline" onClick={() => setShowImportDialog(true)}>
+            导入初始库存
+          </Button>
+          <Link to="/products/new">
+            <Button className="bg-orange-500 hover:bg-orange-600">+ 添加商品</Button>
+          </Link>
+        </div>
       </div>
 
       <Card>
@@ -185,10 +279,9 @@ export function Products() {
               <TableRow>
                 <TableHead>商品名称</TableHead>
                 <TableHead>分类</TableHead>
-                <TableHead>规格型号</TableHead>
+                <TableHead>品牌/规格</TableHead>
                 <TableHead>单位</TableHead>
-                <TableHead className="text-right">成本价</TableHead>
-                <TableHead className="text-right">销售价</TableHead>
+                <TableHead className="text-right">参考售价</TableHead>
                 <TableHead className="text-right">库存</TableHead>
                 <TableHead>操作</TableHead>
               </TableRow>
@@ -196,7 +289,7 @@ export function Products() {
             <TableBody>
               {tableProps.total === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-slate-500">
+                  <TableCell colSpan={7} className="text-center py-8 text-slate-500">
                     暂无商品数据
                   </TableCell>
                 </TableRow>
@@ -208,14 +301,11 @@ export function Products() {
                       <Badge variant="secondary">{product.category.name}</Badge>
                     </TableCell>
                     <TableCell className="text-slate-500">
-                      {product.specification || '-'} {product.model || ''}
+                      {getSpecSummary(product.productSpecs)}
                     </TableCell>
                     <TableCell>{product.unit}</TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatCurrency(product.costPrice)}
-                    </TableCell>
                     <TableCell className="text-right font-mono text-orange-600">
-                      {formatCurrency(product.salePrice)}
+                      {product.referencePrice ? formatCurrency(product.referencePrice) : '-'}
                     </TableCell>
                     <TableCell className="text-right font-mono">
                       {product.stock}
@@ -272,11 +362,9 @@ export function Products() {
             </div>
             <div className="bg-slate-50 p-4 rounded-lg">
               <div className="text-2xl font-bold text-slate-800">
-                {formatCurrency(
-                  products.reduce((sum, p) => sum + p.salePrice * p.stock, 0)
-                )}
+                {brands.length}
               </div>
-              <div className="text-sm text-slate-500">库存总值</div>
+              <div className="text-sm text-slate-500">品牌数量</div>
             </div>
             <div className="bg-slate-50 p-4 rounded-lg">
               <div className="text-2xl font-bold text-slate-800">
@@ -307,6 +395,111 @@ export function Products() {
             </Button>
             <Button variant="destructive" onClick={handleDelete}>
               删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>导入初始库存</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-slate-500">
+              选择商品并设置初始库存数量。商品如果不存在将自动创建。
+            </p>
+
+            <div className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium w-20">商品</label>
+                <select
+                  className="flex-1 h-9 border rounded px-2"
+                  id="import-product-select"
+                >
+                  <option value="">选择商品</option>
+                  {products.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium w-20">库存数量</label>
+                <Input
+                  type="number"
+                  id="import-quantity"
+                  placeholder="0"
+                  min="0"
+                  className="flex-1"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium w-20">参考售价</label>
+                <Input
+                  type="number"
+                  id="import-price"
+                  placeholder="可不填"
+                  step="0.01"
+                  className="flex-1"
+                />
+              </div>
+
+              <Button size="sm" onClick={handleAddImportRow} className="w-full">
+                + 添加到列表
+              </Button>
+            </div>
+
+            {importItems.length > 0 && (
+              <div className="border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>商品</TableHead>
+                      <TableHead className="text-right">库存</TableHead>
+                      <TableHead className="text-right">售价</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {importItems.map((item, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="text-sm">{item.productName}</TableCell>
+                        <TableCell className="text-right font-mono">{item.quantity}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {item.price ? formatCurrency(item.price) : '-'}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-red-600"
+                            onClick={() => removeImportItem(index)}
+                          >
+                            删除
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            <p className="text-xs text-slate-400">
+              提示：如果商品已存在，库存数量将累加。如果参考售价留空，将使用商品原有售价。
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowImportDialog(false);
+              setImportItems([]);
+            }}>
+              取消
+            </Button>
+            <Button onClick={handleImportStock} disabled={importItems.length === 0}>
+              确认导入 {importItems.length > 0 && `(${importItems.length}项)`}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,21 +1,22 @@
 {
-  "version": "v2.1",
+  "version": "v2.8",
   "lastUpdated": "2026-04-18",
-  "currentPhase": "Phase 3",
-  "currentTask": "已完成",
-  "currentAction": "Phase 3 前端基础改造已完成",
-  "completedPhases": ["Phase 1", "Phase 2", "Phase 3"],
-  "completedTasks": ["P1-T1", "P1-T2", "P1-T3", "P1-T4", "P1-T5", "P1-T6", "P1-T7", "P1-T8", "P1-T9", "P2-T1", "P2-T2", "P2-T3", "P2-T4", "P2-T5", "P2-T6", "P2-T7", "P3-T1", "P3-T2", "P3-T3", "P3-T4"],
-  "inProgressFiles": [],
-  "nextSteps": [
-    "Phase 4: 核心业务页面",
-    "P4-T1: 欠款统计Tab1-按联系人",
-    "P4-T2: 欠款统计Tab1-按公司",
-    "P4-T3: 欠款统计Tab1-按项目",
-    "P4-T4: 欠款统计Tab2-我应付",
-    "P4-T5: Projects.tsx项目关联公司",
-    "P4-T6: Entities.tsx公司管理"
+  "currentPhase": "Phase 8",
+  "currentTask": "全部完成",
+  "currentAction": "所有Phase任务已完成",
+  "completedPhases": ["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5", "Phase 6", "Phase 7", "Phase 8"],
+  "completedTasks": [
+    "P1-T1", "P1-T2", "P1-T3", "P1-T4", "P1-T5", "P1-T6", "P1-T7", "P1-T8", "P1-T9",
+    "P2-T1", "P2-T2", "P2-T3", "P2-T4", "P2-T5", "P2-T6",
+    "P3-T1", "P3-T2", "P3-T3", "P3-T4", "P3-T5", "P3-T6", "P3-T7",
+    "P4-T1", "P4-T2", "P4-T3", "P4-T4", "P4-T5", "P4-T6", "P4-T7",
+    "P5-T1", "P5-T2", "P5-T3", "P5-T4", "P5-T5", "P5-T6", "P5-T7", "P5-T8",
+    "P6-T1", "P6-T2", "P6-T3", "P6-T4", "P6-T5", "P6-T6",
+    "P7-T1", "P7-T2", "P7-T3", "P7-T4", "P7-T5", "P7-T6",
+    "P8-T1", "P8-T2", "P8-T3"
   ],
+  "inProgressFiles": [],
+  "nextSteps": [],
   "pendingChanges": [],
-  "notes": "Phase 3完成。Contacts.tsx添加了类型筛选（客户/水电工/公司）和编号显示。Rebates.tsx改为Contact选择。Purchases.tsx改为Supplier选择。alert改为toast。"
+  "notes": "所有Phase任务已完成。备份/恢复脚本已优化，自动查找项目根目录（通过package.json和prisma目录识别）。路径处理：electron照片存储在exe同级/photos，数据库在exe同级/prisma/dev.db。备份命令: npx tsx scripts/backup.ts。恢复命令: npx tsx scripts/restore.ts <备份文件>"
 }

@@ -18,8 +18,8 @@ export interface Product {
   unit: string;
   purchaseUnit: string | null;
   unitRatio: number;
-  costPrice: number;
-  salePrice: number;
+  lastPurchasePrice: number | null;
+  referencePrice: number | null;
   stock: number;
   minStock: number;
   imagePath: string | null;
@@ -27,6 +27,40 @@ export interface Product {
   purchases?: Purchase[];
   saleItems?: SaleItem[];
   createdAt: Date;
+  updatedAt: Date;
+  productSpecs?: ProductSpec[];
+  returnItems?: SaleReturnItem[];
+  costPrice?: number;
+  salePrice?: number;
+}
+
+export interface Brand {
+  id: string;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+  specs?: ProductSpec[];
+}
+
+export interface ProductSpec {
+  id: string;
+  productId: string;
+  brandId: string;
+  name: string;
+  unit: string;
+  salePrice: number;
+  createdAt: Date;
+  updatedAt: Date;
+  product?: Product;
+  brand?: Brand;
+}
+
+export interface CustomerPrice {
+  id: string;
+  customerId: string;
+  productId: string;
+  lastPrice: number;
+  transactionCount: number;
   updatedAt: Date;
 }
 
@@ -251,11 +285,12 @@ export interface DeliveryRecord {
 
 export interface AccountReceivable {
   id: string;
-  customerId: string;
-  customer?: Customer;
+  contactId: string;
+  contact?: Contact;
   saleId: string | null;
-  sale?: Sale | null;
+  sale?: SaleOrder | null;
   projectId: string | null;
+  entityId: string | null;
   originalAmount: number;
   paidAmount: number;
   remainingAmount: number;
@@ -446,6 +481,7 @@ export interface Contact {
   address: string | null;
   remark: string | null;
   contactType: string;
+  valueScore: number | null;
   createdAt: Date;
   updatedAt: Date;
   phones?: ContactPhone[];
@@ -550,6 +586,8 @@ export interface SaleOrder {
   items?: OrderItem[];
   payments?: OrderPayment[];
   receivables?: Receivable[];
+  returns?: SaleReturn[];
+  badDebtWriteOffs?: BadDebtWriteOff[];
 }
 
 export interface OrderItem {
@@ -598,4 +636,43 @@ export interface SaleOrderPhoto {
   photoType: string;
   photoRemark: string | null;
   createdAt: Date;
+}
+
+export interface SaleReturn {
+  id: string;
+  saleOrderId: string;
+  saleOrder?: SaleOrder;
+  returnDate: Date;
+  totalAmount: number;
+  remark: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  items?: SaleReturnItem[];
+}
+
+export interface SaleReturnItem {
+  id: string;
+  saleReturnId: string;
+  saleReturn?: SaleReturn;
+  productId: string;
+  product?: Product;
+  returnQuantity: number;
+  unitPrice: number;
+  amount: number;
+  createdAt: Date;
+}
+
+export interface BadDebtWriteOff {
+  id: string;
+  contactId: string;
+  contact?: Contact;
+  saleOrderId: string | null;
+  saleOrder?: SaleOrder | null;
+  originalAmount: number;
+  writtenOffAmount: number;
+  finalAmount: number;
+  reason: string | null;
+  operatorNote: string | null;
+  createdAt: Date;
+  createdBy: string | null;
 }

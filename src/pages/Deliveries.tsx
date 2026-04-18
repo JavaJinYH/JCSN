@@ -20,13 +20,37 @@ import {
 import { DataTablePagination, useDataTable } from '@/components/DataTable';
 import { db } from '@/lib/db';
 import { formatCurrency } from '@/lib/utils';
-import { DeliveryFee, DeliveryRecord, Sale } from '@/lib/types';
+import { DeliveryFee, SaleOrder } from '@/lib/types';
 import { toast } from '@/components/Toast';
+
+interface DeliveryRecordDisplay {
+  id: string;
+  saleId: string | null;
+  saleOrder?: SaleOrder | null;
+  projectId: string | null;
+  zoneName: string;
+  recipientName: string;
+  recipientPhone: string | null;
+  deliveryAddress: string;
+  distance: number;
+  weight: number;
+  baseFee: number;
+  distanceFee: number;
+  weightFee: number;
+  totalFee: number;
+  deliveryStatus: string;
+  deliveryDate: Date | null;
+  driverName: string | null;
+  driverPhone: string | null;
+  remark: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 export function Deliveries() {
   const [deliveryFees, setDeliveryFees] = useState<DeliveryFee[]>([]);
-  const [deliveryRecords, setDeliveryRecords] = useState<DeliveryRecord[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
+  const [deliveryRecords, setDeliveryRecords] = useState<DeliveryRecordDisplay[]>([]);
+  const [saleOrders, setSaleOrders] = useState<SaleOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'fees' | 'records'>('fees');
   const [showAddFeeDialog, setShowAddFeeDialog] = useState(false);
@@ -43,7 +67,7 @@ export function Deliveries() {
     remark: '',
   });
   const [recordFormData, setRecordFormData] = useState({
-    saleId: '',
+    saleOrderId: '',
     zoneName: '',
     recipientName: '',
     recipientPhone: '',
@@ -62,7 +86,7 @@ export function Deliveries() {
   useEffect(() => {
     if (!showAddRecordDialog) {
       setRecordFormData({
-        saleId: '',
+        saleOrderId: '',
         zoneName: '',
         recipientName: '',
         recipientPhone: '',
@@ -92,24 +116,25 @@ export function Deliveries() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [feesData, recordsData, salesData] = await Promise.all([
+      const [feesData, recordsData, ordersData] = await Promise.all([
         db.deliveryFee.findMany({ orderBy: { zoneName: 'asc' } }),
         db.deliveryRecord.findMany({
           orderBy: { createdAt: 'desc' },
           take: 100,
-          include: { sale: { include: { customer: true } } },
         }),
-        db.sale.findMany({
+        db.saleOrder.findMany({
+          where: { needDelivery: true },
           orderBy: { saleDate: 'desc' },
           take: 100,
-          include: { customer: true },
+          include: { buyer: true },
         }),
       ]);
       setDeliveryFees(feesData);
-      setDeliveryRecords(recordsData);
-      setSales(salesData);
+      setDeliveryRecords(recordsData as DeliveryRecordDisplay[]);
+      setSaleOrders(ordersData);
     } catch (error) {
-      console.error('Failed to load delivery data:', error);
+      console.error('[Deliveries] 加载数据失败:', error);
+      toast('数据加载失败，请刷新页面重试', 'error');
     } finally {
       setLoading(false);
     }
@@ -139,7 +164,7 @@ export function Deliveries() {
       loadData();
       toast('配送费用标准添加成功', 'success');
     } catch (error) {
-      console.error('Failed to add delivery fee:', error);
+      console.error('[Deliveries] 添加配送费用失败:', error);
       toast('添加失败，请重试', 'error');
     }
   };
@@ -166,7 +191,7 @@ export function Deliveries() {
     try {
       await db.deliveryRecord.create({
         data: {
-          saleId: recordFormData.saleId || null,
+          saleId: recordFormData.saleOrderId || null,
           zoneName: zoneName,
           recipientName: recordFormData.recipientName.trim(),
           recipientPhone: recordFormData.recipientPhone.trim() || null,
@@ -185,24 +210,26 @@ export function Deliveries() {
       });
 
       setShowAddRecordDialog(false);
-      setRecordFormData({ saleId: '', zoneName: '', recipientName: '', recipientPhone: '', deliveryAddress: '', distance: '', weight: '', driverName: '', driverPhone: '', remark: '' });
+      setRecordFormData({
+        saleOrderId: '', zoneName: '', recipientName: '', recipientPhone: '',
+        deliveryAddress: '', distance: '', weight: '', driverName: '', driverPhone: '', remark: ''
+      });
       setActiveTab('records');
       loadData();
       toast('配送记录添加成功', 'success');
     } catch (error) {
-      console.error('Failed to add delivery record:', error);
+      console.error('[Deliveries] 添加配送记录失败:', error);
       toast('添加失败，请重试', 'error');
     }
   };
 
   const handleDeleteFee = async (id: string) => {
-    if (!confirm('确定要删除这个配送费用标准吗？')) return;
-
     try {
       await db.deliveryFee.delete({ where: { id } });
       loadData();
+      toast('删除成功', 'success');
     } catch (error) {
-      console.error('Failed to delete delivery fee:', error);
+      console.error('[Deliveries] 删除配送费用失败:', error);
       toast('删除失败，请重试', 'error');
     }
   };
@@ -217,8 +244,9 @@ export function Deliveries() {
         },
       });
       loadData();
+      toast('状态更新成功', 'success');
     } catch (error) {
-      console.error('Failed to update delivery status:', error);
+      console.error('[Deliveries] 更新配送状态失败:', error);
       toast('更新失败，请重试', 'error');
     }
   };
@@ -236,7 +264,7 @@ export function Deliveries() {
     return matchesSearch && matchesStatus;
   });
 
-  const tableProps = useDataTable<DeliveryRecord>({
+  const tableProps = useDataTable<DeliveryRecordDisplay>({
     data: filteredRecords,
     defaultPageSize: 20,
   });
@@ -430,25 +458,29 @@ export function Deliveries() {
         <>
           {showAddRecordDialog && (
             <Dialog open={showAddRecordDialog} onOpenChange={setShowAddRecordDialog}>
-              <DialogContent>
+              <DialogContent className="max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>添加配送记录</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">关联销售单（可选）</label>
-                    <select
-                      className="w-full h-10 px-3 border rounded-md bg-white"
-                      value={recordFormData.saleId}
-                      onChange={(e) => setRecordFormData({ ...recordFormData, saleId: e.target.value })}
+                    <label className="text-sm font-medium mb-1 block">关联销售订单（可选）</label>
+                    <Select
+                      value={recordFormData.saleOrderId || '__none__'}
+                      onValueChange={(v) => setRecordFormData({ ...recordFormData, saleOrderId: v === '__none__' ? '' : v })}
                     >
-                      <option value="">不关联销售单</option>
-                      {sales.map((sale) => (
-                        <option key={sale.id} value={sale.id}>
-                          {sale.invoiceNo || sale.id.slice(-8)} - {sale.customer?.name || '散客'} - {formatCurrency(sale.totalAmount)}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger>
+                        <SelectValue placeholder="不关联销售订单" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">不关联销售订单</SelectItem>
+                        {saleOrders.map((order) => (
+                          <SelectItem key={order.id} value={order.id}>
+                            {order.invoiceNo || order.writtenInvoiceNo || order.id.slice(-8)} - {order.buyer?.name || '散客'} - {formatCurrency(order.totalAmount)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">收货人姓名 <span className="text-red-500">*</span></label>
@@ -476,18 +508,22 @@ export function Deliveries() {
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">配送区域</label>
-                    <select
-                      className="w-full h-10 px-3 border rounded-md bg-white"
-                      value={recordFormData.zoneName}
-                      onChange={(e) => setRecordFormData({ ...recordFormData, zoneName: e.target.value })}
+                    <Select
+                      value={recordFormData.zoneName || '__none__'}
+                      onValueChange={(v) => setRecordFormData({ ...recordFormData, zoneName: v === '__none__' ? '' : v })}
                     >
-                      <option value="">默认区域</option>
-                      {deliveryFees.map((fee) => (
-                        <option key={fee.id} value={fee.zoneName}>
-                          {fee.zoneName}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger>
+                        <SelectValue placeholder="默认区域" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">默认区域</SelectItem>
+                        {deliveryFees.map((fee) => (
+                          <SelectItem key={fee.id} value={fee.zoneName}>
+                            {fee.zoneName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">重量 (kg)</label>
@@ -606,9 +642,9 @@ export function Deliveries() {
                           <div className="text-sm text-slate-600 mt-1">
                             {record.deliveryAddress} | {record.zoneName}
                           </div>
-                          {record.sale && (
+                          {record.saleId && (
                             <div className="text-sm text-slate-500 mt-1">
-                              关联单据: {record.sale.invoiceNo || record.sale.id.slice(-8)} - {record.sale.customer?.name || '散客'}
+                              关联订单ID: {record.saleId.slice(-8)}
                             </div>
                           )}
                         </div>

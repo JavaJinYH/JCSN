@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,225 +25,246 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { DataTablePagination, useDataTable } from '@/components/DataTable';
+import { DataTableFilters, DataTablePagination, useDataTable } from '@/components/DataTable';
 import { db } from '@/lib/db';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatDate } from '@/lib/utils';
 import { toast } from '@/components/Toast';
-import type { Entity, Contact, BizProject } from '@/lib/types';
+import type { Entity, Contact, BizProject, SaleOrder } from '@/lib/types';
 
-interface EntityWithStats extends Entity {
-  totalSpent: number;
-  orderCount: number;
-  projectCount: number;
-  contact?: Contact | null;
-}
+type EntityWithRelations = Entity & {
+  contact: Contact | null;
+  projects?: BizProject[];
+  orders?: SaleOrder[];
+};
+
+const entityTypeOptions = [
+  { value: 'company', label: '公司/企业' },
+  { value: 'government', label: '政府/事业单位' },
+  { value: 'personal', label: '个人' },
+];
+
+const filters = [
+  { key: 'entityType', label: '主体类型', type: 'select' as const, options: entityTypeOptions },
+  { key: 'search', label: '关键词', type: 'text' as const, placeholder: '主体名称/联系人/地址...' },
+];
 
 export function Entities() {
-  const [entities, setEntities] = useState<EntityWithStats[]>([]);
+  const [entities, setEntities] = useState<EntityWithRelations[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [entityTypeFilter, setEntityTypeFilter] = useState<string>('all');
-  const [editEntity, setEditEntity] = useState<EntityWithStats | null>(null);
-  const [deleteEntity, setDeleteEntity] = useState<EntityWithStats | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [selectedEntity, setSelectedEntity] = useState<EntityWithRelations | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
-  const [entityDetail, setEntityDetail] = useState<EntityWithStats | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const [entityProjects, setEntityProjects] = useState<BizProject[]>([]);
+  const [entityOrders, setEntityOrders] = useState<SaleOrder[]>([]);
+  const [entityStats, setEntityStats] = useState<Record<string, { total: number; paid: number; count: number }>>({});
+  const [viewLoading, setViewLoading] = useState(false);
+  const [filterValues, setFilterValues] = useState<Record<string, any>>({});
+
   const [formData, setFormData] = useState({
     name: '',
-    entityType: 'personal',
-    contactId: '__none__',
+    entityType: 'company' as 'company' | 'government' | 'personal',
+    contactId: '',
     address: '',
     remark: '',
   });
 
   useEffect(() => {
+    loadContacts();
     loadData();
   }, []);
 
-  const loadData = async () => {
+  useEffect(() => {
+    if (showAddDialog) {
+      loadContacts();
+    }
+  }, [showAddDialog]);
+
+  useEffect(() => {
+    if (!showAddDialog) {
+      setFormData({
+        name: '',
+        entityType: 'company',
+        contactId: '',
+        address: '',
+        remark: '',
+      });
+    }
+  }, [showAddDialog]);
+
+  const loadContacts = async () => {
     try {
-      const [entitiesData, contactsData] = await Promise.all([
-        db.entity.findMany({
-          include: { contact: true },
-          orderBy: { name: 'asc' },
-        }),
-        db.contact.findMany({ orderBy: { name: 'asc' } }),
-      ]);
-
-      const entitiesWithStats: EntityWithStats[] = await Promise.all(
-        entitiesData.map(async (entity) => {
-          const orders = await db.saleOrder.findMany({
-            where: { paymentEntityId: entity.id },
-          });
-          const totalSpent = orders.reduce((sum, o) => sum + o.paidAmount, 0);
-          const projects = await db.bizProject.findMany({
-            where: { entityId: entity.id },
-          });
-
-          return {
-            ...entity,
-            totalSpent,
-            orderCount: orders.length,
-            projectCount: projects.length,
-          };
-        })
-      );
-
-      setEntities(entitiesWithStats);
+      const contactsData = await db.contact.findMany({
+        where: { contactType: { in: ['customer', 'company'] } },
+        orderBy: { name: 'asc' },
+        include: { phones: true },
+      });
       setContacts(contactsData);
     } catch (error) {
+      console.error('[Entities] 加载联系人失败:', error);
+    }
+  };
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const entitiesData = await db.entity.findMany({
+        include: { contact: true },
+        orderBy: { name: 'asc' },
+      });
+
+      const stats: Record<string, { total: number; paid: number; count: number }> = {};
+      for (const entity of entitiesData) {
+        const orders = await db.saleOrder.findMany({
+          where: { paymentEntityId: entity.id },
+          select: { totalAmount: true, paidAmount: true },
+        });
+        stats[entity.id] = {
+          total: orders.reduce((sum, o) => sum + o.totalAmount, 0),
+          paid: orders.reduce((sum, o) => sum + o.paidAmount, 0),
+          count: orders.length,
+        };
+      }
+
+      setEntities(entitiesData);
+      setEntityStats(stats);
+    } catch (error) {
       console.error('[Entities] 加载主体失败:', error);
-      toast('加载主体失败，请刷新页面重试', 'error');
+      toast('加载数据失败，请刷新页面重试', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredEntities = entities.filter((e) => {
-    const matchesSearch =
-      !searchTerm ||
-      e.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType =
-      entityTypeFilter === 'all' || e.entityType === entityTypeFilter;
-    return matchesSearch && matchesType;
-  });
+  const handleFilterChange = (key: string, value: any) => {
+    setFilterValues((prev) => ({ ...prev, [key]: value }));
+  };
 
-  const tableProps = useDataTable<EntityWithStats>({
+  const handleResetFilters = () => {
+    setFilterValues({});
+  };
+
+  const filteredEntities = useMemo(() => {
+    return entities.filter((entity) => {
+      if (filterValues.entityType && entity.entityType !== filterValues.entityType) {
+        return false;
+      }
+      if (filterValues.search) {
+        const search = filterValues.search.toLowerCase();
+        const matchName = entity.name.toLowerCase().includes(search);
+        const matchContact = entity.contact?.name.toLowerCase().includes(search);
+        const matchAddress = entity.address?.toLowerCase().includes(search);
+        if (!matchName && !matchContact && !matchAddress) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [entities, filterValues]);
+
+  const tableProps = useDataTable<EntityWithRelations>({
     data: filteredEntities,
     defaultPageSize: 20,
   });
 
+  const handleViewEntity = async (entity: EntityWithRelations) => {
+    setViewLoading(true);
+    setSelectedEntity(entity);
+    try {
+      const [projectsData, ordersData] = await Promise.all([
+        db.bizProject.findMany({
+          where: { entityId: entity.id },
+          orderBy: { createdAt: 'desc' },
+        }),
+        db.saleOrder.findMany({
+          where: { paymentEntityId: entity.id },
+          include: {
+            buyer: true,
+            payer: true,
+            project: true,
+            paymentEntity: true,
+          },
+          orderBy: { saleDate: 'desc' },
+        }),
+      ]);
+      setEntityProjects(projectsData);
+      setEntityOrders(ordersData);
+      setShowDetailDialog(true);
+    } catch (error) {
+      console.error('[Entities] 加载主体详情失败:', error);
+      toast('加载主体详情失败，请重试', 'error');
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
   const handleAddEntity = async () => {
-    if (!formData.name.trim()) {
-      toast('请输入主体名称', 'warning');
+    if (!formData.name) {
+      toast('请填写必填项（主体名称）', 'warning');
       return;
     }
 
     try {
       await db.entity.create({
         data: {
-          name: formData.name.trim(),
+          name: formData.name,
           entityType: formData.entityType,
-          contactId: formData.contactId === '__none__' ? null : formData.contactId,
-          address: formData.address.trim() || null,
-          remark: formData.remark.trim() || null,
+          contactId: formData.contactId || null,
+          address: formData.address || null,
+          remark: formData.remark || null,
         },
       });
 
       setShowAddDialog(false);
-      setFormData({ name: '', entityType: 'personal', contactId: '__none__', address: '', remark: '' });
+      setFormData({
+        name: '',
+        entityType: 'company',
+        contactId: '',
+        address: '',
+        remark: '',
+      });
       loadData();
-      toast('添加成功', 'success');
+      toast('主体添加成功', 'success');
     } catch (error) {
       console.error('[Entities] 添加主体失败:', error);
       toast('添加失败，请重试', 'error');
     }
   };
 
-  const handleUpdateEntity = async () => {
-    if (!editEntity || !formData.name.trim()) {
-      toast('请输入主体名称', 'warning');
-      return;
-    }
-
+  const handleDeleteEntity = async (entityId: string) => {
     try {
-      await db.entity.update({
-        where: { id: editEntity.id },
-        data: {
-          name: formData.name.trim(),
-          entityType: formData.entityType,
-          contactId: formData.contactId === '__none__' ? null : formData.contactId,
-          address: formData.address.trim() || null,
-          remark: formData.remark.trim() || null,
-        },
+      const stats = entityStats[entityId];
+      if (stats && stats.count > 0) {
+        toast(`该主体已关联 ${stats.count} 笔销售订单，无法删除`, 'warning');
+        return;
+      }
+
+      await db.entity.delete({
+        where: { id: entityId },
       });
-
-      setEditEntity(null);
       loadData();
-      toast('更新成功', 'success');
-    } catch (error) {
-      console.error('[Entities] 更新主体失败:', error);
-      toast('更新失败，请重试', 'error');
-    }
-  };
-
-  const handleDeleteEntity = async () => {
-    if (!deleteEntity) return;
-
-    try {
-      await db.entity.delete({ where: { id: deleteEntity.id } });
-      setDeleteEntity(null);
-      loadData();
-      toast('删除成功', 'success');
+      toast('主体删除成功', 'success');
     } catch (error) {
       console.error('[Entities] 删除主体失败:', error);
       toast('删除失败，请重试', 'error');
     }
   };
 
-  const openEditDialog = (entity: EntityWithStats) => {
-    setFormData({
-      name: entity.name,
-      entityType: entity.entityType,
-      contactId: entity.contactId || '__none__',
-      address: entity.address || '',
-      remark: entity.remark || '',
-    });
-    setEditEntity(entity);
-  };
-
-  const handleOpenDetail = async (entity: EntityWithStats) => {
-    setDetailLoading(true);
-    try {
-      const [orders, projects, roles] = await Promise.all([
-        db.saleOrder.findMany({
-          where: { paymentEntityId: entity.id },
-          include: { buyer: true, project: true },
-          orderBy: { saleDate: 'desc' },
-          take: 10,
-        }),
-        db.bizProject.findMany({
-          where: { entityId: entity.id },
-          orderBy: { createdAt: 'desc' },
-        }),
-        db.contactEntityRole.findMany({
-          where: { entityId: entity.id },
-          include: { contact: true },
-        }),
-      ]);
-
-      const totalSpent = orders.reduce((sum, o) => sum + o.paidAmount, 0);
-
-      setEntityDetail({
-        ...entity,
-        totalSpent,
-        orderCount: orders.length,
-        projectCount: projects.length,
-      });
-      (window as any).__entityDetail = { orders, projects, roles };
-      setShowDetailDialog(true);
-    } catch (error) {
-      console.error('[Entities] 加载详情失败:', error);
-      toast('加载详情失败', 'error');
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
   const getEntityTypeBadge = (type: string) => {
     switch (type) {
-      case 'personal':
-        return <Badge className="bg-blue-500">个人</Badge>;
       case 'company':
-        return <Badge className="bg-purple-500">公司</Badge>;
+        return <Badge className="bg-blue-500 hover:bg-blue-600">公司</Badge>;
       case 'government':
-        return <Badge className="bg-green-500">政府</Badge>;
+        return <Badge className="bg-purple-500 hover:bg-purple-600">政府/事业单位</Badge>;
+      case 'personal':
+        return <Badge variant="secondary">个人</Badge>;
       default:
-        return <Badge variant="secondary">{type}</Badge>;
+        return <Badge>{type}</Badge>;
     }
   };
+
+  const totalEntityAmount = filteredEntities.reduce((sum, e) => sum + (entityStats[e.id]?.total || 0), 0);
+  const totalPaidAmount = filteredEntities.reduce((sum, e) => sum + (entityStats[e.id]?.paid || 0), 0);
 
   if (loading) {
     return (
@@ -253,53 +274,55 @@ export function Entities() {
     );
   }
 
-  const entityDetailData = detailLoading ? null : (window as any).__entityDetail;
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">结账主体管理</h2>
-          <p className="text-slate-500 mt-1">管理付款主体 - 所有账目挂在主体下</p>
+          <p className="text-slate-500 mt-1">管理公司/单位等结账主体及其销售订单</p>
         </div>
         <Button className="bg-orange-500 hover:bg-orange-600" onClick={() => setShowAddDialog(true)}>
           + 添加主体
         </Button>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold text-slate-800">{filteredEntities.length}</div>
+            <div className="text-sm text-slate-500">主体总数</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold text-blue-600">
+              {filteredEntities.filter((e) => e.entityType === 'company').length}
+            </div>
+            <div className="text-sm text-slate-500">公司</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold text-orange-600">{formatCurrency(totalEntityAmount)}</div>
+            <div className="text-sm text-slate-500">主体销售额</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold text-green-600">{formatCurrency(totalPaidAmount)}</div>
+            <div className="text-sm text-slate-500">已收款</div>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-3 flex-wrap">
-            <Select value={entityTypeFilter} onValueChange={setEntityTypeFilter}>
-              <SelectTrigger className="w-32 h-8">
-                <SelectValue placeholder="全部类型" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部类型</SelectItem>
-                <SelectItem value="personal">个人</SelectItem>
-                <SelectItem value="company">公司</SelectItem>
-                <SelectItem value="government">政府</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Input
-              placeholder="搜索主体名称..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-48 h-8"
-            />
-
-            {searchTerm && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSearchTerm('')}
-                className="h-8 text-slate-500"
-              >
-                清除搜索
-              </Button>
-            )}
-          </div>
+          <DataTableFilters
+            filters={filters}
+            values={filterValues}
+            onChange={handleFilterChange}
+            onReset={handleResetFilters}
+          />
         </CardHeader>
         <CardContent>
           <Table>
@@ -307,15 +330,15 @@ export function Entities() {
               <TableRow>
                 <TableHead>主体名称</TableHead>
                 <TableHead>类型</TableHead>
-                <TableHead>关联人员</TableHead>
-                <TableHead>累计消费</TableHead>
+                <TableHead>联系人</TableHead>
+                <TableHead>联系电话</TableHead>
                 <TableHead>订单数</TableHead>
-                <TableHead>项目数</TableHead>
+                <TableHead className="text-right">销售总额</TableHead>
                 <TableHead>操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tableProps.total === 0 ? (
+              {tableProps.data.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-slate-500">
                     暂无主体数据
@@ -323,30 +346,27 @@ export function Entities() {
                 </TableRow>
               ) : (
                 tableProps.data.map((entity) => (
-                  <TableRow key={entity.id}>
+                  <TableRow key={entity.id} className="cursor-pointer hover:bg-slate-50" onClick={() => handleViewEntity(entity)}>
                     <TableCell className="font-medium">{entity.name}</TableCell>
                     <TableCell>{getEntityTypeBadge(entity.entityType)}</TableCell>
+                    <TableCell>{entity.contact?.name || '-'}</TableCell>
                     <TableCell className="text-slate-500">
-                      {entity.contact ? entity.contact.name : '-'}
+                      {entity.contact?.primaryPhone || entity.contact?.phones?.[0]?.phone || '-'}
                     </TableCell>
-                    <TableCell className="font-mono text-orange-600">
-                      {formatCurrency(entity.totalSpent)}
+                    <TableCell className="font-mono">{entityStats[entity.id]?.count || 0}</TableCell>
+                    <TableCell className="text-right font-mono text-orange-600">
+                      {formatCurrency(entityStats[entity.id]?.total || 0)}
                     </TableCell>
-                    <TableCell>{entity.orderCount}</TableCell>
-                    <TableCell>{entity.projectCount}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => handleOpenDetail(entity)}>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => handleViewEntity(entity)}>
                           详情
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => openEditDialog(entity)}>
-                          编辑
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => setDeleteEntity(entity)}
+                          className="text-red-500 hover:text-red-600"
+                          onClick={() => handleDeleteEntity(entity.id)}
                         >
                           删除
                         </Button>
@@ -369,208 +389,83 @@ export function Entities() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-slate-800">{entities.length}</div>
-            <div className="text-sm text-slate-500">主体总数</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-blue-600">
-              {entities.filter(e => e.entityType === 'personal').length}
-            </div>
-            <div className="text-sm text-slate-500">个人主体</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-purple-600">
-              {entities.filter(e => e.entityType === 'company').length}
-            </div>
-            <div className="text-sm text-slate-500">公司主体</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-orange-600">
-              {formatCurrency(entities.reduce((sum, e) => sum + e.totalSpent, 0))}
-            </div>
-            <div className="text-sm text-slate-500">累计消费总额</div>
-          </CardContent>
-        </Card>
-      </div>
-
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>添加新主体</DialogTitle>
+            <DialogTitle>添加结账主体</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <label className="text-sm font-medium mb-1 block">
+              <label className="text-sm font-medium mb-2 block">
                 主体名称 <span className="text-red-500">*</span>
               </label>
               <Input
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="输入主体名称"
+                placeholder="例如: 江城装饰工程有限公司"
               />
             </div>
+
             <div>
-              <label className="text-sm font-medium mb-1 block">主体类型</label>
+              <label className="text-sm font-medium mb-2 block">主体类型</label>
               <Select
                 value={formData.entityType}
-                onValueChange={(v) => setFormData({ ...formData, entityType: v })}
+                onValueChange={(v) => setFormData({ ...formData, entityType: v as 'company' | 'government' | 'personal' })}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="personal">个人</SelectItem>
-                  <SelectItem value="company">公司</SelectItem>
-                  <SelectItem value="government">政府</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">关联人员（可选）</label>
-              <Select
-                value={formData.contactId}
-                onValueChange={(v) => setFormData({ ...formData, contactId: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="选择关联人员（可选）" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">无</SelectItem>
-                  {contacts.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name} ({c.primaryPhone})
+                  {entityTypeOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">地址</label>
-              <Input
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                placeholder="输入地址"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">备注</label>
-              <Input
-                value={formData.remark}
-                onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
-                placeholder="输入备注"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddDialog(false)}>
-              取消
-            </Button>
-            <Button onClick={handleAddEntity}>保存</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      <Dialog open={!!editEntity} onOpenChange={() => setEditEntity(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>编辑主体</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
             <div>
-              <label className="text-sm font-medium mb-1 block">
-                主体名称 <span className="text-red-500">*</span>
-              </label>
-              <Input
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">主体类型</label>
+              <label className="text-sm font-medium mb-2 block">关联联系人</label>
               <Select
-                value={formData.entityType}
-                onValueChange={(v) => setFormData({ ...formData, entityType: v })}
+                value={formData.contactId || '__none__'}
+                onValueChange={(v) => setFormData({ ...formData, contactId: v === '__none__' ? '' : v })}
               >
                 <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="personal">个人</SelectItem>
-                  <SelectItem value="company">公司</SelectItem>
-                  <SelectItem value="government">政府</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">关联人员（可选）</label>
-              <Select
-                value={formData.contactId}
-                onValueChange={(v) => setFormData({ ...formData, contactId: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="选择关联人员（可选）" />
+                  <SelectValue placeholder="选择联系人（可选）" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">无</SelectItem>
-                  {contacts.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name} ({c.primaryPhone})
+                  {contacts.map((contact) => (
+                    <SelectItem key={contact.id} value={contact.id}>
+                      {contact.name} ({contact.contactType === 'plumber' ? '水电工' : '客户'})
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+
             <div>
-              <label className="text-sm font-medium mb-1 block">地址</label>
+              <label className="text-sm font-medium mb-2 block">主体地址</label>
               <Input
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                placeholder="例如: XX市XX区XX路XX号"
               />
             </div>
+
             <div>
-              <label className="text-sm font-medium mb-1 block">备注</label>
+              <label className="text-sm font-medium mb-2 block">备注</label>
               <Input
                 value={formData.remark}
                 onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
+                placeholder="可选"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditEntity(null)}>
-              取消
-            </Button>
-            <Button onClick={handleUpdateEntity}>保存</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!deleteEntity} onOpenChange={() => setDeleteEntity(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>确认删除</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <p>
-              确定要删除主体 <strong>{deleteEntity?.name}</strong> 吗？
-            </p>
-            <p className="text-sm text-red-500 mt-2">此操作不可恢复。</p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteEntity(null)}>
-              取消
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteEntity}>
-              删除
-            </Button>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)}>取消</Button>
+            <Button onClick={handleAddEntity} className="bg-orange-500 hover:bg-orange-600">保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -578,170 +473,158 @@ export function Entities() {
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>主体详情 - {entityDetail?.name}</DialogTitle>
+            <DialogTitle>主体详情</DialogTitle>
           </DialogHeader>
-          {detailLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="text-slate-500">加载中...</div>
-            </div>
-          ) : entityDetail && entityDetailData ? (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <div className="text-sm text-slate-500">累计消费</div>
-                  <div className="text-xl font-bold text-blue-600">{formatCurrency(entityDetail.totalSpent)}</div>
-                </div>
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <div className="text-sm text-slate-500">订单数</div>
-                  <div className="text-xl font-bold text-green-600">{entityDetail.orderCount} 笔</div>
-                </div>
-                <div className="bg-purple-50 p-4 rounded-lg">
-                  <div className="text-sm text-slate-500">项目数</div>
-                  <div className="text-xl font-bold text-purple-600">{entityDetail.projectCount} 个</div>
-                </div>
-                <div className="bg-orange-50 p-4 rounded-lg">
-                  <div className="text-sm text-slate-500">信用额度</div>
-                  <div className="text-xl font-bold text-orange-600">{formatCurrency(entityDetail.creditLimit)}</div>
-                </div>
-              </div>
 
+          {selectedEntity && (
+            <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-50 rounded-lg">
                   <h4 className="font-medium mb-3">基本信息</h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
+                      <span className="text-slate-500">主体名称:</span>
+                      <span className="font-medium">{selectedEntity.name}</span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className="text-slate-500">主体类型:</span>
-                      <span>{getEntityTypeBadge(entityDetail.entityType)}</span>
+                      <span>{getEntityTypeBadge(selectedEntity.entityType)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">关联人员:</span>
-                      <span>{entityDetail.contact?.name || '-'}</span>
+                      <span className="text-slate-500">联系人:</span>
+                      <span>{selectedEntity.contact?.name || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">地址:</span>
-                      <span>{entityDetail.address || '-'}</span>
+                      <span className="text-slate-500">联系电话:</span>
+                      <span>{selectedEntity.contact?.primaryPhone || '-'}</span>
                     </div>
-                    {entityDetail.remark && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">主体地址:</span>
+                      <span>{selectedEntity.address || '-'}</span>
+                    </div>
+                    {selectedEntity.remark && (
                       <div className="flex justify-between">
                         <span className="text-slate-500">备注:</span>
-                        <span>{entityDetail.remark}</span>
+                        <span>{selectedEntity.remark}</span>
                       </div>
                     )}
                   </div>
                 </div>
 
                 <div className="p-4 bg-slate-50 rounded-lg">
-                  <h4 className="font-medium mb-3">信用信息</h4>
+                  <h4 className="font-medium mb-3">销售统计</h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-slate-500">信用额度:</span>
-                      <span>{formatCurrency(entityDetail.creditLimit)}</span>
+                      <span className="text-slate-500">关联订单:</span>
+                      <span className="font-bold text-orange-600">{entityStats[selectedEntity.id]?.count || 0} 笔</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">已用额度:</span>
-                      <span className="text-orange-600">{formatCurrency(entityDetail.creditUsed)}</span>
+                      <span className="text-slate-500">销售总额:</span>
+                      <span className="font-bold">{formatCurrency(entityStats[selectedEntity.id]?.total || 0)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">可用额度:</span>
-                      <span className="text-green-600">{formatCurrency(entityDetail.creditLimit - entityDetail.creditUsed)}</span>
+                      <span className="text-slate-500">已收款:</span>
+                      <span className="text-green-600">{formatCurrency(entityStats[selectedEntity.id]?.paid || 0)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">待收款:</span>
+                      <span className="text-red-600 font-bold">
+                        {formatCurrency((entityStats[selectedEntity.id]?.total || 0) - (entityStats[selectedEntity.id]?.paid || 0))}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">关联项目:</span>
+                      <span>{entityProjects.length} 个</span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {entityDetailData.roles && entityDetailData.roles.length > 0 && (
-                <div>
-                  <h4 className="font-medium mb-3">关联人员及角色</h4>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>人员</TableHead>
-                        <TableHead>角色</TableHead>
-                        <TableHead>是否默认</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {entityDetailData.roles.map((role: any) => (
-                        <TableRow key={role.id}>
-                          <TableCell>{role.contact?.name || '-'}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{role.role}</Badge>
-                          </TableCell>
-                          <TableCell>{role.isDefault ? '是' : '否'}</TableCell>
+              <div>
+                <h4 className="font-medium mb-3">关联项目 ({entityProjects.length})</h4>
+                {entityProjects.length === 0 ? (
+                  <div className="text-center py-4 text-slate-500 bg-slate-50 rounded-lg">
+                    暂无关联项目
+                  </div>
+                ) : (
+                  <div className="border rounded-lg overflow-hidden mb-4">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>项目名称</TableHead>
+                          <TableHead>状态</TableHead>
+                          <TableHead>开始日期</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+                      </TableHeader>
+                      <TableBody>
+                        {entityProjects.map((project) => (
+                          <TableRow key={project.id}>
+                            <TableCell className="font-medium">{project.name}</TableCell>
+                            <TableCell>
+                              <Badge variant={project.status === '进行中' ? 'default' : 'secondary'}>
+                                {project.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-slate-500 text-sm">
+                              {project.startDate ? formatDate(project.startDate) : '-'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
 
-              {entityDetailData.projects && entityDetailData.projects.length > 0 && (
-                <div>
-                  <h4 className="font-medium mb-3">关联项目</h4>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>项目名称</TableHead>
-                        <TableHead>状态</TableHead>
-                        <TableHead>开始日期</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {entityDetailData.projects.slice(0, 5).map((project: BizProject) => (
-                        <TableRow key={project.id}>
-                          <TableCell className="font-medium">{project.name}</TableCell>
-                          <TableCell>
-                            <Badge className={
-                              project.status === '进行中' ? 'bg-blue-500' :
-                              project.status === '已完成' ? 'bg-green-500' :
-                              'bg-slate-500'
-                            }>
-                              {project.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-slate-500">
-                            {project.startDate ? new Date(project.startDate).toLocaleDateString('zh-CN') : '-'}
-                          </TableCell>
+              <div>
+                <h4 className="font-medium mb-3">关联销售订单 ({entityOrders.length})</h4>
+                {entityOrders.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-lg">
+                    暂无关联销售订单
+                  </div>
+                ) : (
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>单据号</TableHead>
+                          <TableHead>日期</TableHead>
+                          <TableHead>购货人</TableHead>
+                          <TableHead>项目</TableHead>
+                          <TableHead className="text-right">金额</TableHead>
+                          <TableHead className="text-right">已付</TableHead>
+                          <TableHead>状态</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-
-              {entityDetailData.orders && entityDetailData.orders.length > 0 && (
-                <div>
-                  <h4 className="font-medium mb-3">最近订单</h4>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>单号</TableHead>
-                        <TableHead>日期</TableHead>
-                        <TableHead>购货人</TableHead>
-                        <TableHead className="text-right">金额</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {entityDetailData.orders.slice(0, 5).map((order: any) => (
-                        <TableRow key={order.id}>
-                          <TableCell className="font-mono text-sm">
-                            {order.invoiceNo || order.id.substring(0, 8)}
-                          </TableCell>
-                          <TableCell className="text-slate-500">
-                            {new Date(order.saleDate).toLocaleDateString('zh-CN')}
-                          </TableCell>
-                          <TableCell className="text-slate-500">
-                            {order.buyer?.name || '-'}
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {formatCurrency(order.totalAmount)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+                      </TableHeader>
+                      <TableBody>
+                        {entityOrders.map((order) => (
+                          <TableRow key={order.id}>
+                            <TableCell className="font-mono text-sm">
+                              {order.invoiceNo || order.writtenInvoiceNo || order.id.substring(0, 8)}
+                            </TableCell>
+                            <TableCell className="text-slate-500 text-sm">
+                              {formatDate(order.saleDate)}
+                            </TableCell>
+                            <TableCell>{order.buyer?.name || '-'}</TableCell>
+                            <TableCell>{order.project?.name || '-'}</TableCell>
+                            <TableCell className="text-right font-mono">
+                              {formatCurrency(order.totalAmount)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-green-600">
+                              {formatCurrency(order.paidAmount)}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
+                                {order.status === 'completed' ? '已完成' : order.status}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
 
               <div className="flex justify-end gap-3">
                 <Button variant="outline" onClick={() => setShowDetailDialog(false)}>
@@ -749,9 +632,17 @@ export function Entities() {
                 </Button>
               </div>
             </div>
-          ) : null}
+          )}
         </DialogContent>
       </Dialog>
+
+      {viewLoading && (
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
+          <div className="bg-white p-4 rounded-lg">
+            <div className="text-slate-500">加载中...</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

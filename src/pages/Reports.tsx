@@ -93,17 +93,17 @@ export function Reports() {
   };
 
   const loadSalesReport = async (start: Date, end: Date) => {
-    const sales = await db.sale.findMany({
+    const orders = await db.saleOrder.findMany({
       where: { saleDate: { gte: start, lte: end } },
       include: { items: true },
     });
 
-    const totalSales = sales.reduce((sum, s) => sum + s.paidAmount, 0);
-    const totalCost = sales.reduce((sum, s) => {
+    const totalSales = orders.reduce((sum, s) => sum + s.paidAmount, 0);
+    const totalCost = orders.reduce((sum, s) => {
       return sum + s.items.reduce((itemSum, item) => itemSum + item.costPriceSnapshot * item.quantity, 0);
     }, 0);
     const totalProfit = totalSales - totalCost;
-    const totalOrders = sales.length;
+    const totalOrders = orders.length;
     const avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
 
     setReportData({ totalSales, totalOrders, totalProfit, avgOrderValue });
@@ -116,11 +116,11 @@ export function Reports() {
       current.setDate(current.getDate() + 1);
     }
 
-    sales.forEach((sale) => {
-      const key = dayjs(sale.saleDate).format('MM-DD');
+    orders.forEach((order) => {
+      const key = dayjs(order.saleDate).format('MM-DD');
       const existing = dailyData.get(key);
       if (existing) {
-        existing.sales += sale.paidAmount;
+        existing.sales += order.paidAmount;
         existing.orders += 1;
       }
     });
@@ -135,7 +135,7 @@ export function Reports() {
   };
 
   const loadProductReport = async (start: Date, end: Date) => {
-    const salesItems = await db.saleItem.findMany({
+    const orderItems = await db.orderItem.findMany({
       where: {
         createdAt: { gte: start, lte: end },
       },
@@ -143,7 +143,7 @@ export function Reports() {
     });
 
     const productMap = new Map<string, any>();
-    salesItems.forEach((item) => {
+    orderItems.forEach((item) => {
       const existing = productMap.get(item.productId);
       if (existing) {
         existing.quantity += item.quantity;
@@ -169,7 +169,7 @@ export function Reports() {
   };
 
   const loadProfitReport = async (start: Date, end: Date) => {
-    const sales = await db.sale.findMany({
+    const orders = await db.saleOrder.findMany({
       where: { saleDate: { gte: start, lte: end } },
       include: { items: true },
     });
@@ -182,14 +182,14 @@ export function Reports() {
       current.setDate(current.getDate() + 1);
     }
 
-    sales.forEach((sale) => {
-      const key = dayjs(sale.saleDate).format('MM-DD');
+    orders.forEach((order) => {
+      const key = dayjs(order.saleDate).format('MM-DD');
       const existing = dailyData.get(key);
       if (existing) {
-        const saleCost = sale.items.reduce((sum, item) => sum + item.costPriceSnapshot * item.quantity, 0);
-        existing.revenue += sale.paidAmount;
-        existing.cost += saleCost;
-        existing.profit += sale.paidAmount - saleCost;
+        const orderCost = order.items.reduce((sum, item) => sum + item.costPriceSnapshot * item.quantity, 0);
+        existing.revenue += order.paidAmount;
+        existing.cost += orderCost;
+        existing.profit += order.paidAmount - orderCost;
       }
     });
 
@@ -202,41 +202,41 @@ export function Reports() {
       }))
     );
 
-    const totalRevenue = sales.reduce((sum, s) => sum + s.paidAmount, 0);
-    const totalCost = sales.reduce((sum, s) => {
+    const totalRevenue = orders.reduce((sum, s) => sum + s.paidAmount, 0);
+    const totalCost = orders.reduce((sum, s) => {
       return sum + s.items.reduce((itemSum, item) => itemSum + item.costPriceSnapshot * item.quantity, 0);
     }, 0);
 
     setReportData({
       totalSales: totalRevenue,
-      totalOrders: sales.length,
+      totalOrders: orders.length,
       totalProfit: totalRevenue - totalCost,
-      avgOrderValue: sales.length > 0 ? totalRevenue / sales.length : 0,
+      avgOrderValue: orders.length > 0 ? totalRevenue / orders.length : 0,
     });
   };
 
   const loadCustomerReport = async (start: Date, end: Date) => {
-    const sales = await db.sale.findMany({
+    const orders = await db.saleOrder.findMany({
       where: {
         saleDate: { gte: start, lte: end },
-        customerId: { not: null },
+        buyerId: { not: null },
       },
-      include: { customer: true },
+      include: { buyer: true },
     });
 
     const customerMap = new Map<string, any>();
-    sales.forEach((sale) => {
-      if (!sale.customer) return;
-      const existing = customerMap.get(sale.customerId);
+    orders.forEach((order) => {
+      if (!order.buyer) return;
+      const existing = customerMap.get(order.buyerId);
       if (existing) {
-        existing.amount += sale.paidAmount;
+        existing.amount += order.paidAmount;
         existing.orders += 1;
       } else {
-        customerMap.set(sale.customerId, {
-          name: sale.customer.name,
-          phone: sale.customer.phone,
-          type: sale.customer.customerType,
-          amount: sale.paidAmount,
+        customerMap.set(order.buyerId, {
+          name: order.buyer.name,
+          phone: order.buyer.primaryPhone,
+          type: order.buyer.contactType,
+          amount: order.paidAmount,
           orders: 1,
         });
       }

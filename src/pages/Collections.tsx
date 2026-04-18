@@ -59,6 +59,7 @@ export function Collections() {
         db.customer.findMany({ orderBy: { name: 'asc' } }),
         db.accountReceivable.findMany({
           where: { remainingAmount: { gt: 0 } },
+          include: { contact: true },
           orderBy: { createdAt: 'desc' },
         }),
       ]);
@@ -329,7 +330,7 @@ export function Collections() {
                   <option value="">不关联</option>
                   {receivables.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.customer?.name} - {formatCurrency(r.remainingAmount)}
+                      {r.contact?.name} - {formatCurrency(r.remainingAmount)}
                     </option>
                   ))}
                 </select>

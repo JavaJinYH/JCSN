@@ -27,17 +27,57 @@ model Product {
   unit             String                    @default("个")
   purchaseUnit     String?
   unitRatio        Float                     @default(1)
-  costPrice        Float
-  salePrice        Float
-  stock            Int                       @default(0)
-  minStock         Int                       @default(0)
+  lastPurchasePrice Float?
+  referencePrice   Float?
+  stock            Float                     @default(0)
+  minStock         Float                     @default(0)
   imagePath        String?
   imageUrl         String?
   purchases        Purchase[]
   saleItems        SaleItem[]
   favoriteProducts CustomerFavoriteProduct[]
+  productSpecs     ProductSpec[]
+  returnItems      SaleReturnItem[]
   createdAt        DateTime                  @default(now())
   updatedAt        DateTime                  @updatedAt
+}
+
+model Brand {
+  id         String   @id @default(cuid())
+  name       String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  specs      ProductSpec[]
+}
+
+model ProductSpec {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  brandId    String
+  brand      Brand   @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  name       String
+  unit       String  @default("个")
+
+  salePrice  Float
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([productId, brandId, name])
+}
+
+model CustomerPrice {
+  id            String   @id @default(cuid())
+  customerId    String
+  productId     String
+  lastPrice     Float
+  transactionCount Int   @default(1)
+  updatedAt     DateTime @updatedAt
+
+  @@unique([customerId, productId])
 }
 
 model Purchase {
@@ -475,6 +515,7 @@ model Contact {
   address      String?
   remark       String?
   contactType  String   @default("customer")
+  valueScore   Float?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -489,6 +530,7 @@ model Contact {
   rebatesAsPlumber Rebate[]
   receivables    AccountReceivable[]
   supplierContacts Supplier[]
+  badDebtWriteOffs BadDebtWriteOff[]
 }
 
 model ContactPhone {
@@ -628,6 +670,50 @@ model SaleOrder {
   rebates      Rebate[]
   receivables  Receivable[]
   photos       SaleOrderPhoto[]
+  returns      SaleReturn[]
+  badDebtWriteOffs BadDebtWriteOff[]
+}
+
+model SaleReturn {
+  id           String   @id @default(cuid())
+  saleOrderId  String
+  saleOrder    SaleOrder @relation(fields: [saleOrderId], references: [id], onDelete: Cascade)
+  returnDate   DateTime @default(now())
+  totalAmount  Float
+  remark       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  items        SaleReturnItem[]
+}
+
+model SaleReturnItem {
+  id            String   @id @default(cuid())
+  saleReturnId  String
+  saleReturn    SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
+
+  productId     String
+  product       Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  returnQuantity Float
+  unitPrice     Float
+  amount        Float
+
+  createdAt    DateTime @default(now())
+}
+
+model BadDebtWriteOff {
+  id              String   @id @default(cuid())
+  contactId       String
+  contact         Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  saleOrderId     String?
+  saleOrder       SaleOrder? @relation(fields: [saleOrderId], references: [id], onDelete: SetNull)
+  originalAmount  Float
+  writtenOffAmount Float
+  finalAmount     Float
+  reason          String?
+  operatorNote    String?
+  createdAt       DateTime @default(now())
+  createdBy       String?
 }
 
 model OrderItem {

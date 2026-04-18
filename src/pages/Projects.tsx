@@ -27,28 +27,15 @@ import {
 } from '@/components/ui/dialog';
 import { DataTableFilters, DataTablePagination, useDataTable } from '@/components/DataTable';
 import { db } from '@/lib/db';
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
+import { formatCurrency, formatDate } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import { useNavigate } from 'react-router-dom';
-import type { Project, Customer, Sale, SaleItem, Payment } from '@/lib/types';
+import type { Entity, BizProject, SaleOrder } from '@/lib/types';
 
-type ProjectWithRelations = Project & {
-  customer: Customer | null;
-  sales?: SaleWithDetails[];
+type BizProjectWithRelations = BizProject & {
+  entity: Entity | null;
+  orders?: SaleOrder[];
 };
-
-type SaleWithDetails = Sale & {
-  customer: Customer | null;
-  project: Project | null;
-  items: (SaleItem & { product: any })[];
-  payments: Payment[];
-};
-
-interface ProjectStats {
-  total: number;
-  paid: number;
-  count: number;
-}
 
 const statusOptions = [
   { value: '进行中', label: '进行中' },
@@ -59,25 +46,25 @@ const statusOptions = [
 
 const filters = [
   { key: 'status', label: '状态', type: 'select' as const, options: statusOptions },
-  { key: 'search', label: '关键词', type: 'text' as const, placeholder: '项目名称/客户/地址...' },
+  { key: 'search', label: '关键词', type: 'text' as const, placeholder: '项目名称/主体/地址...' },
 ];
 
 export function Projects() {
   const navigate = useNavigate();
-  const [projects, setProjects] = useState<ProjectWithRelations[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [projects, setProjects] = useState<BizProjectWithRelations[]>([]);
+  const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [selectedProject, setSelectedProject] = useState<ProjectWithRelations | null>(null);
+  const [selectedProject, setSelectedProject] = useState<BizProjectWithRelations | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
-  const [projectSales, setProjectSales] = useState<SaleWithDetails[]>([]);
-  const [projectStats, setProjectStats] = useState<Record<string, ProjectStats>>({});
+  const [projectOrders, setProjectOrders] = useState<SaleOrder[]>([]);
+  const [projectStats, setProjectStats] = useState<Record<string, { total: number; paid: number; count: number }>>({});
   const [viewLoading, setViewLoading] = useState(false);
   const [filterValues, setFilterValues] = useState<Record<string, any>>({});
 
   const [formData, setFormData] = useState({
     name: '',
-    customerId: '' as string | undefined,
+    entityId: '',
     address: '',
     status: '进行中',
     startDate: '',
@@ -86,45 +73,59 @@ export function Projects() {
   });
 
   useEffect(() => {
-    loadCustomers();
+    loadEntities();
     loadData();
   }, []);
 
   useEffect(() => {
     if (showAddDialog) {
-      loadCustomers();
+      loadEntities();
     }
   }, [showAddDialog]);
 
-  const loadCustomers = async () => {
+  useEffect(() => {
+    if (!showAddDialog) {
+      setFormData({
+        name: '',
+        entityId: '',
+        address: '',
+        status: '进行中',
+        startDate: '',
+        endDate: '',
+        remark: '',
+      });
+    }
+  }, [showAddDialog]);
+
+  const loadEntities = async () => {
     try {
-      const customersData = await db.customer.findMany({
+      const entitiesData = await db.entity.findMany({
         orderBy: { name: 'asc' },
       });
-      setCustomers(customersData);
+      setEntities(entitiesData);
     } catch (error) {
-      console.error('[Projects] 加载客户失败:', error);
+      console.error('[Projects] 加载主体失败:', error);
     }
   };
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const projectsData = await db.project.findMany({
-        include: { customer: true },
+      const projectsData = await db.bizProject.findMany({
+        include: { entity: true },
         orderBy: { createdAt: 'desc' },
       });
 
-      const stats: Record<string, ProjectStats> = {};
+      const stats: Record<string, { total: number; paid: number; count: number }> = {};
       for (const project of projectsData) {
-        const sales = await db.sale.findMany({
+        const orders = await db.saleOrder.findMany({
           where: { projectId: project.id },
           select: { totalAmount: true, paidAmount: true },
         });
         stats[project.id] = {
-          total: sales.reduce((sum, s) => sum + s.totalAmount, 0),
-          paid: sales.reduce((sum, s) => sum + s.paidAmount, 0),
-          count: sales.length,
+          total: orders.reduce((sum, o) => sum + o.totalAmount, 0),
+          paid: orders.reduce((sum, o) => sum + o.paidAmount, 0),
+          count: orders.length,
         };
       }
 
@@ -154,9 +155,9 @@ export function Projects() {
       if (filterValues.search) {
         const search = filterValues.search.toLowerCase();
         const matchName = project.name.toLowerCase().includes(search);
-        const matchCustomer = project.customer?.name.toLowerCase().includes(search);
+        const matchEntity = project.entity?.name.toLowerCase().includes(search);
         const matchAddress = project.address?.toLowerCase().includes(search);
-        if (!matchName && !matchCustomer && !matchAddress) {
+        if (!matchName && !matchEntity && !matchAddress) {
           return false;
         }
       }
@@ -164,26 +165,26 @@ export function Projects() {
     });
   }, [projects, filterValues]);
 
-  const tableProps = useDataTable<ProjectWithRelations>({
+  const tableProps = useDataTable<BizProjectWithRelations>({
     data: filteredProjects,
     defaultPageSize: 20,
   });
 
-  const handleViewProject = async (project: ProjectWithRelations) => {
+  const handleViewProject = async (project: BizProjectWithRelations) => {
     setViewLoading(true);
     setSelectedProject(project);
     try {
-      const salesData = await db.sale.findMany({
+      const ordersData = await db.saleOrder.findMany({
         where: { projectId: project.id },
         include: {
-          customer: true,
+          buyer: true,
+          payer: true,
           project: true,
-          items: { include: { product: true } },
-          payments: true,
+          paymentEntity: true,
         },
         orderBy: { saleDate: 'desc' },
       });
-      setProjectSales(salesData);
+      setProjectOrders(ordersData);
       setShowDetailDialog(true);
     } catch (error) {
       console.error('[Projects] 加载项目详情失败:', error);
@@ -193,22 +194,22 @@ export function Projects() {
     }
   };
 
-  const handleViewSale = (saleId: string) => {
+  const handleViewOrder = (orderId: string) => {
     setShowDetailDialog(false);
-    navigate(`/sales?saleId=${saleId}`);
+    navigate(`/sales?orderId=${orderId}`);
   };
 
   const handleAddProject = async () => {
-    if (!formData.name || !formData.customerId) {
-      toast('请填写必填项（项目名称、关联客户）', 'warning');
+    if (!formData.name || !formData.entityId) {
+      toast('请填写必填项（项目名称、关联主体）', 'warning');
       return;
     }
 
     try {
-      await db.project.create({
+      await db.bizProject.create({
         data: {
           name: formData.name,
-          customerId: formData.customerId,
+          entityId: formData.entityId,
           address: formData.address || null,
           status: formData.status,
           startDate: formData.startDate ? new Date(formData.startDate) : null,
@@ -220,7 +221,7 @@ export function Projects() {
       setShowAddDialog(false);
       setFormData({
         name: '',
-        customerId: undefined,
+        entityId: '',
         address: '',
         status: '进行中',
         startDate: '',
@@ -233,7 +234,7 @@ export function Projects() {
       await db.auditLog.create({
         data: {
           actionType: 'CREATE',
-          entityType: 'Project',
+          entityType: 'BizProject',
           entityId: 'new',
           newValue: JSON.stringify({ name: formData.name }),
           timestamp: new Date(),
@@ -247,7 +248,7 @@ export function Projects() {
 
   const handleUpdateProjectStatus = async (projectId: string, newStatus: string) => {
     try {
-      await db.project.update({
+      await db.bizProject.update({
         where: { id: projectId },
         data: { status: newStatus },
       });
@@ -290,7 +291,7 @@ export function Projects() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">项目管理</h2>
-          <p className="text-slate-500 mt-1">管理客户项目及项目关联的销售订单</p>
+          <p className="text-slate-500 mt-1">管理项目及项目关联的销售订单</p>
         </div>
         <Button className="bg-orange-500 hover:bg-orange-600" onClick={() => setShowAddDialog(true)}>
           + 添加项目
@@ -342,7 +343,7 @@ export function Projects() {
             <TableHeader>
               <TableRow>
                 <TableHead>项目名称</TableHead>
-                <TableHead>关联客户</TableHead>
+                <TableHead>关联主体</TableHead>
                 <TableHead>项目地址</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead>开始日期</TableHead>
@@ -363,7 +364,7 @@ export function Projects() {
                 tableProps.data.map((project) => (
                   <TableRow key={project.id} className="cursor-pointer hover:bg-slate-50" onClick={() => handleViewProject(project)}>
                     <TableCell className="font-medium">{project.name}</TableCell>
-                    <TableCell>{project.customer?.name || '-'}</TableCell>
+                    <TableCell>{project.entity?.name || '-'}</TableCell>
                     <TableCell className="text-slate-500 max-w-[150px] truncate">{project.address || '-'}</TableCell>
                     <TableCell>{getStatusBadge(project.status)}</TableCell>
                     <TableCell className="text-slate-500">
@@ -409,32 +410,28 @@ export function Projects() {
               <Input
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="例如: 阳光小区水管改造"
+                placeholder="例如: 龙湖天街水电工程"
               />
             </div>
 
             <div>
               <label className="text-sm font-medium mb-2 block">
-                关联客户 <span className="text-red-500">*</span>
+                关联主体 <span className="text-red-500">*</span>
               </label>
               <Select
-                value={formData.customerId || '__none__'}
-                onValueChange={(v) => setFormData({ ...formData, customerId: v === '__none__' ? undefined : v })}
+                value={formData.entityId || '__none__'}
+                onValueChange={(v) => setFormData({ ...formData, entityId: v === '__none__' ? '' : v })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="选择客户" />
+                  <SelectValue placeholder="选择结账主体" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">请选择客户</SelectItem>
-                  {customers.length === 0 ? (
-                    <div className="p-2 text-sm text-slate-500">暂无客户，请先添加客户</div>
-                  ) : (
-                    customers.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name} {c.phone ? `(${c.phone})` : ''}
-                      </SelectItem>
-                    ))
-                  )}
+                  <SelectItem value="__none__">无</SelectItem>
+                  {entities.map((entity) => (
+                    <SelectItem key={entity.id} value={entity.id}>
+                      {entity.name} ({entity.entityType === 'company' ? '公司' : entity.entityType === 'government' ? '政府' : '个人'})
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -519,8 +516,8 @@ export function Projects() {
                       <span className="font-medium">{selectedProject.name}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">关联客户:</span>
-                      <span>{selectedProject.customer?.name || '-'}</span>
+                      <span className="text-slate-500">关联主体:</span>
+                      <span>{selectedProject.entity?.name || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">项目地址:</span>
@@ -591,8 +588,8 @@ export function Projects() {
               </div>
 
               <div>
-                <h4 className="font-medium mb-3">关联销售订单 ({projectSales.length})</h4>
-                {projectSales.length === 0 ? (
+                <h4 className="font-medium mb-3">关联销售订单 ({projectOrders.length})</h4>
+                {projectOrders.length === 0 ? (
                   <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-lg">
                     暂无关联销售订单
                   </div>
@@ -603,7 +600,8 @@ export function Projects() {
                         <TableRow>
                           <TableHead>单据号</TableHead>
                           <TableHead>日期</TableHead>
-                          <TableHead>客户</TableHead>
+                          <TableHead>购货人</TableHead>
+                          <TableHead>结账主体</TableHead>
                           <TableHead className="text-right">金额</TableHead>
                           <TableHead className="text-right">已付</TableHead>
                           <TableHead>状态</TableHead>
@@ -611,31 +609,32 @@ export function Projects() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {projectSales.map((sale) => (
-                          <TableRow key={sale.id}>
+                        {projectOrders.map((order) => (
+                          <TableRow key={order.id}>
                             <TableCell className="font-mono text-sm">
-                              {sale.invoiceNo || sale.writtenInvoiceNo || sale.id.substring(0, 8)}
+                              {order.invoiceNo || order.writtenInvoiceNo || order.id.substring(0, 8)}
                             </TableCell>
                             <TableCell className="text-slate-500 text-sm">
-                              {formatDate(sale.saleDate)}
+                              {formatDate(order.saleDate)}
                             </TableCell>
-                            <TableCell>{sale.customer?.name || '-'}</TableCell>
+                            <TableCell>{order.buyer?.name || '-'}</TableCell>
+                            <TableCell>{order.paymentEntity?.name || '-'}</TableCell>
                             <TableCell className="text-right font-mono">
-                              {formatCurrency(sale.totalAmount)}
+                              {formatCurrency(order.totalAmount)}
                             </TableCell>
                             <TableCell className="text-right font-mono text-green-600">
-                              {formatCurrency(sale.paidAmount)}
+                              {formatCurrency(order.paidAmount)}
                             </TableCell>
                             <TableCell>
-                              <Badge variant={sale.status === 'completed' ? 'default' : 'secondary'}>
-                                {sale.status === 'completed' ? '已完成' : sale.status}
+                              <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
+                                {order.status === 'completed' ? '已完成' : order.status}
                               </Badge>
                             </TableCell>
                             <TableCell>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleViewSale(sale.id)}
+                                onClick={() => handleViewOrder(order.id)}
                               >
                                 查看详情
                               </Button>

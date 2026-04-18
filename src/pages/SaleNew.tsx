@@ -69,6 +69,8 @@ export function SaleNew() {
   const [remark, setRemark] = useState('');
   const [writtenInvoiceNo, setWrittenInvoiceNo] = useState('');
   const [loading, setLoading] = useState(false);
+  const [manualFinalAmount, setManualFinalAmount] = useState<number | null>(null);
+  const [showLossConfirm, setShowLossConfirm] = useState(false);
 
   const [showBuyerDialog, setShowBuyerDialog] = useState(false);
   const [newBuyerName, setNewBuyerName] = useState('');
@@ -128,6 +130,15 @@ export function SaleNew() {
 
   const loadHistoricalPrices = async (contactId: string) => {
     try {
+      const customerPrices = await db.customerPrice.findMany({
+        where: { customerId: contactId },
+      });
+
+      const priceMap = new Map<string, number>();
+      customerPrices.forEach(cp => {
+        priceMap.set(cp.productId, cp.lastPrice);
+      });
+
       const orders = await db.saleOrder.findMany({
         where: { buyerId: contactId },
         include: {
@@ -138,7 +149,6 @@ export function SaleNew() {
         orderBy: { saleDate: 'desc' },
       });
 
-      const priceMap = new Map<string, number>();
       orders.forEach(order => {
         order.items?.forEach(item => {
           if (!priceMap.has(item.productId)) {
@@ -189,7 +199,7 @@ export function SaleNew() {
         {
           product,
           quantity: 1,
-          unitPrice: historicalPrice || product.salePrice,
+          unitPrice: historicalPrice || product.referencePrice || 0,
         },
       ]);
     }
@@ -218,12 +228,20 @@ export function SaleNew() {
     (sum, item) => sum + item.unitPrice * item.quantity,
     0
   );
+  const costTotal = cart.reduce(
+    (sum, item) => sum + (item.product.costPrice || 0) * item.quantity,
+    0
+  );
   const rateDiscount = subtotal * (100 - discountRate) / 100;
   const totalDiscount = discount + rateDiscount;
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
-  const finalAmount = subtotal - totalDiscount;
+  const calculatedFinalAmount = subtotal - totalDiscount;
+  const finalAmount = manualFinalAmount !== null ? manualFinalAmount : calculatedFinalAmount;
   const paidAmount = Math.min(totalPaid, finalAmount);
   const remainingAmount = Math.max(0, finalAmount - totalPaid);
+  const isManualFinalAmount = manualFinalAmount !== null;
+  const lossAmount = costTotal - finalAmount;
+  const showLossWarning = finalAmount < costTotal && finalAmount > 0;
 
   const handleMoli = () => {
     const moliAmount = Math.floor(subtotal - totalDiscount);
@@ -284,6 +302,11 @@ export function SaleNew() {
       return;
     }
 
+    if (showLossWarning && !showLossConfirm) {
+      setShowLossConfirm(true);
+      return;
+    }
+
     setLoading(true);
     try {
       const sale = await db.saleOrder.create({
@@ -332,8 +355,36 @@ export function SaleNew() {
             stock: {
               decrement: item.quantity,
             },
+            lastPurchasePrice: item.product.lastPurchasePrice || undefined,
           },
         });
+
+        const existingPrice = await db.customerPrice.findUnique({
+          where: {
+            customerId_productId: {
+              customerId: selectedBuyer,
+              productId: item.product.id,
+            },
+          },
+        });
+        if (existingPrice) {
+          await db.customerPrice.update({
+            where: { id: existingPrice.id },
+            data: {
+              lastPrice: item.unitPrice,
+              transactionCount: existingPrice.transactionCount + 1,
+            },
+          });
+        } else {
+          await db.customerPrice.create({
+            data: {
+              customerId: selectedBuyer,
+              productId: item.product.id,
+              lastPrice: item.unitPrice,
+              transactionCount: 1,
+            },
+          });
+        }
       }
 
       if (photos.length > 0) {
@@ -468,11 +519,16 @@ export function SaleNew() {
                       <div className="flex items-center justify-between mt-2">
                         <div className="flex flex-col">
                           <span className="text-orange-600 font-bold">
-                            {formatCurrency(product.salePrice)}
+                            {product.referencePrice ? formatCurrency(product.referencePrice) : '-'}
                           </span>
                           {historicalPrices.has(product.id) && (
                             <span className="text-xs text-slate-400">
                               上次: {formatCurrency(historicalPrices.get(product.id)!)}
+                            </span>
+                          )}
+                          {product.lastPurchasePrice && (
+                            <span className="text-xs text-slate-400">
+                              进价: {formatCurrency(product.lastPurchasePrice)}
                             </span>
                           )}
                         </div>
@@ -741,12 +797,43 @@ export function SaleNew() {
                   </div>
                 )}
 
-                <div className="flex justify-between text-lg font-bold pt-2 border-t border-slate-200">
-                  <span>应付金额</span>
-                  <span className="text-orange-600 font-mono">
-                    {formatCurrency(finalAmount)}
-                  </span>
+                <div className="flex justify-between items-center text-lg font-bold pt-2 border-t border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <span>应付金额</span>
+                    {isManualFinalAmount && (
+                      <Badge variant="outline" className="text-xs bg-yellow-50">手动</Badge>
+                    )}
+                  </div>
+                  {isManualFinalAmount ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        value={manualFinalAmount}
+                        onChange={(e) => setManualFinalAmount(parseFloat(e.target.value) || 0)}
+                        className="w-28 h-8 text-right font-mono text-orange-600"
+                        step="0.01"
+                      />
+                      <Button size="sm" variant="ghost" onClick={() => setManualFinalAmount(null)}>
+                        重置
+                      </Button>
+                    </div>
+                  ) : (
+                    <span
+                      className="text-orange-600 font-mono cursor-pointer hover:text-orange-700"
+                      onClick={() => setManualFinalAmount(finalAmount)}
+                      title="点击手动修改应付金额"
+                    >
+                      {formatCurrency(finalAmount)}
+                    </span>
+                  )}
                 </div>
+
+                {showLossWarning && (
+                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-600">
+                    <div className="font-medium">⚠️ 亏本警告</div>
+                    <div>成交价低于成本价，预计亏损 {formatCurrency(lossAmount)}</div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -938,6 +1025,33 @@ export function SaleNew() {
               取消
             </Button>
             <Button onClick={() => setShowPaymentDialog(false)}>确认</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showLossConfirm} onOpenChange={setShowLossConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>⚠️ 确认亏本？</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p>成交价 <span className="font-bold text-red-600">{formatCurrency(finalAmount)}</span> 低于成本价 <span className="font-bold">{formatCurrency(costTotal)}</span></p>
+            <p className="mt-2 text-red-600">预计亏损：{formatCurrency(lossAmount)}</p>
+            <p className="mt-4 text-sm text-slate-500">是否确认继续保存？</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLossConfirm(false)}>
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setShowLossConfirm(false);
+                handleSubmit();
+              }}
+            >
+              确认亏本保存
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -40,6 +40,7 @@ interface PersonInfo {
   address: string | null;
   remark: string | null;
   contactType: string;
+  valueScore: number | null;
   totalSpent: number;
   orderCount: number;
   lastOrderDate: Date | null;
@@ -67,6 +68,7 @@ export function Contacts() {
     address: '',
     remark: '',
     contactType: 'customer',
+    valueScore: null as number | null,
   });
 
   useEffect(() => {
@@ -106,6 +108,7 @@ export function Contacts() {
             address: contact.address,
             remark: contact.remark,
             contactType: contact.contactType,
+            valueScore: contact.valueScore,
             totalSpent,
             orderCount: orders.length,
             lastOrderDate: lastOrder?.saleDate || null,
@@ -174,7 +177,7 @@ export function Contacts() {
       });
 
       setShowAddDialog(false);
-      setFormData({ name: '', code: '', primaryPhone: '', address: '', remark: '', contactType: 'customer' });
+      setFormData({ name: '', code: '', primaryPhone: '', address: '', remark: '', contactType: 'customer', valueScore: null });
       loadData();
       toast('添加成功', 'success');
     } catch (error) {
@@ -193,6 +196,7 @@ export function Contacts() {
       address: contact.address || '',
       remark: contact.remark || '',
       contactType: contact.contactType,
+      valueScore: contact.valueScore,
     });
     setEditContact(contact);
   };
@@ -227,6 +231,7 @@ export function Contacts() {
           address: formData.address.trim() || null,
           remark: formData.remark.trim() || null,
           contactType: formData.contactType,
+          valueScore: formData.valueScore,
         },
       });
 
@@ -369,6 +374,7 @@ export function Contacts() {
                 <TableHead>编号</TableHead>
                 <TableHead>姓名</TableHead>
                 <TableHead>类型</TableHead>
+                <TableHead>评分</TableHead>
                 <TableHead>主手机号</TableHead>
                 <TableHead>其他电话</TableHead>
                 <TableHead>关联主体</TableHead>
@@ -394,6 +400,16 @@ export function Contacts() {
                       {person.contactType === 'customer' && <Badge variant="outline" className="bg-blue-50">客户</Badge>}
                       {person.contactType === 'plumber' && <Badge variant="outline" className="bg-green-50">水电工</Badge>}
                       {person.contactType === 'company' && <Badge variant="outline" className="bg-purple-50">公司</Badge>}
+                    </TableCell>
+                    <TableCell>
+                      {person.valueScore != null ? (
+                        <div className="flex items-center gap-1">
+                          <span className="font-bold text-orange-600">{person.valueScore.toFixed(1)}</span>
+                          <span className="text-yellow-500">★</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-orange-600">{person.primaryPhone}</TableCell>
                     <TableCell className="text-slate-500 text-sm">
@@ -490,6 +506,30 @@ export function Contacts() {
                   <SelectItem value="company">公司联系人</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">
+                客户评分
+              </label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min="0"
+                  max="10"
+                  step="0.1"
+                  value={formData.valueScore ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData({
+                      ...formData,
+                      valueScore: val ? parseFloat(val) : null,
+                    });
+                  }}
+                  placeholder="0-10分"
+                  className="w-32"
+                />
+                <span className="text-sm text-slate-500">分 (0-10)</span>
+              </div>
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">
