@@ -2055,6 +2055,7 @@ supplier
 
 | 版本 | 日期 | 更新内容 | 变更人 |
 |------|------|----------|--------|
+| v4.6 | 2026-04-18 | **代码审查修复**：<br>1. SaleNew.tsx CartItem添加costPrice/salePrice字段，修复亏本警告计算<br>2. SaleOrder添加needDelivery/deliveryAddress/deliveryFee配送字段<br>3. Reports.tsx商品统计改用saleDate而非createdAt<br>4. Prisma迁移添加delivery字段 | 系统 |
 | v4.5 | 2026-04-18 | **商品体系与高级功能**：<br>1. 新增Brand/ProductSpec/CustomerPrice商品多规格体系<br>2. 新增SaleReturn/SaleReturnItem退货管理<br>3. 新增BadDebtWriteOff坏账处理<br>4. 新增应付金额直接编辑和亏本警告机制<br>5. 新增AuditLogs操作日志页面<br>6. 新增PurchaseHistory进货历史页面<br>7. 新增Contact.valueScore客户评分字段<br>8. 新增Products.tsx初始库存导入功能<br>9. 新增LegacyBills.tsx历史账单迁移页面<br>10. 新增backup.ts/restore.ts数据备份恢复脚本<br>11. 照片存储路径修复（findProjectRoot自动查找） | 系统 |
 | v4.4 | 2026-04-18 | 文档同步优化：<br>1. 补充 Contact.contactType 枚举定义<br>2. 统一 Entity 称为"结账主体"<br>3. 补充 Supplier 供应商模块设计<br>4. 更新导航菜单（新增 Contacts、Entities）<br>5. 更新 IPC 模型列表 | 系统 |
 | v4.3 | 2026-04-17 | **联系人-结账主体模型重构**：<br>1. 新增Contact/ContactPhone/Entity/BizProject模型<br>2. 新增ContactEntityRole/ContactProjectRole角色关联<br>3. 新增SaleOrder/OrderItem/OrderPayment/Receivable新订单模型<br>4. 新增SaleOrderPhoto订单照片模型<br>5. 新增Contacts联系人管理页面<br>6. 新增Entities结账主体管理页面<br>7. 重构SaleNew支持新架构<br>8. 重构Sales支持双架构（sale + saleOrder）<br>9. 重构Settlements支持按付款主体查询 | 系统 |
@@ -2064,7 +2065,7 @@ supplier
 
 ---
 
-*文档版本: 4.5*
+*文档版本: 4.6*
 *创建日期: 2024-01-15*
 *最后更新: 2026-04-18*
-*更新说明: v4.5更新 - 商品多规格体系、退货管理、坏账处理、备份恢复等 Phase 4-8 功能同步*
+*更新说明: v4.6更新 - 代码审查修复：CartItem添加costPrice/salePrice、SaleOrder添加配送字段、Reports统计逻辑修复*
