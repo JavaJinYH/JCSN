@@ -47,7 +47,9 @@ model Purchase {
   quantity     Int
   unitPrice    Float
   totalAmount  Float
-  supplier     String?
+  supplierId   String?
+  supplier     Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplierName String?
   purchaseDate DateTime        @default(now())
   remark       String?
   batchNo      String?
@@ -79,9 +81,7 @@ model Customer {
   payerSales            Sale[]                   @relation("PayerCustomer")
   introducerSales       Sale[]                   @relation("IntroducerCustomer")
   pickerSales           Sale[]                   @relation("PickerCustomer")
-  rebates               Rebate[]
   projects              Project[]
-  accountReceivables    AccountReceivable[]
   settlementAdjustments SettlementAdjustment[]
   paymentPlans          PaymentPlan[]
   collectionRecords     CollectionRecord[]
@@ -148,7 +148,6 @@ model Sale {
   deliveryRecords       DeliveryRecord[]
   settlementAdjustments SettlementAdjustment[]
   photos                SalePhoto[]
-  accountReceivables    AccountReceivable[]
   createdAt             DateTime               @default(now())
 }
 
@@ -194,7 +193,7 @@ model Rebate {
   saleId       String
   sale         Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
   plumberId    String?
-  plumber      Customer? @relation(fields: [plumberId], references: [id], onDelete: SetNull)
+  plumber      Contact? @relation(fields: [plumberId], references: [id], onDelete: SetNull)
   supplierName String
   rebateAmount Float
   rebateType   String    @default("cash")
@@ -246,11 +245,12 @@ model DeliveryRecord {
 
 model AccountReceivable {
   id                 String    @id @default(cuid())
-  customerId         String
-  customer           Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  contactId         String
+  contact           Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
   saleId             String?
-  sale               Sale?     @relation(fields: [saleId], references: [id], onDelete: SetNull)
   projectId          String?
+  entityId          String?
+  entity             Entity?   @relation(fields: [entityId], references: [id], onDelete: SetNull)
   originalAmount     Float
   paidAmount         Float     @default(0)
   remainingAmount    Float
@@ -470,10 +470,12 @@ model InventoryCheckItem {
 
 model Contact {
   id           String   @id @default(cuid())
+  code        String   @unique
   name         String
-  primaryPhone String   @unique
+  primaryPhone String?
   address      String?
   remark       String?
+  contactType  String   @default("customer")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -485,6 +487,9 @@ model Contact {
   ordersAsIntroducer SaleOrder[] @relation("IntroducerContact")
   ordersAsPicker  SaleOrder[]  @relation("PickerContact")
   personalEntity  Entity?
+  rebatesAsPlumber Rebate[]
+  receivables    AccountReceivable[]
+  supplierContacts Supplier[]
 }
 
 model ContactPhone {
@@ -497,6 +502,21 @@ model ContactPhone {
 
   @@unique([contactId, phone])
   @@index([contactId])
+}
+
+model Supplier {
+  id           String   @id @default(cuid())
+  code        String   @unique
+  name         String
+  contactId   String?
+  supplierContact     Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  phone       String?
+  address     String?
+  remark      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  purchases   Purchase[]
 }
 
 model Entity {
@@ -516,6 +536,7 @@ model Entity {
   roles   ContactEntityRole[]
   projects BizProject[]
   orders  SaleOrder[]
+  receivables AccountReceivable[]
 }
 
 model BizProject {

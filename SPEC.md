@@ -1707,13 +1707,24 @@ const agingLevels = {
 #### 25.2.1 Contact（联系人/人员）
 一个人只有一个记录，手机号唯一。
 
+**contactType 枚举定义**：
+| 值 | 名称 | 说明 |
+|----|------|------|
+| `customer` | 散客/业主 | 普通购买客户 |
+| `plumber` | 水电工 | 有返点的介绍人 |
+| `other` | 其他 | 其他人员 |
+
+> 注意：公司/装修公司是 Entity（结账主体），不是 Contact。Contact 是人，Entity 是组织。
+
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | String | 唯一标识 (cuid) |
+| code | String | 内部编号（如 C001，唯一） |
 | name | String | 姓名 |
-| primaryPhone | String | 主手机号，**唯一** |
+| primaryPhone | String? | 主手机号（可变更） |
 | address | String? | 地址 |
 | remark | String? | 备注 |
+| contactType | String | 类型 (customer/plumber/other)，默认 `customer` |
 | createdAt | DateTime | 创建时间 |
 | updatedAt | DateTime | 更新时间 |
 
@@ -1926,7 +1937,7 @@ const agingLevels = {
 
 ---
 
-## 27. 导航菜单（v4.3 更新）
+## 27. 导航菜单（v4.4 更新）
 
 ```
 1. 📊 首页/仪表盘 (Dashboard)
@@ -1934,7 +1945,7 @@ const agingLevels = {
 3. 📥 进货管理 (Purchases)
 4. 💰 销售管理 (Sales)
 5. 🏷️ 商品管理 (Products)
-6. 👥 客户管理 (Customers)
+6. 👥 客户管理 (Customers)        ← 旧架构，待废弃
 7. 🧑 联系人管理 (Contacts)        ← v4.3 新增
 8. 🏢 结账主体 (Entities)          ← v4.3 新增
 9. 🏗️ 项目管理 (Projects)
@@ -1948,11 +1959,15 @@ const agingLevels = {
 17. ⚙️ 系统设置 (Settings)
 ```
 
+> 注意：客户管理 (Customers) 是旧架构页面，最终将被联系人管理 (Contacts) 替代。
+
 ---
 
-## 28. IPC 通信模型（v4.3 更新）
+## 28. IPC 通信模型（v4.4 更新）
 
 ### 28.1 支持的数据模型
+
+**旧架构模型**：
 ```
 category, product, customer, customerCategory, project,
 sale, saleItem, payment, systemSetting, purchase,
@@ -1961,11 +1976,20 @@ accountReceivable, settlementAdjustment, paymentPlan, auditLog,
 salePhoto, purchasePhoto, collectionRecord,
 inventoryCheck, inventoryCheckItem,
 saleSlip, saleSlipItem, customerFavoriteProduct,
-customerPhone,
+customerPhone
+```
+
+**新架构模型（v4.3）**：
+```
 contact, contactPhone, entity, bizProject,
 contactEntityRole, contactProjectRole,
 saleOrder, orderItem, orderPayment, receivable,
 saleOrderPhoto
+```
+
+**供应商模型（v4.4）**：
+```
+supplier
 ```
 
 ---
@@ -2021,6 +2045,7 @@ saleOrderPhoto
 
 | 版本 | 日期 | 更新内容 | 变更人 |
 |------|------|----------|--------|
+| v4.4 | 2026-04-18 | 文档同步优化：<br>1. 补充 Contact.contactType 枚举定义<br>2. 统一 Entity 称为"结账主体"<br>3. 补充 Supplier 供应商模块设计<br>4. 更新导航菜单（新增 Contacts、Entities）<br>5. 更新 IPC 模型列表 | 系统 |
 | v4.3 | 2026-04-17 | **联系人-结账主体模型重构**：<br>1. 新增Contact/ContactPhone/Entity/BizProject模型<br>2. 新增ContactEntityRole/ContactProjectRole角色关联<br>3. 新增SaleOrder/OrderItem/OrderPayment/Receivable新订单模型<br>4. 新增SaleOrderPhoto订单照片模型<br>5. 新增Contacts联系人管理页面<br>6. 新增Entities结账主体管理页面<br>7. 重构SaleNew支持新架构<br>8. 重构Sales支持双架构（sale + saleOrder）<br>9. 重构Settlements支持按付款主体查询 | 系统 |
 | v4.2 | 2026-04-16 | 客户管理模块增强：详情按钮、完整关联数据展示 | 系统 |
 | v4.1 | 2026-04-16 | 销售单数据关联网络构建：四角色完整信息展示 | 系统 |
@@ -2028,7 +2053,7 @@ saleOrderPhoto
 
 ---
 
-*文档版本: 4.3*
+*文档版本: 4.4*
 *创建日期: 2024-01-15*
-*最后更新: 2026-04-17*
-*更新说明: v4.3更新 - 联系人-结账主体模型重构，实现买付分离*
+*最后更新: 2026-04-18*
+*更新说明: v4.4更新 - 文档同步优化：contactType枚举、Entity称结账主体、Supplier模块、导航菜单、IPC模型分类*

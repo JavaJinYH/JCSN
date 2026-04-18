@@ -23,8 +23,8 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
-    strictPort: true,
+    port: 3000,
+    strictPort: false,
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', 'recharts'],
