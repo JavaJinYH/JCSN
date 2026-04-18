@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -22,6 +23,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { PhotoViewer } from '@/components/PhotoViewer';
 import { PhotoThumbnail } from '@/components/PhotoThumbnail';
@@ -84,6 +86,10 @@ export function Sales() {
   const [photoViewerIndex, setPhotoViewerIndex] = useState(0);
   const [customerTypeFilter, setCustomerTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  const [showReturnDialog, setShowReturnDialog] = useState(false);
+  const [returnQuantity, setReturnQuantity] = useState<string>('');
+  const [returnItemIndex, setReturnItemIndex] = useState<number>(0);
 
   const filters = [
     { key: 'search', label: '搜索', type: 'text' as const, placeholder: '搜索单据号或客户...' },
@@ -372,6 +378,66 @@ export function Sales() {
       toast(`加载销售详情失败: ${error?.message || '未知错误'}`, 'error');
     } finally {
       setViewLoading(false);
+    }
+  };
+
+  const handleOpenReturnDialog = (itemIndex: number) => {
+    setReturnItemIndex(itemIndex);
+    setReturnQuantity('');
+    setShowReturnDialog(true);
+  };
+
+  const handleReturnConfirm = async () => {
+    if (!selectedSale || !returnQuantity) {
+      toast('请填写退货数量', 'warning');
+      return;
+    }
+
+    const item = selectedSale.items[returnItemIndex];
+    if (!item) return;
+
+    const qty = parseFloat(returnQuantity);
+    if (qty <= 0 || qty > item.quantity) {
+      toast('退货数量必须大于0且不超过购买数量', 'warning');
+      return;
+    }
+
+    try {
+      const returnAmount = qty * item.unitPrice;
+
+      await db.saleReturn.create({
+        data: {
+          saleOrderId: selectedSale.id,
+          totalAmount: returnAmount,
+          items: {
+            create: {
+              productId: item.productId,
+              returnQuantity: qty,
+              unitPrice: item.unitPrice,
+              amount: returnAmount,
+            },
+          },
+        },
+      });
+
+      await db.product.update({
+        where: { id: item.productId },
+        data: { stock: { increment: qty } },
+      });
+
+      await db.receivable.update({
+        where: { orderId: selectedSale.id },
+        data: { remainingAmount: { increment: returnAmount } },
+      });
+
+      setShowReturnDialog(false);
+      setReturnQuantity('');
+      setViewDialogOpen(false);
+      loadData();
+      toast('退货记录创建成功！', 'success');
+    } catch (error) {
+      console.error('[Sales] 创建退货记录失败:', error);
+      toast('退货失败，请重试', 'error');
     }
   };
 
@@ -738,7 +804,7 @@ export function Sales() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {selectedSale.items?.map((item: any) => (
+                    {selectedSale.items?.map((item: any, index: number) => (
                       <TableRow key={item.id}>
                         <TableCell>{item.product?.name || '-'}</TableCell>
                         <TableCell className="text-right">{item.product?.specification || '-'}</TableCell>
@@ -746,6 +812,17 @@ export function Sales() {
                         <TableCell className="text-right font-mono">{formatCurrency(item.unitPrice)}</TableCell>
                         <TableCell className="text-right">{item.quantity}</TableCell>
                         <TableCell className="text-right font-mono">{formatCurrency(item.subtotal)}</TableCell>
+                        <TableCell>
+                          {selectedSale.source === 'new' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenReturnDialog(index)}
+                            >
+                              退货
+                            </Button>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -849,6 +926,67 @@ export function Sales() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showReturnDialog} onOpenChange={setShowReturnDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>销售退货</DialogTitle>
+          </DialogHeader>
+          {selectedSale && selectedSale.items[returnItemIndex] && (
+            <div className="space-y-4 py-4">
+              <div className="bg-slate-50 p-3 rounded-lg">
+                <div className="text-sm text-slate-500">商品名称</div>
+                <div className="font-bold">{selectedSale.items[returnItemIndex].product?.name}</div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm text-slate-500">原购买数量</div>
+                  <div className="font-bold">{selectedSale.items[returnItemIndex].quantity}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-500">购买单价</div>
+                  <div className="font-bold font-mono">
+                    {formatCurrency(selectedSale.items[returnItemIndex].unitPrice)}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  退货数量 <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="number"
+                  value={returnQuantity}
+                  onChange={(e) => setReturnQuantity(e.target.value)}
+                  placeholder="0"
+                  min="1"
+                  max={selectedSale.items[returnItemIndex].quantity}
+                />
+                <div className="text-xs text-slate-500 mt-1">
+                  最多可退: {selectedSale.items[returnItemIndex].quantity}
+                </div>
+              </div>
+
+              {returnQuantity && (
+                <div className="bg-orange-50 p-3 rounded-lg">
+                  <div className="text-sm text-slate-500">退货金额</div>
+                  <div className="text-xl font-bold text-orange-600">
+                    {formatCurrency(
+                      parseFloat(returnQuantity) * selectedSale.items[returnItemIndex].unitPrice
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReturnDialog(false)}>取消</Button>
+            <Button onClick={handleReturnConfirm}>确认退货</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
