@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dialog';
 import { db } from '@/lib/db';
 import { formatCurrency } from '@/lib/utils';
+import { toast } from '@/components/Toast';
 import type { Product, InventoryCheck, InventoryCheckItem } from '@/lib/types';
 
 interface ProductWithStock extends Product {
@@ -138,26 +139,24 @@ export function InventoryCheckPage() {
 
       const hasAdjustments = products.some(p => p.profitLoss !== 0 && p.actualStock !== p.stock);
       if (hasAdjustments) {
-        const confirmAdjust = confirm('盘点完成，是否将系统库存更新为实际盘点数量？');
-        if (confirmAdjust) {
-          for (const p of products) {
-            if (p.actualStock !== p.stock) {
-              await db.product.update({
-                where: { id: p.id },
-                data: { stock: p.actualStock },
-              });
-            }
+        for (const p of products) {
+          if (p.actualStock !== p.stock) {
+            await db.product.update({
+              where: { id: p.id },
+              data: { stock: p.actualStock },
+            });
           }
         }
+        toast('盘点完成，库存已调整', 'success');
+      } else {
+        toast('盘点完成，无库存差异', 'success');
       }
-
-      alert('盘点完成');
       setShowNewCheckDialog(false);
       setCheckName('');
       loadData();
     } catch (error) {
       console.error('Failed to submit check:', error);
-      alert('盘点提交失败，请重试');
+      toast('盘点提交失败，请重试', 'error');
     } finally {
       setSubmitting(false);
     }

@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table';
 import { db } from '@/lib/db';
 import { formatCurrency } from '@/lib/utils';
+import { toast } from '@/components/Toast';
 import type { SaleSlip } from '@/lib/types';
 
 export function SaleDrafts() {
@@ -47,18 +48,17 @@ export function SaleDrafts() {
   };
 
   const handleDeleteDraft = async (slipId: string) => {
-    if (!confirm('确定要删除这个暂存单吗？')) return;
     try {
       await db.saleSlip.delete({ where: { id: slipId } });
       loadDrafts();
+      toast('删除成功', 'success');
     } catch (error) {
       console.error('Failed to delete draft:', error);
-      alert('删除失败，请重试');
+      toast('删除失败，请重试', 'error');
     }
   };
 
   const handleSubmitDraft = async (slip: SaleSlip) => {
-    if (!confirm('确定要提交这个暂存单吗？')) return;
     try {
       setLoading(true);
 
@@ -121,11 +121,11 @@ export function SaleDrafts() {
         data: { status: 'completed' },
       });
 
-      alert('提交成功');
+      toast('提交成功', 'success');
       navigate('/sales');
     } catch (error) {
       console.error('Failed to submit draft:', error);
-      alert('提交失败，请重试');
+      toast('提交失败，请重试', 'error');
     } finally {
       setLoading(false);
     }

@@ -18,6 +18,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { db } from '@/lib/db';
+import { toast } from '@/components/Toast';
 import type { Category } from '@/lib/types';
 
 export function ProductNew() {
@@ -58,7 +59,7 @@ export function ProductNew() {
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.categoryId || !formData.costPrice || !formData.salePrice) {
-      alert('请填写必填项');
+      toast('请填写必填项', 'warning');
       return;
     }
 
@@ -78,11 +79,11 @@ export function ProductNew() {
         },
       });
 
-      alert('商品添加成功！');
+      toast('商品添加成功！', 'success');
       navigate('/products');
     } catch (error) {
       console.error('Failed to add product:', error);
-      alert('添加失败，请重试');
+      toast('添加失败，请重试', 'error');
     } finally {
       setLoading(false);
     }
@@ -90,7 +91,7 @@ export function ProductNew() {
 
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) {
-      alert('请输入分类名称');
+      toast('请输入分类名称', 'warning');
       return;
     }
 
@@ -107,9 +108,10 @@ export function ProductNew() {
       setShowCategoryDialog(false);
       setNewCategoryName('');
       setNewCategoryDesc('');
+      toast('分类添加成功', 'success');
     } catch (error) {
       console.error('Failed to add category:', error);
-      alert('添加分类失败');
+      toast('添加分类失败', 'error');
     }
   };
 

@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { PhotoViewer } from '@/components/PhotoViewer';
 import { PhotoThumbnail } from '@/components/PhotoThumbnail';
 import { db } from '@/lib/db';
+import { toast } from '@/components/Toast';
 import dayjs from 'dayjs';
 
 interface SalePhotoItem {
@@ -121,7 +122,7 @@ export function PhotoManagement() {
 
   const handleExport = async () => {
     if (selectedPhotos.size === 0) {
-      alert('请先选择要导出的照片');
+      toast('请先选择要导出的照片', 'warning');
       return;
     }
 
@@ -139,13 +140,13 @@ export function PhotoManagement() {
       );
 
       if (result.success) {
-        alert(`导出成功！共导出 ${result.data.count} 张照片`);
+        toast(`导出成功！共导出 ${result.data.count} 张照片`, 'success');
       } else {
-        alert(`导出失败: ${result.error}`);
+        toast(`导出失败: ${result.error}`, 'error');
       }
     } catch (error) {
       console.error('Export failed:', error);
-      alert('导出失败，请重试');
+      toast('导出失败，请重试', 'error');
     } finally {
       setExporting(false);
     }

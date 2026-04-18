@@ -223,9 +223,6 @@ export function Customers() {
   };
 
   const handleRecalculateScores = async () => {
-    const confirmed = window.confirm('确定要重新计算所有客户评分吗？');
-    if (!confirmed) return;
-
     try {
       setLoading(true);
       const customersData = await db.customer.findMany();
@@ -346,7 +343,6 @@ export function Customers() {
 
   const handleDeletePhone = async (phoneId: string) => {
     if (!editCustomer) return;
-    if (!confirm('确定要删除这个联系电话吗？')) return;
 
     try {
       await db.customerPhone.delete({ where: { id: phoneId } });

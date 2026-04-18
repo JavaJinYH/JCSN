@@ -104,7 +104,17 @@ export function Dashboard() {
 
       const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-      const [allProducts, todaySalesData, recentSalesData, allSales, saleItems] = await Promise.all([
+      const [
+        allProducts,
+        todayLegacySales,
+        recentLegacySales,
+        allLegacySales,
+        legacySaleItems,
+        todayNewOrders,
+        recentNewOrders,
+        allNewOrders,
+        newOrderItems,
+      ] = await Promise.all([
         db.product.findMany(),
         db.sale.findMany({
           where: { saleDate: { gte: today } },
@@ -123,11 +133,30 @@ export function Dashboard() {
           where: { createdAt: { gte: weekAgo } },
           include: { product: true },
         }),
+        db.saleOrder.findMany({
+          where: { saleDate: { gte: today } },
+          include: { buyer: true },
+        }),
+        db.saleOrder.findMany({
+          where: { saleDate: { gte: weekAgo } },
+          orderBy: { saleDate: 'desc' },
+          take: 10,
+          include: { buyer: true },
+        }),
+        db.saleOrder.findMany({
+          where: { saleDate: { gte: weekAgo } },
+        }),
+        db.orderItem.findMany({
+          where: { createdAt: { gte: weekAgo } },
+          include: { product: true },
+        }),
       ]);
 
       const lowStock = allProducts.filter(p => p.stock <= p.minStock && p.minStock > 0);
-      const todaySales = todaySalesData.reduce((sum, s) => sum + s.paidAmount, 0);
-      const todayOrders = todaySalesData.length;
+      const todayLegacySalesTotal = todayLegacySales.reduce((sum, s) => sum + s.paidAmount, 0);
+      const todayNewOrdersTotal = todayNewOrders.reduce((sum, o) => sum + o.paidAmount, 0);
+      const todaySales = todayLegacySalesTotal + todayNewOrdersTotal;
+      const todayOrders = todayLegacySales.length + todayNewOrders.length;
 
       setStats({
         todaySales,
@@ -142,7 +171,24 @@ export function Dashboard() {
         minStock: p.minStock,
         unit: p.unit,
       })));
-      setRecentSales(recentSalesData);
+
+      const recentAll = [
+        ...recentLegacySales.map(s => ({
+          id: s.id,
+          paidAmount: s.paidAmount,
+          saleDate: s.saleDate,
+          customer: s.customer,
+          source: 'legacy' as const,
+        })),
+        ...recentNewOrders.map(o => ({
+          id: o.id,
+          paidAmount: o.paidAmount,
+          saleDate: o.saleDate,
+          customer: o.buyer,
+          source: 'new' as const,
+        })),
+      ].sort((a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime()).slice(0, 10);
+      setRecentSales(recentAll as any);
 
       const chartMap = new Map<string, { sales: number; orders: number }>();
       for (let i = 6; i >= 0; i--) {
@@ -151,11 +197,20 @@ export function Dashboard() {
         chartMap.set(dateStr, { sales: 0, orders: 0 });
       }
 
-      allSales.forEach((sale) => {
+      allLegacySales.forEach((sale) => {
         const dateStr = new Date(sale.saleDate).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
         const existing = chartMap.get(dateStr);
         if (existing) {
           existing.sales += sale.paidAmount;
+          existing.orders += 1;
+        }
+      });
+
+      allNewOrders.forEach((order) => {
+        const dateStr = new Date(order.saleDate).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+        const existing = chartMap.get(dateStr);
+        if (existing) {
+          existing.sales += order.paidAmount;
           existing.orders += 1;
         }
       });
@@ -168,7 +223,21 @@ export function Dashboard() {
       setChartData(chartDataArray);
 
       const productMap = new Map<string, { name: string; quantity: number; amount: number }>();
-      saleItems.forEach((item: any) => {
+      legacySaleItems.forEach((item: any) => {
+        const existing = productMap.get(item.productId);
+        if (existing) {
+          existing.quantity += item.quantity;
+          existing.amount += item.subtotal;
+        } else {
+          productMap.set(item.productId, {
+            name: item.product?.name || '未知商品',
+            quantity: item.quantity,
+            amount: item.subtotal,
+          });
+        }
+      });
+
+      newOrderItems.forEach((item: any) => {
         const existing = productMap.get(item.productId);
         if (existing) {
           existing.quantity += item.quantity;
@@ -208,10 +277,16 @@ export function Dashboard() {
         startDate = new Date(today.getFullYear(), today.getMonth(), 1);
       }
 
-      const salesInPeriod = await db.sale.findMany({
-        where: { saleDate: { gte: startDate } },
-        include: { payments: true },
-      });
+      const [legacySalesInPeriod, newOrdersInPeriod] = await Promise.all([
+        db.sale.findMany({
+          where: { saleDate: { gte: startDate } },
+          include: { payments: true },
+        }),
+        db.saleOrder.findMany({
+          where: { saleDate: { gte: startDate } },
+          include: { payments: true },
+        }),
+      ]);
 
       let cashAmount = 0;
       let wechatAmount = 0;
@@ -219,14 +294,35 @@ export function Dashboard() {
       let transferAmount = 0;
       let totalSales = 0;
       let newReceivable = 0;
+      let orderCount = 0;
 
-      salesInPeriod.forEach(sale => {
+      legacySalesInPeriod.forEach(sale => {
         totalSales += sale.totalAmount;
-        const paidAmount = sale.paidAmount;
         const receivable = sale.totalAmount - sale.paidAmount;
         newReceivable += receivable;
+        orderCount++;
 
         sale.payments.forEach(payment => {
+          const method = payment.method?.toLowerCase() || '';
+          if (method.includes('现金') || method === 'cash') {
+            cashAmount += payment.amount;
+          } else if (method.includes('微信') || method === 'wechat') {
+            wechatAmount += payment.amount;
+          } else if (method.includes('支付宝') || method === 'alipay') {
+            alipayAmount += payment.amount;
+          } else if (method.includes('转账') || method === 'transfer') {
+            transferAmount += payment.amount;
+          }
+        });
+      });
+
+      newOrdersInPeriod.forEach(order => {
+        totalSales += order.totalAmount;
+        const receivable = order.totalAmount - order.paidAmount;
+        newReceivable += receivable;
+        orderCount++;
+
+        order.payments.forEach(payment => {
           const method = payment.method?.toLowerCase() || '';
           if (method.includes('现金') || method === 'cash') {
             cashAmount += payment.amount;
@@ -247,7 +343,7 @@ export function Dashboard() {
         alipayAmount,
         transferAmount,
         newReceivable,
-        orderCount: salesInPeriod.length,
+        orderCount,
       });
     } catch (error) {
       console.error('Failed to load flow stats:', error);

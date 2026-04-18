@@ -21,6 +21,7 @@ import {
 import { db } from '@/lib/db';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { getAgingLevel } from '@/lib/customerUtils';
+import { toast } from '@/components/Toast';
 import type { CollectionRecord, Customer, AccountReceivable } from '@/lib/types';
 
 export function Collections() {
@@ -83,7 +84,7 @@ export function Collections() {
 
   const handleAddRecord = async () => {
     if (!selectedCustomer) {
-      alert('请选择客户');
+      toast('请选择客户', 'warning');
       return;
     }
 
@@ -132,19 +133,18 @@ export function Collections() {
       loadData();
     } catch (error) {
       console.error('Failed to add record:', error);
-      alert('添加失败，请重试');
+      toast('添加失败，请重试', 'error');
     }
   };
 
   const handleDeleteRecord = async (id: string) => {
-    if (!confirm('确定要删除这条催账记录吗？')) return;
-
     try {
       await db.collectionRecord.delete({ where: { id } });
       loadData();
+      toast('删除成功', 'success');
     } catch (error) {
       console.error('Failed to delete record:', error);
-      alert('删除失败，请重试');
+      toast('删除失败，请重试', 'error');
     }
   };
 

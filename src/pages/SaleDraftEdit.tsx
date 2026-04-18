@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/dialog';
 import { db } from '@/lib/db';
 import { formatCurrency, generateInvoiceNo } from '@/lib/utils';
+import { toast } from '@/components/Toast';
 import type { Product, Category, Customer, Project, SaleSlip } from '@/lib/types';
 
 interface CartItem {
@@ -94,7 +95,7 @@ export function SaleDraftEdit() {
       ]);
 
       if (!slipData) {
-        alert('暂存单不存在');
+        toast('暂存单不存在', 'error');
         navigate('/sales/drafts');
         return;
       }
@@ -214,7 +215,7 @@ export function SaleDraftEdit() {
 
   const handleSaveDraft = async () => {
     if (cart.length === 0) {
-      alert('请先添加商品');
+      toast('请先添加商品', 'warning');
       return;
     }
     try {
@@ -248,11 +249,11 @@ export function SaleDraftEdit() {
           },
         },
       });
-      alert('保存成功');
+      toast('保存成功', 'success');
       navigate('/sales/drafts');
     } catch (error) {
       console.error('Failed to save draft:', error);
-      alert('保存失败，请重试');
+      toast('保存失败，请重试', 'error');
     } finally {
       setLoading(false);
     }
@@ -260,7 +261,7 @@ export function SaleDraftEdit() {
 
   const handleSubmit = async () => {
     if (cart.length === 0) {
-      alert('请先添加商品');
+      toast('请先添加商品', 'warning');
       return;
     }
     try {
@@ -323,11 +324,11 @@ export function SaleDraftEdit() {
         data: { status: 'completed' },
       });
 
-      alert('提交成功');
+      toast('提交成功', 'success');
       navigate('/sales');
     } catch (error) {
       console.error('Failed to submit:', error);
-      alert('提交失败，请重试');
+      toast('提交失败，请重试', 'error');
     } finally {
       setLoading(false);
     }

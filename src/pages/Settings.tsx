@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { db } from '@/lib/db';
 import { formatCurrency } from '@/lib/utils';
+import { toast } from '@/components/Toast';
 import type { SystemSetting, Category } from '@/lib/types';
 import * as XLSX from 'xlsx';
 
@@ -75,11 +76,11 @@ export function Settings() {
         },
       });
 
-      alert('店铺信息保存成功！');
+      toast('店铺信息保存成功！', 'success');
       loadData();
     } catch (error) {
       console.error('Failed to save shop info:', error);
-      alert('保存失败，请重试');
+      toast('保存失败，请重试', 'error');
     } finally {
       setSaving(false);
     }
@@ -130,16 +131,16 @@ export function Settings() {
       XLSX.writeFile(wb, `折柳建材数据备份_${new Date().toISOString().split('T')[0]}.xlsx`);
 
       setShowBackupDialog(false);
-      alert('数据备份成功！');
+      toast('数据备份成功！', 'success');
     } catch (error) {
       console.error('Failed to backup data:', error);
-      alert('备份失败，请重试');
+      toast('备份失败，请重试', 'error');
     }
   };
 
   const handleAddCategory = async () => {
     if (!categoryName.trim()) {
-      alert('请输入分类名称');
+      toast('请输入分类名称', 'warning');
       return;
     }
 
@@ -155,15 +156,16 @@ export function Settings() {
       setCategoryName('');
       setCategoryDesc('');
       loadData();
+      toast('分类添加成功', 'success');
     } catch (error) {
       console.error('Failed to add category:', error);
-      alert('添加分类失败');
+      toast('添加分类失败', 'error');
     }
   };
 
   const handleUpdateCategory = async () => {
     if (!editCategory || !categoryName.trim()) {
-      alert('请输入分类名称');
+      toast('请输入分类名称', 'warning');
       return;
     }
 
@@ -180,21 +182,21 @@ export function Settings() {
       setCategoryName('');
       setCategoryDesc('');
       loadData();
+      toast('分类更新成功', 'success');
     } catch (error) {
       console.error('Failed to update category:', error);
-      alert('更新分类失败');
+      toast('更新分类失败', 'error');
     }
   };
 
   const handleDeleteCategory = async (id: string) => {
-    if (!confirm('确定要删除此分类吗？')) return;
-
     try {
       await db.category.delete({ where: { id } });
       loadData();
+      toast('分类删除成功', 'success');
     } catch (error) {
       console.error('Failed to delete category:', error);
-      alert('删除失败，该分类下可能有商品');
+      toast('删除失败，该分类下可能有商品', 'error');
     }
   };
 

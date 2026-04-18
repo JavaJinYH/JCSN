@@ -155,8 +155,6 @@ export function LegacyBills() {
   };
 
   const handleDeleteBill = async (bill: AccountReceivable) => {
-    if (!confirm(`确定要删除这笔历史账单吗？`)) return;
-
     try {
       await db.accountReceivable.delete({
         where: { id: bill.id },

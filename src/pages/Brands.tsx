@@ -104,7 +104,6 @@ export function Brands() {
   };
 
   const handleDeleteBrand = async (brand: Brand) => {
-    if (!confirm(`确定要删除品牌 "${brand.name}" 吗？相关规格也会被删除。`)) return;
     try {
       await db.brand.delete({ where: { id: brand.id } });
       toast('品牌删除成功', 'success');
@@ -143,7 +142,6 @@ export function Brands() {
   };
 
   const handleDeleteSpec = async (spec: ProductSpec) => {
-    if (!confirm(`确定要删除规格 "${spec.name}" 吗？`)) return;
     try {
       await db.productSpec.delete({ where: { id: spec.id } });
       toast('规格删除成功', 'success');
