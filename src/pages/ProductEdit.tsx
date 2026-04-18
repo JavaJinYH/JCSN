@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { toast } from '@/components/Toast';
 import {
   Select,
   SelectContent,
@@ -75,7 +76,7 @@ export function ProductEdit() {
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.categoryId) {
-      alert('请填写必填项');
+      toast('请填写必填项', 'warning');
       return;
     }
 
@@ -98,11 +99,11 @@ export function ProductEdit() {
         },
       });
 
-      alert('商品更新成功！');
+      toast('商品更新成功！', 'success');
       navigate('/products');
     } catch (error) {
       console.error('Failed to update product:', error);
-      alert('更新失败，请重试');
+      toast('更新失败，请重试', 'error');
     } finally {
       setSaving(false);
     }
