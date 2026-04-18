@@ -359,6 +359,15 @@ export function SaleNew() {
         },
       });
 
+      await db.receivable.create({
+        data: {
+          orderId: sale.id,
+          originalAmount: finalAmount,
+          paidAmount: paidAmount,
+          remainingAmount: remainingAmount,
+        },
+      });
+
       for (const item of cart) {
         await db.product.update({
           where: { id: item.product.id },
