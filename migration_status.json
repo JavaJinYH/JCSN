@@ -1,9 +1,9 @@
 {
-  "version": "v2.10",
+  "version": "v2.11",
   "lastUpdated": "2026-04-18",
   "currentPhase": "Phase 8",
-  "currentTask": "代码审查修复",
-  "currentAction": "完成代码审查修复：SaleNew CartItem添加costPrice/salePrice、SaleOrder添加配送字段、Reports统计逻辑修复",
+  "currentTask": "业务规则同步",
+  "currentAction": "业务规则同步：更新MIGRATION_PLAN和SPEC，添加核心经营规则（定价/收款/配送/退货）",
   "completedPhases": ["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5", "Phase 6", "Phase 7", "Phase 8"],
   "completedTasks": [
     "P1-T1", "P1-T2", "P1-T3", "P1-T4", "P1-T5", "P1-T6", "P1-T7", "P1-T8", "P1-T9",
@@ -14,10 +14,33 @@
     "P6-T1", "P6-T2", "P6-T3", "P6-T4", "P6-T5", "P6-T6",
     "P7-T1", "P7-T2", "P7-T3", "P7-T4", "P7-T5",
     "P8-T1", "P8-T2", "P8-T3",
-    "CODE-REVIEW-1", "CODE-REVIEW-2", "CODE-REVIEW-3", "CODE-REVIEW-4"
+    "CODE-REVIEW-1", "CODE-REVIEW-2", "CODE-REVIEW-3", "CODE-REVIEW-4",
+    "BIZ-DOC-1", "BIZ-DOC-2", "BIZ-DOC-3", "BIZ-DOC-4"
   ],
   "inProgressFiles": [],
-  "nextSteps": ["Phase 9: 集成测试"],
-  "pendingChanges": [],
-  "notes": "Phase 1-8 全部完成。代码审查修复：SaleNew CartItem添加costPrice/salePrice、SaleOrder添加needDelivery/deliveryAddress/deliveryFee、Reports使用saleDate筛选。已Git提交(v2.10)，已更新SPEC.md至v4.6。"
+  "nextSteps": ["Phase 9: 集成测试", "BIZ-1: 修改利润率警告逻辑（10%保底）", "BIZ-2: Product添加isPriceVolatile字段", "BIZ-3: 特殊商品退货按市场价处理"],
+  "pendingChanges": [
+    {
+      "id": "BIZ-1",
+      "task": "修改利润率警告逻辑（10%保底）",
+      "description": "当前只有亏本警告（成交价<成本价），需要改为利润率<10%警告",
+      "files": ["src/pages/SaleNew.tsx"],
+      "priority": "high"
+    },
+    {
+      "id": "BIZ-2",
+      "task": "Product添加isPriceVolatile字段",
+      "description": "特殊商品（不锈钢/电线等）价格每日波动，需要标记",
+      "files": ["prisma/schema.prisma", "src/pages/Products.tsx"],
+      "priority": "high"
+    },
+    {
+      "id": "BIZ-3",
+      "task": "特殊商品退货按市场价处理",
+      "description": "退货时如果是特殊商品，弹出对话框输入当日市场价格",
+      "files": ["src/pages/SaleNew.tsx或退货页面"],
+      "priority": "medium"
+    }
+  ],
+  "notes": "Phase 1-8全部完成。代码审查已修复。业务规则已同步到MIGRATION_PLAN(v2.2)和SPEC(v4.6)。待完成BIZ-1/2/3实现业务规则。"
 }
