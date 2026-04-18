@@ -192,7 +192,108 @@ const handleSubmit = () => {
 
 ---
 
-## 七、重复性问题处理流程
+## 七、下拉搜索组件规范（分类编号：SEL-002）
+
+### 7.1 问题背景
+**问题原因**：当选项数量较多（如联系人、结账主体、供应商等）时，普通的 `<Select>` 组件只能滚动选择，用户需要滚动很久才能找到目标选项，体验很差。
+
+**典型症状**：
+- 结账主体有100+个时，选择困难
+- 供应商列表很长，只能滑动选择
+- 联系人数量多时，选择效率低
+
+### 7.2 解决方案：Combobox（可搜索下拉）
+
+**使用场景**：选项数量 > 10 个时，必须使用可搜索的 Combobox 组件。
+
+**shadcn/ui 组件**：`Command` 组件（配合 `Popover`）
+
+### 7.3 正确用法
+
+```tsx
+// 使用 shadcn/ui 的 Command 组件实现可搜索下拉
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+
+// 示例：选择结账主体
+const [open, setOpen] = useState(false);
+const [selectedEntity, setSelectedEntity] = useState<string>('');
+const [searchTerm, setSearchTerm] = useState('');
+
+const filteredEntities = entities.filter(e =>
+  e.name.toLowerCase().includes(searchTerm.toLowerCase())
+);
+
+return (
+  <Popover open={open} onOpenChange={setOpen}>
+    <PopoverTrigger asChild>
+      <Button variant="outline" role="combobox" className="w-full justify-between">
+        {selectedEntity
+          ? entities.find(e => e.id === selectedEntity)?.name
+          : "选择结账主体..."}
+      </Button>
+    </PopoverTrigger>
+    <PopoverContent className="w-[400px] p-0">
+      <Command>
+        <CommandInput
+          placeholder="搜索结账主体..."
+          value={searchTerm}
+          onValueChange={setSearchTerm}
+        />
+        <CommandList>
+          <CommandEmpty>没有找到匹配的结账主体</CommandEmpty>
+          <CommandGroup>
+            {filteredEntities.map(entity => (
+              <CommandItem
+                key={entity.id}
+                value={entity.id}
+                onSelect={() => {
+                  setSelectedEntity(entity.id);
+                  setOpen(false);
+                  setSearchTerm('');
+                }}
+              >
+                {entity.name}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </Command>
+    </PopoverContent>
+  </Popover>
+);
+```
+
+### 7.4 必须使用搜索下拉的场景
+
+| 场景 | 选项数量 | 原因 |
+|------|---------|------|
+| 选择结账主体 | >10 | 便于快速定位 |
+| 选择供应商 | >10 | 便于快速定位 |
+| 选择联系人/客户 | >10 | 便于快速定位 |
+| 选择项目 | >10 | 便于快速定位 |
+| 选择商品 | >10 | 便于快速定位 |
+
+### 7.5 搜索下拉设计原则
+
+1. **即时搜索**：用户输入时立即过滤，无需点击搜索按钮
+2. **模糊匹配**：支持部分匹配，如输入"江城"能匹配"江城装饰有限公司"
+3. **显示匹配提示**：高亮匹配的文字
+4. **无结果提示**：当没有匹配项时显示友好提示
+5. **键盘支持**：支持上下键选择，Enter确认，Esc关闭
+
+### 7.6 代码审查检查项
+
+- [ ] 选项 > 10 的场景使用 Combobox
+- [ ] 支持输入搜索和即时过滤
+- [ ] 无匹配结果时有友好提示
+- [ ] 选择后正确更新状态
+- [ ] 弹窗关闭后重置搜索词
+
+---
+
+## 八、重复性问题处理流程
 
 ### 8.1 问题分类体系
 | 分类编号 | 类别 | 示例 |
