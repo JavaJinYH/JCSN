@@ -144,7 +144,6 @@ model Sale {
   status                String                 @default("completed")
   items                 SaleItem[]
   payments              Payment[]
-  rebates               Rebate[]
   deliveryRecords       DeliveryRecord[]
   settlementAdjustments SettlementAdjustment[]
   photos                SalePhoto[]
@@ -191,7 +190,7 @@ model SystemSetting {
 model Rebate {
   id           String    @id @default(cuid())
   saleId       String
-  sale         Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  sale         SaleOrder @relation(fields: [saleId], references: [id], onDelete: Cascade)
   plumberId    String?
   plumber      Contact? @relation(fields: [plumberId], references: [id], onDelete: SetNull)
   supplierName String
@@ -626,6 +625,7 @@ model SaleOrder {
 
   items        OrderItem[]
   payments     OrderPayment[]
+  rebates      Rebate[]
   receivables  Receivable[]
   photos       SaleOrderPhoto[]
 }

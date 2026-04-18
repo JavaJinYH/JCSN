@@ -1,16 +1,16 @@
 {
   "version": "v2.1",
   "lastUpdated": "2026-04-18",
-  "currentPhase": "Phase 1",
+  "currentPhase": "Phase 2",
   "currentTask": "已完成",
-  "currentAction": "Phase 1 Schema基础改造已完成",
-  "completedPhases": ["Phase 1"],
-  "completedTasks": ["P1-T1", "P1-T2", "P1-T3", "P1-T4", "P1-T5", "P1-T6", "P1-T7", "P1-T8", "P1-T9"],
+  "currentAction": "Phase 2 测试数据创建已完成",
+  "completedPhases": ["Phase 1", "Phase 2"],
+  "completedTasks": ["P1-T1", "P1-T2", "P1-T3", "P1-T4", "P1-T5", "P1-T6", "P1-T7", "P1-T8", "P1-T9", "P2-T1", "P2-T2", "P2-T3", "P2-T4", "P2-T5", "P2-T6", "P2-T7"],
   "inProgressFiles": [],
   "nextSteps": [
-    "Phase 2: 数据迁移核心",
-    "P2-T1: Customer数据导出脚本"
+    "Phase 3: 前端基础改造",
+    "P3-T1: Contacts.tsx添加类型筛选"
   ],
   "pendingChanges": [],
-  "notes": "Phase 1完成。Contact添加code和contactType字段，Supplier模型创建，AccountReceivable改为关联Contact。Rebate.plumber改为关联Contact。Purchase.supplier改为关联Supplier。注意：数据库被重置了，需要后续进行数据迁移。"
+  "notes": "Phase 2完成。新建seed.js适配新架构，创建了Contact、Entity、BizProject、Supplier测试数据。Rebate.sale改为关联SaleOrder。Sale.rebates移除，SaleOrder.rebates添加。"
 }
