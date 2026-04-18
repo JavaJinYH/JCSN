@@ -27,8 +27,9 @@ export function ProductEdit() {
     specification: '',
     model: '',
     unit: '个',
-    costPrice: '',
-    salePrice: '',
+    referencePrice: '',
+    lastPurchasePrice: '',
+    isPriceVolatile: false,
     stock: '',
     minStock: '',
     remark: '',
@@ -55,8 +56,9 @@ export function ProductEdit() {
           specification: productData.specification || '',
           model: productData.model || '',
           unit: productData.unit,
-          costPrice: productData.costPrice.toString(),
-          salePrice: productData.salePrice.toString(),
+          referencePrice: productData.referencePrice?.toString() || '',
+          lastPurchasePrice: productData.lastPurchasePrice?.toString() || '',
+          isPriceVolatile: productData.isPriceVolatile || false,
           stock: productData.stock.toString(),
           minStock: productData.minStock.toString(),
           remark: '',
@@ -72,7 +74,7 @@ export function ProductEdit() {
   };
 
   const handleSubmit = async () => {
-    if (!formData.name || !formData.categoryId || !formData.costPrice || !formData.salePrice) {
+    if (!formData.name || !formData.categoryId) {
       alert('请填写必填项');
       return;
     }
@@ -89,8 +91,9 @@ export function ProductEdit() {
           specification: formData.specification || null,
           model: formData.model || null,
           unit: formData.unit,
-          costPrice: parseFloat(formData.costPrice),
-          salePrice: parseFloat(formData.salePrice),
+          referencePrice: formData.referencePrice ? parseFloat(formData.referencePrice) : null,
+          lastPurchasePrice: formData.lastPurchasePrice ? parseFloat(formData.lastPurchasePrice) : null,
+          isPriceVolatile: formData.isPriceVolatile,
           minStock: parseInt(formData.minStock) || 0,
         },
       });
@@ -214,13 +217,13 @@ export function ProductEdit() {
 
             <div>
               <label className="text-sm font-medium mb-2 block">
-                成本价 (元) <span className="text-red-500">*</span>
+                参考售价 (元)
               </label>
               <Input
                 type="number"
-                value={formData.costPrice}
+                value={formData.referencePrice}
                 onChange={(e) =>
-                  setFormData({ ...formData, costPrice: e.target.value })
+                  setFormData({ ...formData, referencePrice: e.target.value })
                 }
                 min="0"
                 step="0.01"
@@ -229,17 +232,32 @@ export function ProductEdit() {
 
             <div>
               <label className="text-sm font-medium mb-2 block">
-                销售价 (元) <span className="text-red-500">*</span>
+                最近进价 (元)
               </label>
               <Input
                 type="number"
-                value={formData.salePrice}
+                value={formData.lastPurchasePrice}
                 onChange={(e) =>
-                  setFormData({ ...formData, salePrice: e.target.value })
+                  setFormData({ ...formData, lastPurchasePrice: e.target.value })
                 }
                 min="0"
                 step="0.01"
               />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="isPriceVolatile"
+                checked={formData.isPriceVolatile}
+                onChange={(e) =>
+                  setFormData({ ...formData, isPriceVolatile: e.target.checked })
+                }
+                className="w-4 h-4"
+              />
+              <label htmlFor="isPriceVolatile" className="text-sm font-medium">
+                价格波动商品（退货时按当日市场价结算）
+              </label>
             </div>
 
             <div>

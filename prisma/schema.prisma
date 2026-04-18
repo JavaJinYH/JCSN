@@ -29,7 +29,8 @@ model Product {
   unitRatio        Float                     @default(1)
   lastPurchasePrice Float?
   referencePrice   Float?
-  stock            Float                     @default(0)
+  isPriceVolatile Boolean @default(false)
+  stock           Float                     @default(0)
   minStock         Float                     @default(0)
   imagePath        String?
   imageUrl         String?

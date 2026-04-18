@@ -245,6 +245,8 @@ export function SaleNew() {
   const remainingAmount = Math.max(0, finalAmount - totalPaid);
   const isManualFinalAmount = manualFinalAmount !== null;
   const lossAmount = costTotal - finalAmount;
+  const profitRate = finalAmount > 0 ? ((finalAmount - costTotal) / finalAmount) * 100 : 0;
+  const showLowProfitWarning = profitRate < 10 && profitRate >= 0 && finalAmount > 0;
   const showLossWarning = finalAmount < costTotal && finalAmount > 0;
 
   const handleMoli = () => {
@@ -307,6 +309,11 @@ export function SaleNew() {
     }
 
     if (showLossWarning && !showLossConfirm) {
+      setShowLossConfirm(true);
+      return;
+    }
+
+    if (showLowProfitWarning && !showLossConfirm) {
       setShowLossConfirm(true);
       return;
     }
@@ -838,6 +845,13 @@ export function SaleNew() {
                     <div>成交价低于成本价，预计亏损 {formatCurrency(lossAmount)}</div>
                   </div>
                 )}
+
+                {showLowProfitWarning && !showLossWarning && (
+                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-600">
+                    <div className="font-medium">⚠️ 利润率过低警告</div>
+                    <div>利润率 {profitRate.toFixed(1)}% 低于10%，请确认是否继续</div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1036,11 +1050,22 @@ export function SaleNew() {
       <Dialog open={showLossConfirm} onOpenChange={setShowLossConfirm}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>⚠️ 确认亏本？</DialogTitle>
+            <DialogTitle>{showLossWarning ? '⚠️ 确认亏本？' : '⚠️ 确认低利润率？'}</DialogTitle>
           </DialogHeader>
           <div className="py-4">
-            <p>成交价 <span className="font-bold text-red-600">{formatCurrency(finalAmount)}</span> 低于成本价 <span className="font-bold">{formatCurrency(costTotal)}</span></p>
-            <p className="mt-2 text-red-600">预计亏损：{formatCurrency(lossAmount)}</p>
+            {showLossWarning ? (
+              <>
+                <p>成交价 <span className="font-bold text-red-600">{formatCurrency(finalAmount)}</span> 低于成本价 <span className="font-bold">{formatCurrency(costTotal)}</span></p>
+                <p className="mt-2 text-red-600">预计亏损：{formatCurrency(lossAmount)}</p>
+              </>
+            ) : (
+              <>
+                <p>订单利润率 <span className="font-bold text-yellow-600">{profitRate.toFixed(1)}%</span> 低于10%</p>
+                <p className="mt-2">成交总额：{formatCurrency(finalAmount)}</p>
+                <p>成本总额：{formatCurrency(costTotal)}</p>
+                <p>订单利润：{formatCurrency(finalAmount - costTotal)}</p>
+              </>
+            )}
             <p className="mt-4 text-sm text-slate-500">是否确认继续保存？</p>
           </div>
           <DialogFooter>
@@ -1048,13 +1073,13 @@ export function SaleNew() {
               取消
             </Button>
             <Button
-              variant="destructive"
+              variant={showLossWarning ? 'destructive' : 'default'}
               onClick={() => {
                 setShowLossConfirm(false);
                 handleSubmit();
               }}
             >
-              确认亏本保存
+              {showLossWarning ? '确认亏本保存' : '确认保存'}
             </Button>
           </DialogFooter>
         </DialogContent>

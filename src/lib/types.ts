@@ -20,6 +20,7 @@ export interface Product {
   unitRatio: number;
   lastPurchasePrice: number | null;
   referencePrice: number | null;
+  isPriceVolatile: boolean;
   stock: number;
   minStock: number;
   imagePath: string | null;
