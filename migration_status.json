@@ -1,9 +1,9 @@
 {
-  "version": "v2.8",
+  "version": "v2.9",
   "lastUpdated": "2026-04-18",
   "currentPhase": "Phase 8",
   "currentTask": "全部完成",
-  "currentAction": "所有Phase任务已完成",
+  "currentAction": "所有Phase任务已完成，已提交Git并更新SPEC.md",
   "completedPhases": ["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5", "Phase 6", "Phase 7", "Phase 8"],
   "completedTasks": [
     "P1-T1", "P1-T2", "P1-T3", "P1-T4", "P1-T5", "P1-T6", "P1-T7", "P1-T8", "P1-T9",
@@ -12,11 +12,11 @@
     "P4-T1", "P4-T2", "P4-T3", "P4-T4", "P4-T5", "P4-T6", "P4-T7",
     "P5-T1", "P5-T2", "P5-T3", "P5-T4", "P5-T5", "P5-T6", "P5-T7", "P5-T8",
     "P6-T1", "P6-T2", "P6-T3", "P6-T4", "P6-T5", "P6-T6",
-    "P7-T1", "P7-T2", "P7-T3", "P7-T4", "P7-T5", "P7-T6",
+    "P7-T1", "P7-T2", "P7-T3", "P7-T4", "P7-T5",
     "P8-T1", "P8-T2", "P8-T3"
   ],
   "inProgressFiles": [],
-  "nextSteps": [],
+  "nextSteps": ["Phase 9: 集成测试"],
   "pendingChanges": [],
-  "notes": "所有Phase任务已完成。备份/恢复脚本已优化，自动查找项目根目录（通过package.json和prisma目录识别）。路径处理：electron照片存储在exe同级/photos，数据库在exe同级/prisma/dev.db。备份命令: npx tsx scripts/backup.ts。恢复命令: npx tsx scripts/restore.ts <备份文件>"
+  "notes": "Phase 1-8 全部完成。修正P7-T6不存在的问题（Phase 7只有5个任务）。已Git提交(v2.9)，已更新SPEC.md至v4.5。"
 }
