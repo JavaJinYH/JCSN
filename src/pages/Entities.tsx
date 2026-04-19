@@ -28,6 +28,7 @@ import {
 import { DataTableFilters, DataTablePagination, useDataTable } from '@/components/DataTable';
 import { db } from '@/lib/db';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { EntityService } from '@/services/EntityService';
 import { toast } from '@/components/Toast';
 import type { Entity, Contact, BizProject, SaleOrder } from '@/lib/types';
 
@@ -94,11 +95,8 @@ export function Entities() {
 
   const loadContacts = async () => {
     try {
-      const contactsData = await db.contact.findMany({
-        where: { contactType: { in: ['customer', 'company'] } },
-        orderBy: { name: 'asc' },
-      });
-      setContacts(contactsData);
+      const contactsData = await EntityService.getContacts();
+      setContacts(contactsData.filter(c => c.contactType === 'customer' || c.contactType === 'company'));
     } catch (error) {
       console.error('[Entities] 加载联系人失败:', error);
     }
@@ -107,10 +105,7 @@ export function Entities() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const entitiesData = await db.entity.findMany({
-        include: { contact: true },
-        orderBy: { name: 'asc' },
-      });
+      const entitiesData = await EntityService.getEntities();
 
       const stats: Record<string, { total: number; paid: number; count: number }> = {};
       for (const entity of entitiesData) {
@@ -171,20 +166,8 @@ export function Entities() {
     setSelectedEntity(entity);
     try {
       const [projectsData, ordersData] = await Promise.all([
-        db.bizProject.findMany({
-          where: { entityId: entity.id },
-          orderBy: { createdAt: 'desc' },
-        }),
-        db.saleOrder.findMany({
-          where: { paymentEntityId: entity.id },
-          include: {
-            buyer: true,
-            payer: true,
-            project: true,
-            paymentEntity: true,
-          },
-          orderBy: { saleDate: 'desc' },
-        }),
+        EntityService.getProjectsByEntity(entity.id),
+        EntityService.getEntityOrders(entity.id),
       ]);
       setEntityProjects(projectsData);
       setEntityOrders(ordersData);
@@ -204,14 +187,12 @@ export function Entities() {
     }
 
     try {
-      await db.entity.create({
-        data: {
-          name: formData.name,
-          entityType: formData.entityType,
-          contactId: formData.contactId || null,
-          address: formData.address || null,
-          remark: formData.remark || null,
-        },
+      await EntityService.createEntity({
+        name: formData.name,
+        entityType: formData.entityType,
+        contactId: formData.contactId || undefined,
+        address: formData.address || undefined,
+        remark: formData.remark || undefined,
       });
 
       setShowAddDialog(false);
@@ -238,9 +219,7 @@ export function Entities() {
         return;
       }
 
-      await db.entity.delete({
-        where: { id: entityId },
-      });
+      await EntityService.deleteEntity(entityId);
       loadData();
       toast('主体删除成功', 'success');
     } catch (error) {

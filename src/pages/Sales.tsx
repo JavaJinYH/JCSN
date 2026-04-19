@@ -11,9 +11,9 @@ import {
 import { DataTableFilters, useDataTable } from '@/components/DataTable';
 import { Link } from 'react-router-dom';
 import { PhotoViewer } from '@/components/PhotoViewer';
-import { db } from '@/lib/db';
 import { toast } from '@/components/Toast';
 import { SaleStats, SaleTable, SaleDetail } from '@/components/sale-list';
+import { SaleService } from '@/services/SaleService';
 
 type SaleSource = 'legacy' | 'new';
 
@@ -133,18 +133,9 @@ export function Sales() {
   const loadData = async () => {
     try {
       const [legacySales, newSales, contactsData] = await Promise.all([
-        db.sale.findMany({
-          include: { customer: true, _count: { select: { items: true } } },
-          orderBy: { saleDate: 'desc' },
-        }),
-        db.saleOrder.findMany({
-          include: {
-            buyer: true, payer: true, introducer: true,
-            project: true, paymentEntity: true, items: true,
-          },
-          orderBy: { saleDate: 'desc' },
-        }),
-        db.contact.findMany({ orderBy: { name: 'asc' } }),
+        SaleService.getLegacySales(),
+        SaleService.getSaleOrders(),
+        SaleService.getContacts(),
       ]);
 
       const legacySaleItems: SaleListItem[] = legacySales.map((s) => ({

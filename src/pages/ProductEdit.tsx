@@ -12,8 +12,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Combobox } from '@/components/Combobox';
-import { db } from '@/lib/db';
 import type { Product, Category } from '@/lib/types';
+import { ProductService } from '@/services/ProductService';
 
 export function ProductEdit() {
   const navigate = useNavigate();
@@ -60,9 +60,9 @@ export function ProductEdit() {
       if (!id) return;
 
       const [productData, categoriesData, productsData] = await Promise.all([
-        db.product.findUnique({ where: { id } }),
-        db.category.findMany({ orderBy: { sortOrder: 'asc' } }),
-        db.product.findMany({ select: { id: true, name: true, brand: true, specification: true } }),
+        ProductService.getProductById(id),
+        ProductService.getCategories(),
+        ProductService.getProductNames(),
       ]);
 
       if (productData) {
@@ -104,22 +104,19 @@ export function ProductEdit() {
 
     setSaving(true);
     try {
-      await db.product.update({
-        where: { id },
-        data: {
-          name: formData.name,
-          categoryId: formData.categoryId,
-          brand: formData.brand || null,
-          specification: formData.specification || null,
-          model: formData.model || null,
-          unit: formData.unit,
-          purchaseUnit: formData.purchaseUnit || null,
-          unitRatio: formData.purchaseUnit ? parseFloat(formData.unitRatio) || 1 : 1,
-          referencePrice: formData.referencePrice ? parseFloat(formData.referencePrice) : null,
-          lastPurchasePrice: formData.lastPurchasePrice ? parseFloat(formData.lastPurchasePrice) : null,
-          isPriceVolatile: formData.isPriceVolatile,
-          minStock: parseInt(formData.minStock) || 0,
-        },
+      await ProductService.updateProduct(id, {
+        name: formData.name,
+        categoryId: formData.categoryId,
+        brand: formData.brand || undefined,
+        specification: formData.specification || undefined,
+        model: formData.model || undefined,
+        unit: formData.unit,
+        purchaseUnit: formData.purchaseUnit || undefined,
+        unitRatio: formData.purchaseUnit ? (parseFloat(formData.unitRatio) || 1).toString() : '1',
+        referencePrice: formData.referencePrice ? parseFloat(formData.referencePrice) : undefined,
+        lastPurchasePrice: formData.lastPurchasePrice ? parseFloat(formData.lastPurchasePrice) : undefined,
+        isPriceVolatile: formData.isPriceVolatile,
+        minStock: parseInt(formData.minStock) || 0,
       });
 
       toast('商品更新成功！', 'success');

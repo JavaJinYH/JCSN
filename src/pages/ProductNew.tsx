@@ -18,10 +18,10 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Combobox } from '@/components/Combobox';
-import { db } from '@/lib/db';
 import { toast } from '@/components/Toast';
 import { formatProductName } from '@/lib/utils';
 import type { Category, Product } from '@/lib/types';
+import { ProductService } from '@/services/ProductService';
 
 export function ProductNew() {
   const navigate = useNavigate();
@@ -59,8 +59,8 @@ export function ProductNew() {
   const loadData = async () => {
     try {
       const [categoriesData, productsData] = await Promise.all([
-        db.category.findMany({ orderBy: { sortOrder: 'asc' } }),
-        db.product.findMany({ select: { id: true, name: true, brand: true, specification: true } }),
+        ProductService.getCategories(),
+        ProductService.getProductNames(),
       ]);
       setCategories(categoriesData);
       setAllProducts(productsData);
@@ -113,22 +113,20 @@ export function ProductNew() {
 
     setLoading(true);
     try {
-      await db.product.create({
-        data: {
-          name: formData.name,
-          categoryId: formData.categoryId,
-          brand: formData.brand || null,
-          specification: formData.specification || null,
-          model: formData.model || null,
-          unit: formData.unit,
-          purchaseUnit: formData.purchaseUnit || null,
-          unitRatio: formData.purchaseUnit ? parseFloat(formData.unitRatio) || 1 : 1,
-          referencePrice: formData.referencePrice ? parseFloat(formData.referencePrice) : null,
-          lastPurchasePrice: formData.lastPurchasePrice ? parseFloat(formData.lastPurchasePrice) : null,
-          isPriceVolatile: formData.isPriceVolatile,
-          stock: parseInt(formData.stock) || 0,
-          minStock: parseInt(formData.minStock) || 0,
-        },
+      await ProductService.createProduct({
+        name: formData.name,
+        categoryId: formData.categoryId,
+        brand: formData.brand || undefined,
+        specification: formData.specification || undefined,
+        model: formData.model || undefined,
+        unit: formData.unit,
+        purchaseUnit: formData.purchaseUnit || undefined,
+        unitRatio: formData.purchaseUnit ? (parseFloat(formData.unitRatio) || 1).toString() : '1',
+        referencePrice: formData.referencePrice ? parseFloat(formData.referencePrice) : undefined,
+        lastPurchasePrice: formData.lastPurchasePrice ? parseFloat(formData.lastPurchasePrice) : undefined,
+        isPriceVolatile: formData.isPriceVolatile,
+        stock: parseInt(formData.stock) || 0,
+        minStock: parseInt(formData.minStock) || 0,
       });
 
       toast('商品添加成功！', 'success');
@@ -148,11 +146,8 @@ export function ProductNew() {
     }
 
     try {
-      const category = await db.category.create({
-        data: {
-          name: newCategoryName.trim(),
-          description: newCategoryDesc.trim() || null,
-        },
+      const category = await ProductService.createCategory({
+        name: newCategoryName.trim(),
       });
 
       setCategories([...categories, category]);

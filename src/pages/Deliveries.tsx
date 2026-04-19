@@ -19,9 +19,11 @@ import {
 } from '@/components/ui/dialog';
 import { DataTablePagination, useDataTable } from '@/components/DataTable';
 import { db } from '@/lib/db';
-import { formatCurrency } from '@/lib/utils';
-import { DeliveryFee, SaleOrder } from '@/lib/types';
+import { formatCurrency, formatDateTime } from '@/lib/utils';
+import { DeliveryFee, SaleOrder, Purchase } from '@/lib/types';
 import { toast } from '@/components/Toast';
+import { DeliveryService } from '@/services/DeliveryService';
+import { PurchaseService } from '@/services/PurchaseService';
 
 interface DeliveryRecordDisplay {
   id: string;
@@ -47,12 +49,40 @@ interface DeliveryRecordDisplay {
   updatedAt: Date;
 }
 
+interface PurchaseDeliveryDisplay {
+  id: string;
+  productName: string;
+  supplierName: string | null;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  needDelivery: boolean;
+  deliveryStatus: string;
+  driverName: string | null;
+  driverPhone: string | null;
+  estimatedDeliveryDate: Date | null;
+  sentDate: Date | null;
+  deliveredDate: Date | null;
+  status: string;
+  createdAt: Date;
+}
+
+const deliveryStatusLabels: Record<string, { label: string; variant: 'secondary' | 'warning' | 'default' | 'outline' }> = {
+  not_needed: { label: '无需配送', variant: 'outline' },
+  pending: { label: '待发货', variant: 'warning' },
+  shipped: { label: '已发货', variant: 'default' },
+  in_transit: { label: '配送中', variant: 'default' },
+  delivered: { label: '已到货', variant: 'outline' },
+};
+
 export function Deliveries() {
   const [deliveryFees, setDeliveryFees] = useState<DeliveryFee[]>([]);
   const [deliveryRecords, setDeliveryRecords] = useState<DeliveryRecordDisplay[]>([]);
+  const [purchaseDeliveries, setPurchaseDeliveries] = useState<PurchaseDeliveryDisplay[]>([]);
   const [saleOrders, setSaleOrders] = useState<SaleOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'fees' | 'records'>('fees');
+  const [activeTab, setActiveTab] = useState<'fees' | 'sale_records' | 'purchase_records'>('fees');
+  const [purchaseFilter, setPurchaseFilter] = useState<string>('all');
   const [showAddFeeDialog, setShowAddFeeDialog] = useState(false);
   const [showAddRecordDialog, setShowAddRecordDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -78,10 +108,6 @@ export function Deliveries() {
     driverPhone: '',
     remark: '',
   });
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   useEffect(() => {
     if (!showAddRecordDialog) {
@@ -116,22 +142,34 @@ export function Deliveries() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [feesData, recordsData, ordersData] = await Promise.all([
-        db.deliveryFee.findMany({ orderBy: { zoneName: 'asc' } }),
-        db.deliveryRecord.findMany({
-          orderBy: { createdAt: 'desc' },
-          take: 100,
-        }),
-        db.saleOrder.findMany({
-          where: { needDelivery: true },
-          orderBy: { saleDate: 'desc' },
-          take: 100,
-          include: { buyer: true },
-        }),
+      const [feesData, recordsData, ordersData, purchasesData] = await Promise.all([
+        DeliveryService.getDeliveryFees(),
+        DeliveryService.getDeliveryRecords(),
+        DeliveryService.getSaleOrders({ needDelivery: true }),
+        DeliveryService.getPurchases({ needDelivery: true }),
       ]);
       setDeliveryFees(feesData);
       setDeliveryRecords(recordsData as DeliveryRecordDisplay[]);
       setSaleOrders(ordersData);
+
+      const purchaseDeliveriesData: PurchaseDeliveryDisplay[] = purchasesData.map((p: any) => ({
+        id: p.id,
+        productName: p.product?.name || '-',
+        supplierName: p.supplier?.name || p.supplierName || '-',
+        quantity: p.quantity,
+        unitPrice: p.unitPrice,
+        totalAmount: p.totalAmount,
+        needDelivery: p.needDelivery,
+        deliveryStatus: p.deliveryStatus,
+        driverName: p.driverName,
+        driverPhone: p.driverPhone,
+        estimatedDeliveryDate: p.estimatedDeliveryDate,
+        sentDate: p.sentDate,
+        deliveredDate: p.deliveredDate,
+        status: p.status,
+        createdAt: p.createdAt,
+      }));
+      setPurchaseDeliveries(purchaseDeliveriesData);
     } catch (error) {
       console.error('[Deliveries] 加载数据失败:', error);
       toast('数据加载失败，请刷新页面重试', 'error');
@@ -140,6 +178,10 @@ export function Deliveries() {
     }
   };
 
+  useEffect(() => {
+    loadData();
+  }, []);
+
   const handleAddFee = async () => {
     if (!feeFormData.zoneName.trim()) {
       toast('请输入区域名称', 'warning');
@@ -147,16 +189,14 @@ export function Deliveries() {
     }
 
     try {
-      await db.deliveryFee.create({
-        data: {
-          zoneName: feeFormData.zoneName.trim(),
-          baseFee: parseFloat(feeFormData.baseFee) || 0,
-          perKgFee: parseFloat(feeFormData.perKgFee) || 0,
-          perKmFee: parseFloat(feeFormData.perKmFee) || 0,
-          minWeight: parseFloat(feeFormData.minWeight) || 0,
-          maxWeight: 100,
-          remark: feeFormData.remark.trim() || null,
-        },
+      await DeliveryService.createDeliveryFee({
+        zoneName: feeFormData.zoneName.trim(),
+        baseFee: parseFloat(feeFormData.baseFee) || 0,
+        perKgFee: parseFloat(feeFormData.perKgFee) || 0,
+        perKmFee: parseFloat(feeFormData.perKmFee) || 0,
+        minWeight: parseFloat(feeFormData.minWeight) || 0,
+        maxWeight: 100,
+        remark: feeFormData.remark.trim() || undefined,
       });
 
       setShowAddFeeDialog(false);
@@ -214,7 +254,7 @@ export function Deliveries() {
         saleOrderId: '', zoneName: '', recipientName: '', recipientPhone: '',
         deliveryAddress: '', distance: '', weight: '', driverName: '', driverPhone: '', remark: ''
       });
-      setActiveTab('records');
+      setActiveTab('sale_records');
       loadData();
       toast('配送记录添加成功', 'success');
     } catch (error) {
@@ -225,7 +265,7 @@ export function Deliveries() {
 
   const handleDeleteFee = async (id: string) => {
     try {
-      await db.deliveryFee.delete({ where: { id } });
+      await DeliveryService.deleteDeliveryFee(id);
       loadData();
       toast('删除成功', 'success');
     } catch (error) {
@@ -236,17 +276,32 @@ export function Deliveries() {
 
   const handleUpdateRecordStatus = async (id: string, status: string) => {
     try {
-      await db.deliveryRecord.update({
-        where: { id },
-        data: {
-          deliveryStatus: status,
-          deliveryDate: status === 'delivered' ? new Date() : undefined,
-        },
+      await DeliveryService.updateDeliveryRecord(id, {
+        deliveryStatus: status,
+        deliveryDate: status === 'delivered' ? new Date() : undefined,
       });
       loadData();
       toast('状态更新成功', 'success');
     } catch (error) {
       console.error('[Deliveries] 更新配送状态失败:', error);
+      toast('更新失败，请重试', 'error');
+    }
+  };
+
+  const handleUpdatePurchaseDeliveryStatus = async (id: string, newStatus: string) => {
+    try {
+      const updateData: any = { deliveryStatus: newStatus };
+      if (newStatus === 'shipped') {
+      } else if (newStatus === 'in_transit') {
+      } else if (newStatus === 'delivered') {
+        updateData.deliveredDate = new Date();
+        updateData.status = 'delivered';
+      }
+      await PurchaseService.updatePurchase(id, updateData);
+      loadData();
+      toast('状态更新成功', 'success');
+    } catch (error) {
+      console.error('[Deliveries] 更新进货配送状态失败:', error);
       toast('更新失败，请重试', 'error');
     }
   };
@@ -264,8 +319,26 @@ export function Deliveries() {
     return matchesSearch && matchesStatus;
   });
 
+  const filteredPurchaseDeliveries = purchaseDeliveries.filter((p) => {
+    const matchesSearch =
+      !searchTerm ||
+      p.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.supplierName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = purchaseFilter === 'all' || p.deliveryStatus === purchaseFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const purchasePendingCount = purchaseDeliveries.filter(p =>
+    p.status === 'sent' && p.deliveryStatus !== 'delivered'
+  ).length;
+
   const tableProps = useDataTable<DeliveryRecordDisplay>({
     data: filteredRecords,
+    defaultPageSize: 20,
+  });
+
+  const purchaseTableProps = useDataTable<PurchaseDeliveryDisplay>({
+    data: filteredPurchaseDeliveries,
     defaultPageSize: 20,
   });
 
@@ -287,13 +360,15 @@ export function Deliveries() {
           <Button onClick={() => setShowAddFeeDialog(true)} variant="outline">
             + 费用标准
           </Button>
-          <Button onClick={() => setShowAddRecordDialog(true)} className="bg-orange-500 hover:bg-orange-600">
-            + 添加配送
-          </Button>
+          {activeTab === 'sale_records' && (
+            <Button onClick={() => setShowAddRecordDialog(true)} className="bg-orange-500 hover:bg-orange-600">
+              + 添加配送
+            </Button>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-slate-500">配送总费用</CardTitle>
@@ -304,10 +379,18 @@ export function Deliveries() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">待配送</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-500">销售待配送</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">{pendingCount}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">进货待配送</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">{purchasePendingCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -328,10 +411,16 @@ export function Deliveries() {
           费用标准
         </Button>
         <Button
-          variant={activeTab === 'records' ? 'default' : 'outline'}
-          onClick={() => setActiveTab('records')}
+          variant={activeTab === 'sale_records' ? 'default' : 'outline'}
+          onClick={() => setActiveTab('sale_records')}
         >
-          配送记录
+          销售配送
+        </Button>
+        <Button
+          variant={activeTab === 'purchase_records' ? 'default' : 'outline'}
+          onClick={() => setActiveTab('purchase_records')}
+        >
+          进货配送
         </Button>
       </div>
 
@@ -339,9 +428,10 @@ export function Deliveries() {
         <>
           {showAddFeeDialog && (
             <Dialog open={showAddFeeDialog} onOpenChange={setShowAddFeeDialog}>
-              <DialogContent>
+              <DialogContent aria-describedby="fee-dialog-description">
                 <DialogHeader>
                   <DialogTitle>添加配送费用标准</DialogTitle>
+                  <p id="fee-dialog-description" className="text-sm text-slate-500">设置配送区域的基础费用、重量费和距离费</p>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div>
@@ -454,13 +544,14 @@ export function Deliveries() {
         </>
       )}
 
-      {activeTab === 'records' && (
+      {activeTab === 'sale_records' && (
         <>
           {showAddRecordDialog && (
             <Dialog open={showAddRecordDialog} onOpenChange={setShowAddRecordDialog}>
-              <DialogContent className="max-h-[90vh] overflow-y-auto">
+              <DialogContent className="max-h-[90vh] overflow-y-auto" aria-describedby="record-dialog-description">
                 <DialogHeader>
                   <DialogTitle>添加配送记录</DialogTitle>
+                  <p id="record-dialog-description" className="text-sm text-slate-500">填写收货人信息和配送详情</p>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div>
@@ -702,6 +793,144 @@ export function Deliveries() {
             </CardContent>
           </Card>
         </>
+      )}
+
+      {activeTab === 'purchase_records' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3 flex-wrap">
+              <Input
+                placeholder="搜索商品、供应商..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-48 h-8"
+              />
+
+              <Select value={purchaseFilter} onValueChange={setPurchaseFilter}>
+                <SelectTrigger className="w-32 h-8">
+                  <SelectValue placeholder="配送状态" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部</SelectItem>
+                  <SelectItem value="pending">待发货</SelectItem>
+                  <SelectItem value="shipped">已发货</SelectItem>
+                  <SelectItem value="in_transit">配送中</SelectItem>
+                  <SelectItem value="delivered">已到货</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearchTerm('');
+                  setPurchaseFilter('all');
+                }}
+                className="h-8 text-slate-500"
+              >
+                🔄 重置筛选
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="text-center py-8 text-slate-500">加载中...</div>
+            ) : purchaseTableProps.total === 0 ? (
+              <div className="text-center py-8 text-slate-500">暂无进货配送记录</div>
+            ) : (
+              <div className="space-y-3">
+                {purchaseTableProps.data.map((record) => {
+                  const statusInfo = deliveryStatusLabels[record.deliveryStatus] || { label: record.deliveryStatus, variant: 'secondary' as const };
+                  return (
+                    <div key={record.id} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-slate-800">{record.productName}</span>
+                            <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+                          </div>
+                          <div className="text-sm text-slate-600 mt-1">
+                            供应商: {record.supplierName} | 数量: {record.quantity}
+                          </div>
+                          {record.driverName && (
+                            <div className="text-sm text-slate-500 mt-1">
+                              司机: {record.driverName} {record.driverPhone && `(${record.driverPhone})`}
+                            </div>
+                          )}
+                          {record.sentDate && (
+                            <div className="text-xs text-blue-600 mt-1">
+                              发送时间: {formatDateTime(record.sentDate)}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <div className="font-medium text-slate-800">{formatCurrency(record.totalAmount)}</div>
+                          {record.estimatedDeliveryDate && (
+                            <div className="text-sm text-slate-500">
+                              预计: {formatDateTime(record.estimatedDeliveryDate)}
+                            </div>
+                          )}
+                          <div className="flex gap-1 mt-2">
+                            {record.status !== 'completed' && record.deliveryStatus !== 'delivered' && (
+                              <>
+                                {(record.deliveryStatus === 'pending' || record.deliveryStatus === 'shipped') && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleUpdatePurchaseDeliveryStatus(record.id, 'shipped')}
+                                  >
+                                    标记已发货
+                                  </Button>
+                                )}
+                                {record.deliveryStatus === 'shipped' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleUpdatePurchaseDeliveryStatus(record.id, 'in_transit')}
+                                  >
+                                    标记配送中
+                                  </Button>
+                                )}
+                                {record.deliveryStatus !== 'pending' && record.deliveryStatus !== 'shipped' && record.deliveryStatus !== 'in_transit' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleUpdatePurchaseDeliveryStatus(record.id, 'pending')}
+                                  >
+                                    标记待发货
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                            {record.deliveryStatus !== 'delivered' && record.status !== 'completed' && (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="bg-green-500 hover:bg-green-600"
+                                onClick={() => handleUpdatePurchaseDeliveryStatus(record.id, 'delivered')}
+                              >
+                                确认到货
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <DataTablePagination
+              pagination={{
+                page: purchaseTableProps.page,
+                pageSize: purchaseTableProps.pageSize,
+                total: purchaseTableProps.total,
+              }}
+              onPageChange={purchaseTableProps.setPage}
+              onPageSizeChange={purchaseTableProps.setPageSize}
+            />
+          </CardContent>
+        </Card>
       )}
     </div>
   );

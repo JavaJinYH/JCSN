@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +32,7 @@ import { SalePayment } from '@/components/sale/SalePayment';
 import { SaleService } from '@/services/SaleService';
 import { ProductService } from '@/services/ProductService';
 import { ContactService } from '@/services/ContactService';
+import { EntityService } from '@/services/EntityService';
 
 interface PaymentInfo {
   method: string;
@@ -41,6 +42,8 @@ interface PaymentInfo {
 
 export function SaleNew() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const draftIdFromUrl = searchParams.get('draftId');
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -67,6 +70,7 @@ export function SaleNew() {
   const [remark, setRemark] = useState('');
   const [writtenInvoiceNo, setWrittenInvoiceNo] = useState('');
   const [loading, setLoading] = useState(false);
+  const [draftId, setDraftId] = useState<string | null>(null);
   const [manualFinalAmount, setManualFinalAmount] = useState<number | null>(null);
   const [showLossConfirm, setShowLossConfirm] = useState(false);
 
@@ -74,6 +78,7 @@ export function SaleNew() {
     { method: '现金', amount: 0, payerName: '' },
   ]);
   const [photos, setPhotos] = useState<{ id: string; file?: File; preview: string; remark: string; type: string }[]>([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -83,13 +88,76 @@ export function SaleNew() {
     loadProjects();
   }, [selectedEntity]);
 
+  useEffect(() => {
+    console.log('[SaleNew] selectedEntity 变化:', selectedEntity);
+  }, [selectedEntity]);
+
+  useEffect(() => {
+    if (draftIdFromUrl && dataLoaded && products.length > 0) {
+      loadDraft(draftIdFromUrl);
+    }
+  }, [draftIdFromUrl, dataLoaded]);
+
+  const loadDraft = async (id: string, productsData?: Product[]) => {
+    try {
+      setLoading(true);
+      console.log('[SaleNew] 开始加载草稿, id:', id);
+      const draft = await SaleService.getSaleDraftById(id);
+      console.log('[SaleNew] 草稿数据:', draft);
+      console.log('[SaleNew] paymentEntityId:', draft?.paymentEntityId);
+      if (draft) {
+        setDraftId(draft.id);
+        setSelectedBuyer(draft.buyerCustomerId || '__none__');
+        setSelectedPayer(draft.payerCustomerId || '__none__');
+        setSelectedIntroducer(draft.introducerCustomerId || '__none__');
+        setSelectedEntity(draft.paymentEntityId || '');
+        console.log('[SaleNew] 设置 selectedEntity 为:', draft.paymentEntityId || '');
+        setSelectedProject(draft.projectId || '__none__');
+        setPickerName(draft.pickerName || '');
+        setPickerPhone(draft.pickerPhone || '');
+        setNeedsDelivery(draft.needDelivery || false);
+        setDeliveryAddress(draft.deliveryAddress || '');
+        setDeliveryFee(draft.deliveryFee?.toString() || '0');
+        setDiscount(draft.discount || 0);
+        setRemark(draft.remark || '');
+        setWrittenInvoiceNo(draft.writtenInvoiceNo || '');
+        setPayments(draft.payments ? JSON.parse(draft.payments) : [{ method: '现金', amount: 0, payerName: '' }]);
+        
+        const productList = productsData || products;
+        const cartItems: CartItem[] = [];
+        for (const item of draft.items) {
+          const product = productList.find(p => p.id === item.productId);
+          if (product) {
+            cartItems.push({
+              product,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              costPrice: product.lastPurchasePrice || 0,
+              salePrice: product.referencePrice || 0,
+              purchaseUnit: product.purchaseUnit || null,
+              saleUnit: product.unit,
+              unitRatio: product.unitRatio || 1,
+            });
+          }
+        }
+        setCart(cartItems);
+        toast('已加载草稿', 'success');
+      }
+    } catch (error) {
+      console.error('[SaleNew] 加载草稿失败:', error);
+      toast('加载草稿失败', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadData = async () => {
     try {
       let [productsData, categoriesData, contactsData, entitiesData] = await Promise.all([
         ProductService.getProducts(),
-        db.category.findMany({ orderBy: { sortOrder: 'asc' } }),
+        EntityService.getCategories(),
         ContactService.getContacts(),
-        db.entity.findMany({ orderBy: { name: 'asc' } }),
+        EntityService.getEntities(),
       ]);
 
       let walkInCustomer = contactsData.find(c => c.name === '散客');
@@ -107,6 +175,7 @@ export function SaleNew() {
       setCategories(categoriesData);
       setContacts(sortByFrequency(contactsData, 'contact'));
       setEntities(sortByFrequency(entitiesData, 'entity'));
+      setDataLoaded(true);
     } catch (error) {
       console.error('[SaleNew] 加载数据失败:', error);
       toast('数据加载失败，请刷新页面重试', 'error');
@@ -119,10 +188,7 @@ export function SaleNew() {
       return;
     }
     try {
-      const projectsData = await db.bizProject.findMany({
-        where: { entityId: selectedEntity, status: '进行中' },
-        orderBy: { createdAt: 'desc' },
-      });
+      const projectsData = await EntityService.getProjectsByEntity(selectedEntity);
       setProjects(sortByFrequency(projectsData, 'project'));
     } catch (error) {
       console.error('[SaleNew] 加载项目失败:', error);
@@ -138,23 +204,14 @@ export function SaleNew() {
 
   const loadHistoricalPrices = async (contactId: string) => {
     try {
-      const customerPrices = await db.customerPrice.findMany({
-        where: { customerId: contactId },
-      });
+      const [customerPrices, orders] = await Promise.all([
+        ContactService.getCustomerPrices(contactId),
+        ContactService.getCustomerOrders(contactId),
+      ]);
 
       const priceMap = new Map<string, number>();
       customerPrices.forEach(cp => {
         priceMap.set(cp.productId, cp.lastPrice);
-      });
-
-      const orders = await db.saleOrder.findMany({
-        where: { buyerId: contactId },
-        include: {
-          items: {
-            include: { product: true },
-          },
-        },
-        orderBy: { saleDate: 'desc' },
       });
 
       orders.forEach(order => {
@@ -358,6 +415,68 @@ export function SaleNew() {
     handleSubmit();
   };
 
+  const handleSaveDraft = async () => {
+    if (cart.length === 0) {
+      toast('请先添加商品', 'warning');
+      return;
+    }
+
+    if (!selectedEntity) {
+      toast('请选择挂靠主体', 'warning');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const draftData = {
+        buyerId: selectedBuyer,
+        payerId: selectedPayer,
+        introducerId: selectedIntroducer,
+        pickerName: pickerName || null,
+        pickerPhone: pickerPhone || null,
+        projectId: selectedProject,
+        paymentEntityId: selectedEntity,
+        totalAmount: finalAmount,
+        discount: totalDiscount,
+        paidAmount,
+        writtenInvoiceNo: writtenInvoiceNo || null,
+        remark: remark || null,
+        needDelivery: needsDelivery,
+        deliveryAddress: needsDelivery ? deliveryAddress : null,
+        deliveryFee: needsDelivery ? parseFloat(deliveryFee) || 0 : 0,
+        items: cart.map(item => ({
+          productId: item.product.id,
+          productName: item.product.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          subtotal: item.unitPrice * item.quantity,
+          costPriceSnapshot: item.costPrice,
+          sellingPriceSnapshot: item.salePrice,
+        })),
+        payments: payments.filter(p => p.amount > 0).map(p => ({
+          method: p.method,
+          amount: p.amount,
+          payerName: p.payerName || null,
+        })),
+      };
+
+      if (draftId) {
+        await SaleService.updateSaleDraft(draftId, draftData);
+        toast('草稿已更新', 'success');
+      } else {
+        const result = await SaleService.createSaleDraft(draftData);
+        setDraftId(result.draft.id);
+        toast('已暂存草稿', 'success');
+      }
+      navigate('/sales/drafts');
+    } catch (error: any) {
+      console.error('[SaleNew] 保存草稿失败:', error);
+      toast(error.message || '暂存失败，请重试', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -524,6 +643,14 @@ export function SaleNew() {
             disabled={cart.length === 0 || loading}
           >
             {loading ? '保存中...' : '💾 保存销售'}
+          </Button>
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={handleSaveDraft}
+            disabled={cart.length === 0 || loading}
+          >
+            📝 暂存
           </Button>
         </div>
       </div>

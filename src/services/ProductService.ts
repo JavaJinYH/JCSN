@@ -151,4 +151,25 @@ export const ProductService = {
     });
     return products.map(p => p.brand).filter(Boolean) as string[];
   },
+
+  async getCategories() {
+    return db.category.findMany({
+      orderBy: { sortOrder: 'asc' },
+    });
+  },
+
+  async createCategory(data: { name: string; sortOrder?: number }) {
+    return db.category.create({
+      data: {
+        name: data.name,
+        sortOrder: data.sortOrder || 0,
+      },
+    });
+  },
+
+  async getProductNames() {
+    return db.product.findMany({
+      select: { id: true, name: true, brand: true, specification: true },
+    });
+  },
 };

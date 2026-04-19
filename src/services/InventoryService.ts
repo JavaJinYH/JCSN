@@ -155,4 +155,17 @@ export const InventoryService = {
       alertLevel: p.stock === 0 ? 'out' : 'low',
     }));
   },
+
+  async getProducts() {
+    return db.product.findMany({
+      include: { category: true },
+      orderBy: { name: 'asc' },
+    });
+  },
+
+  async getCategories() {
+    return db.category.findMany({
+      orderBy: { sortOrder: 'asc' },
+    });
+  },
 };

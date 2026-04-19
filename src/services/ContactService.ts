@@ -137,4 +137,22 @@ export const ContactService = {
       totalReceivable,
     };
   },
+
+  async getCustomerPrices(customerId: string) {
+    return db.customerPrice.findMany({
+      where: { customerId },
+    });
+  },
+
+  async getCustomerOrders(customerId: string) {
+    return db.saleOrder.findMany({
+      where: { buyerId: customerId },
+      include: {
+        items: {
+          include: { product: true },
+        },
+      },
+      orderBy: { saleDate: 'desc' },
+    });
+  },
 };

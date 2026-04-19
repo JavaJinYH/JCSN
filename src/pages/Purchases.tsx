@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { DataTablePagination, useDataTable } from '@/components/DataTable';
-import { PhotoViewer } from '@/components/PhotoViewer';
 import { db } from '@/lib/db';
 import { sortByFrequency } from '@/lib/frequency';
-import { generateBatchNo } from '@/lib/utils';
-import type { Purchase, Product, Category, Supplier } from '@/lib/types';
+import { generateBatchNo, formatCurrency, formatDateTime } from '@/lib/utils';
+import type { PurchaseOrder, Purchase, Product, Category, Supplier } from '@/lib/types';
+import { PurchaseService } from '@/services';
 import { toast } from '@/components/Toast';
 import {
   Dialog,
@@ -16,15 +18,20 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   PurchaseStats,
   PurchaseFilters,
-  PurchaseTable,
-  PurchaseForm,
-  PurchaseDetail,
   PurchaseReturn,
   PriceHistory,
 } from '@/components/purchase';
-import { useProducts, useCategories } from '@/hooks';
+import { Combobox } from '@/components/Combobox';
+import { PhotoUpload } from '@/components/PhotoUpload';
 
 interface PurchaseItemRow {
   id: string;
@@ -38,11 +45,29 @@ interface PurchaseForReturn {
   productId: string;
   quantity: number;
   unitPrice: number;
+  supplierId: string | null;
+  supplierName: string | null;
   product: Product;
 }
 
+interface PurchaseOrderWithItems extends PurchaseOrder {
+  items: (Purchase & { product: Product })[];
+}
+
+const statusLabels: Record<string, { label: string; variant: 'secondary' | 'default' | 'outline' }> = {
+  draft: { label: '草稿', variant: 'secondary' },
+  sent: { label: '已发送', variant: 'default' },
+  delivered: { label: '已到货', variant: 'default' },
+  completed: { label: '已完成', variant: 'outline' },
+};
+
 export function Purchases() {
-  const [purchases, setPurchases] = useState<(Purchase & { product: Product })[]>([]);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const initialStatus = searchParams.get('status') || 'all';
+
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderWithItems[]>([]);
   const [products, setProducts] = useState<(Product & { category: Category })[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -51,18 +76,24 @@ export function Purchases() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatus);
 
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const prefilledDataRef = useRef<any[] | null>(null);
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItemRow[]>([
     { id: '1', productId: '', quantity: '', unitPrice: '' }
   ]);
   const [commonSupplierId, setCommonSupplierId] = useState('');
   const [commonBatchNo, setCommonBatchNo] = useState('');
   const [commonRemark, setCommonRemark] = useState('');
+  const [needDelivery, setNeedDelivery] = useState(false);
+  const [driverName, setDriverName] = useState('');
+  const [driverPhone, setDriverPhone] = useState('');
+  const [estimatedDate, setEstimatedDate] = useState('');
   const [photos, setPhotos] = useState<{ id: string; file?: File; preview: string; remark: string; type: string }[]>([]);
 
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
-  const [selectedPurchaseId, setSelectedPurchaseId] = useState<string | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   const [showReturnDialog, setShowReturnDialog] = useState(false);
   const [returnPurchase, setReturnPurchase] = useState<PurchaseForReturn | null>(null);
@@ -70,54 +101,43 @@ export function Purchases() {
   const [showPriceHistoryDialog, setShowPriceHistoryDialog] = useState(false);
   const [priceHistoryProduct, setPriceHistoryProduct] = useState<Product | null>(null);
 
+  const state = location.state as { openAdd?: boolean; prefilledItems?: any[] } | null;
+  if (state?.openAdd && state?.prefilledItems && !prefilledDataRef.current) {
+    prefilledDataRef.current = state.prefilledItems;
+  }
+
   useEffect(() => {
     loadData();
-  }, []);
+  }, [statusFilter]);
 
   useEffect(() => {
-    if (showAddDialog) {
-      loadProducts();
-      loadSuppliers();
+    if (prefilledDataRef.current && prefilledDataRef.current.length > 0 && products.length > 0) {
+      setPurchaseItems(prefilledDataRef.current.map((item: any, index: number) => ({
+        id: String(index + 1),
+        productId: String(item.productId),
+        quantity: String(item.quantity),
+        unitPrice: String(item.unitPrice),
+      })));
+      setShowAddDialog(true);
+      prefilledDataRef.current = null;
+      navigate('.', { replace: true });
     }
-  }, [showAddDialog]);
-
-  const loadProducts = async () => {
-    try {
-      const productsData = await db.product.findMany({
-        include: { category: true },
-        orderBy: { name: 'asc' },
-      });
-      setProducts(productsData);
-    } catch (error) {
-      console.error('Failed to load products:', error);
-    }
-  };
-
-  const loadSuppliers = async () => {
-    try {
-      const suppliersData = await db.supplier.findMany({
-        orderBy: { name: 'asc' },
-      });
-      setSuppliers(sortByFrequency(suppliersData, 'supplier'));
-    } catch (error) {
-      console.error('Failed to load suppliers:', error);
-    }
-  };
+  }, [products]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [purchasesData, categoriesData] = await Promise.all([
-        db.purchase.findMany({
-          include: { product: { include: { category: true } }, photos: true },
-          orderBy: { purchaseDate: 'desc' },
-          take: 100,
-        }),
-        db.category.findMany({ orderBy: { sortOrder: 'asc' } }),
+      const [ordersData, categoriesData, productsData, suppliersData] = await Promise.all([
+        PurchaseService.getPurchaseOrders({ status: statusFilter !== 'all' ? statusFilter : undefined }),
+        PurchaseService.getCategories(),
+        PurchaseService.getProducts(),
+        PurchaseService.getSuppliers(),
       ]);
 
-      setPurchases(purchasesData as any);
+      setPurchaseOrders(ordersData as PurchaseOrderWithItems[]);
       setCategories(categoriesData);
+      setProducts(productsData);
+      setSuppliers(sortByFrequency(suppliersData, 'supplier'));
     } catch (error) {
       console.error('Failed to load purchases:', error);
       toast('加载进货记录失败，请刷新页面重试', 'error');
@@ -126,21 +146,21 @@ export function Purchases() {
     }
   };
 
-  const filteredPurchases = purchases.filter((p) => {
+  const filteredOrders = purchaseOrders.filter((order) => {
     const matchesSearch =
       !searchTerm ||
-      p.product?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p as any).supplier?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.supplierName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.batchNo?.toLowerCase().includes(searchTerm.toLowerCase());
-    const purchaseDate = new Date(p.purchaseDate);
+      order.batchNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.supplier?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.supplierName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.items.some(item => item.product?.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    const purchaseDate = new Date(order.purchaseDate);
     const matchesDateStart = !dateRange.start || purchaseDate >= new Date(dateRange.start);
     const matchesDateEnd = !dateRange.end || purchaseDate <= new Date(dateRange.end + 'T23:59:59');
     return matchesSearch && matchesDateStart && matchesDateEnd;
   });
 
-  const tableProps = useDataTable<Purchase & { product: Product }>({
-    data: filteredPurchases,
+  const tableProps = useDataTable<PurchaseOrderWithItems>({
+    data: filteredOrders,
     defaultPageSize: 20,
   });
 
@@ -164,44 +184,33 @@ export function Purchases() {
       const supplier = commonSupplierId && commonSupplierId !== '__none__'
         ? suppliers.find(s => s.id === commonSupplierId)
         : null;
-      const purchaseDate = new Date();
 
-      const createdPurchases = [];
-      for (const item of validItems) {
-        const quantity = parseInt(item.quantity);
-        const unitPrice = parseFloat(item.unitPrice);
-
-        const purchase = await db.purchase.create({
-          data: {
-            productId: item.productId,
-            quantity,
-            unitPrice,
-            totalAmount: quantity * unitPrice,
-            supplierId: supplier?.id || null,
-            supplierName: supplier?.name || null,
-            batchNo: commonBatchNo || generateBatchNo(),
-            purchaseDate,
-            remark: commonRemark || null,
-          },
-        });
-        createdPurchases.push(purchase);
-
-        await db.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: quantity } },
-        });
-      }
+      const { order, items: createdItems } = await PurchaseService.createPurchaseOrder({
+        items: validItems.map(item => ({
+          productId: item.productId,
+          quantity: parseInt(item.quantity),
+          unitPrice: parseFloat(item.unitPrice),
+        })),
+        supplierId: supplier?.id || null,
+        supplierName: supplier?.name || null,
+        commonBatchNo: commonBatchNo || undefined,
+        commonRemark: commonRemark || null,
+        needDelivery,
+        driverName: driverName || null,
+        driverPhone: driverPhone || null,
+        estimatedDeliveryDate: needDelivery && estimatedDate ? new Date(estimatedDate) : null,
+      });
 
       for (const photo of photos) {
         if (photo.file) {
-          const dateStr = purchaseDate.toISOString().slice(0, 10).replace(/-/g, '');
+          const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
           const photoTypeNames: Record<string, string> = {
             delivery: '送货单',
             signed: '签收单',
           };
           const typeName = photoTypeNames[photo.type] || photo.type;
           const ext = photo.file.name.split('.').pop() || 'jpg';
-          const fileName = `${dateStr}_${createdPurchases[0].id}_${typeName}.${ext}`;
+          const fileName = `${dateStr}_${order.id}_${typeName}.${ext}`;
 
           const reader = new FileReader();
           const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -214,7 +223,7 @@ export function Purchases() {
 
           await db.purchasePhoto.create({
             data: {
-              purchaseId: createdPurchases[0].id,
+              purchaseId: createdItems[0].id,
               photoPath: `purchases/${fileName}`,
               photoType: photo.type,
               photoRemark: photo.remark || null,
@@ -224,16 +233,25 @@ export function Purchases() {
       }
 
       setShowAddDialog(false);
+      setPurchaseItems([{ id: '1', productId: '', quantity: '', unitPrice: '' }]);
+      setCommonSupplierId('');
+      setCommonBatchNo('');
+      setCommonRemark('');
+      setNeedDelivery(false);
+      setDriverName('');
+      setDriverPhone('');
+      setEstimatedDate('');
+      setPhotos([]);
       loadData();
-      toast(`成功添加 ${createdPurchases.length} 条进货记录！`, 'success');
+      toast(`成功添加进货单，包含 ${createdItems.length} 种商品！`, 'success');
     } catch (error) {
       console.error('Failed to add purchase:', error);
       toast('添加失败，请重试', 'error');
     }
   };
 
-  const handleViewPurchase = (purchaseId: string) => {
-    setSelectedPurchaseId(purchaseId);
+  const handleViewOrder = (orderId: string) => {
+    setSelectedOrderId(orderId);
     setViewDialogOpen(true);
   };
 
@@ -248,6 +266,8 @@ export function Purchases() {
       productId: purchase.productId,
       quantity: purchase.quantity,
       unitPrice: purchase.unitPrice,
+      supplierId: purchase.supplierId || null,
+      supplierName: purchase.supplier?.name || purchase.supplierName || null,
       product: purchase.product,
     });
     setShowReturnDialog(true);
@@ -257,6 +277,11 @@ export function Purchases() {
     setSearchTerm('');
     setSelectedCategory('all');
     setDateRange({ start: '', end: '' });
+    setStatusFilter('all');
+  };
+
+  const totalOrderAmount = (order: PurchaseOrderWithItems) => {
+    return order.items.reduce((sum, item) => sum + item.totalAmount, 0);
   };
 
   if (loading) {
@@ -279,7 +304,7 @@ export function Purchases() {
         </Button>
       </div>
 
-      <PurchaseStats purchases={purchases} />
+      <PurchaseStats purchases={purchaseOrders.flatMap(o => o.items)} />
 
       <Card>
         <CardHeader>
@@ -288,25 +313,69 @@ export function Purchases() {
             selectedCategory={selectedCategory}
             searchTerm={searchTerm}
             dateRange={dateRange}
+            statusFilter={statusFilter}
             onCategoryChange={setSelectedCategory}
             onSearchChange={setSearchTerm}
             onDateRangeChange={setDateRange}
+            onStatusChange={setStatusFilter}
             onReset={handleResetFilters}
           />
         </CardHeader>
         <CardContent>
-          <PurchaseTable
-            purchases={filteredPurchases as any}
-            pagination={{
-              page: tableProps.page,
-              pageSize: tableProps.pageSize,
-              total: tableProps.total,
-            }}
-            onPageChange={tableProps.setPage}
-            onPageSizeChange={tableProps.setPageSize}
-            onView={handleViewPurchase}
-            onViewPriceHistory={handleViewPriceHistory}
-          />
+          <div className="space-y-3">
+            {tableProps.data.map((order) => {
+              const statusInfo = statusLabels[order.status] || { label: order.status, variant: 'secondary' as const };
+              return (
+                <div key={order.id} className="border rounded-lg p-4 bg-white">
+                  <div className="flex items-center justify-between cursor-pointer" onClick={() => handleViewOrder(order.id)}>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <span className="font-medium text-slate-800">
+                          {order.batchNo || order.id.slice(-8)}
+                        </span>
+                        <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+                        {order.supplier?.name && (
+                          <span className="text-sm text-slate-500">供应商: {order.supplier.name}</span>
+                        )}
+                      </div>
+                      <div className="text-sm text-slate-500 mt-1">
+                        {formatDateTime(order.purchaseDate)} | {order.items.length} 种商品
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold text-green-600">
+                        {formatCurrency(totalOrderAmount(order))}
+                      </div>
+                      <div className="text-sm text-slate-500">进货总额</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t">
+                    <div className="text-sm font-medium text-slate-700 mb-2">商品明细:</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {order.items.map((item) => (
+                        <div key={item.id} className="flex items-center justify-between p-2 bg-slate-50 rounded text-sm">
+                          <div>
+                            <span className="font-medium">{item.product?.name}</span>
+                            <span className="text-slate-500 ml-2">x{item.quantity}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-mono">{formatCurrency(item.totalAmount)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {order.remark && (
+                    <div className="mt-2 text-sm text-slate-500">
+                      备注: {order.remark}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
           <DataTablePagination
             pagination={{
               page: tableProps.page,
@@ -322,39 +391,240 @@ export function Purchases() {
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>添加进货记录</DialogTitle>
+            <DialogTitle>添加进货单</DialogTitle>
           </DialogHeader>
-          <PurchaseForm
-            open={showAddDialog}
-            products={products}
-            suppliers={suppliers}
-            purchaseItems={purchaseItems}
-            commonSupplierId={commonSupplierId}
-            commonBatchNo={commonBatchNo}
-            commonRemark={commonRemark}
-            photos={photos}
-            onOpenChange={setShowAddDialog}
-            onItemsChange={setPurchaseItems}
-            onSupplierChange={setCommonSupplierId}
-            onBatchNoChange={setCommonBatchNo}
-            onRemarkChange={setCommonRemark}
-            onPhotosChange={setPhotos}
-            onSubmit={handleAddPurchase}
-          />
+          <div className="space-y-4 py-4">
+            <div className="bg-orange-50 p-3 rounded-lg text-sm text-orange-700">
+              提示：可以添加多行商品，一次性完成多种商品的进货记录
+            </div>
+
+            <div className="max-h-64 overflow-y-auto border rounded-lg">
+              <table className="w-full">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="text-left p-2 text-sm font-medium">操作</th>
+                    <th className="text-left p-2 text-sm font-medium">商品</th>
+                    <th className="text-left p-2 text-sm font-medium w-24">数量</th>
+                    <th className="text-left p-2 text-sm font-medium w-28">单价 (元)</th>
+                    <th className="text-right p-2 text-sm font-medium w-28">小计 (元)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {purchaseItems.map((item) => {
+                    const subtotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
+                    return (
+                      <tr key={item.id} className="border-t">
+                        <td className="p-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              if (purchaseItems.length > 1) {
+                                setPurchaseItems(purchaseItems.filter(i => i.id !== item.id));
+                              }
+                            }}
+                            className="text-red-500 hover:text-red-700 h-8"
+                          >
+                            删除
+                          </Button>
+                        </td>
+                        <td className="p-2">
+                          <Combobox
+                            value={item.productId}
+                            onValueChange={(v) => {
+                              const newItems = purchaseItems.map(i =>
+                                i.id === item.id ? { ...i, productId: v } : i
+                              );
+                              setPurchaseItems(newItems);
+                            }}
+                            options={products.map((p) => ({
+                              value: p.id,
+                              label: `${p.name}${p.specification ? ` (${p.specification})` : ''}`,
+                            }))}
+                            placeholder="搜索商品..."
+                            emptyText="没有找到商品"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <Input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const newItems = purchaseItems.map(i =>
+                                i.id === item.id ? { ...i, quantity: e.target.value } : i
+                              );
+                              setPurchaseItems(newItems);
+                            }}
+                            className="h-8"
+                            placeholder="数量"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <Input
+                            type="number"
+                            value={item.unitPrice}
+                            onChange={(e) => {
+                              const newItems = purchaseItems.map(i =>
+                                i.id === item.id ? { ...i, unitPrice: e.target.value } : i
+                              );
+                              setPurchaseItems(newItems);
+                            }}
+                            className="h-8"
+                            placeholder="单价"
+                          />
+                        </td>
+                        <td className="p-2 text-right font-mono">
+                          {formatCurrency(subtotal)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPurchaseItems([...purchaseItems, {
+                  id: String(Date.now()),
+                  productId: '',
+                  quantity: '',
+                  unitPrice: ''
+                }]);
+              }}
+              className="w-full"
+            >
+              + 添加商品
+            </Button>
+
+            <div className="bg-slate-50 p-3 rounded-lg flex justify-between items-center">
+              <div className="text-sm text-slate-500">
+                共 {purchaseItems.filter(item => item.productId).length} 种商品
+              </div>
+              <div className="text-right">
+                <div className="text-sm text-slate-500">进货总额</div>
+                <div className="text-2xl font-bold text-green-600">
+                  {formatCurrency(purchaseItems.reduce((sum, item) => {
+                    return sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
+                  }, 0))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">批次号</label>
+                <Input
+                  value={commonBatchNo}
+                  onChange={(e) => setCommonBatchNo(e.target.value)}
+                  placeholder="留空自动生成"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">供应商</label>
+                <Select value={commonSupplierId} onValueChange={(v) => setCommonSupplierId(v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择供应商（可选）" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">无</SelectItem>
+                    {suppliers.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name} ({s.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">备注</label>
+              <Input
+                value={commonRemark}
+                onChange={(e) => setCommonRemark(e.target.value)}
+                placeholder="可选"
+              />
+            </div>
+
+            <div className="border-t pt-4">
+              <div className="flex items-center gap-3 mb-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={needDelivery}
+                    onChange={(e) => setNeedDelivery(e.target.checked)}
+                    className="w-4 h-4 rounded"
+                  />
+                  <span className="text-sm font-medium">需要供应商配送</span>
+                </label>
+              </div>
+
+              {needDelivery && (
+                <div className="space-y-3 pl-2 border-l-2 border-blue-200">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <span className="text-xs text-slate-500">司机/联系人</span>
+                      <Input
+                        value={driverName}
+                        onChange={(e) => setDriverName(e.target.value)}
+                        placeholder="司机姓名（可选）"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-xs text-slate-500">联系电话</span>
+                      <Input
+                        value={driverPhone}
+                        onChange={(e) => setDriverPhone(e.target.value)}
+                        placeholder="司机电话（可选）"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs text-slate-500">预计到货日期</span>
+                    <Input
+                      type="date"
+                      value={estimatedDate}
+                      onChange={(e) => setEstimatedDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">单据照片</label>
+              <PhotoUpload
+                photos={photos}
+                onChange={setPhotos}
+                maxPhotos={2}
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowAddDialog(false)}>取消</Button>
+              <Button onClick={handleAddPurchase} className="bg-orange-500 hover:bg-orange-600">保存</Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold">进货详情</DialogTitle>
+            <DialogTitle className="text-xl font-bold">进货单详情</DialogTitle>
           </DialogHeader>
-          <PurchaseDetail
-            purchaseId={selectedPurchaseId}
-            open={viewDialogOpen}
-            onOpenChange={setViewDialogOpen}
-            onOpenReturn={handleOpenReturn}
-          />
+          {selectedOrderId && (
+            <OrderDetail
+              orderId={selectedOrderId}
+              open={viewDialogOpen}
+              onOpenChange={setViewDialogOpen}
+              onOpenReturn={handleOpenReturn}
+              onViewPriceHistory={handleViewPriceHistory}
+              onStatusChange={loadData}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -386,6 +656,336 @@ export function Purchases() {
           />
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function OrderDetail({
+  orderId,
+  open,
+  onOpenChange,
+  onOpenReturn,
+  onViewPriceHistory,
+  onStatusChange,
+}: {
+  orderId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onOpenReturn: (purchase: any) => void;
+  onViewPriceHistory: (product: Product) => void;
+  onStatusChange: () => void;
+}) {
+  const [order, setOrder] = useState<PurchaseOrderWithItems | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editQuantity, setEditQuantity] = useState('');
+  const [editUnitPrice, setEditUnitPrice] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open && orderId) {
+      loadOrder();
+    }
+  }, [open, orderId]);
+
+  const loadOrder = async () => {
+    setLoading(true);
+    try {
+      const data = await PurchaseService.getPurchaseOrderById(orderId);
+      setOrder(data as PurchaseOrderWithItems);
+    } catch (error) {
+      console.error('[OrderDetail] 加载失败:', error);
+      toast('加载详情失败', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditItem = (item: any) => {
+    setEditingItemId(item.id);
+    setEditQuantity(item.quantity.toString());
+    setEditUnitPrice(item.unitPrice.toString());
+  };
+
+  const handleSaveEdit = async () => {
+    if (!order || !editingItemId) return;
+    const qty = parseInt(editQuantity);
+    const price = parseFloat(editUnitPrice);
+    if (isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
+      toast('数量和单价必须是正数', 'warning');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await db.purchase.update({
+        where: { id: editingItemId },
+        data: {
+          quantity: qty,
+          unitPrice: price,
+          totalAmount: qty * price,
+        },
+      });
+      setEditingItemId(null);
+      loadOrder();
+      toast('保存成功', 'success');
+    } catch (error) {
+      console.error('[OrderDetail] 保存失败:', error);
+      toast('保存失败', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteItem = async (itemId: string) => {
+    if (!order) return;
+    if (order.items.length <= 1) {
+      toast('至少要保留一个商品', 'warning');
+      return;
+    }
+
+    try {
+      await db.purchase.delete({ where: { id: itemId } });
+      loadOrder();
+      toast('删除成功', 'success');
+    } catch (error) {
+      console.error('[OrderDetail] 删除失败:', error);
+      toast('删除失败', 'error');
+    }
+  };
+
+  const handleSendToSupplier = async () => {
+    if (!order) return;
+    setSaving(true);
+    try {
+      await PurchaseService.updatePurchaseOrderStatus(order.id, 'sent');
+      loadOrder();
+      onStatusChange();
+      toast('已发送给供应商', 'success');
+    } catch (error) {
+      console.error('[OrderDetail] 发送失败:', error);
+      toast('操作失败', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleConfirmDelivery = async () => {
+    if (!order) return;
+    setSaving(true);
+    try {
+      const quantities: { [key: string]: number } = {};
+      order.items.forEach(item => {
+        quantities[item.id] = item.quantity;
+      });
+      await PurchaseService.confirmPurchaseDelivery(order.id, quantities);
+      loadOrder();
+      onStatusChange();
+      toast('已确认到货，库存已增加', 'success');
+    } catch (error) {
+      console.error('[OrderDetail] 确认到货失败:', error);
+      toast('操作失败', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleComplete = async () => {
+    if (!order) return;
+    setSaving(true);
+    try {
+      await PurchaseService.updatePurchaseOrderStatus(order.id, 'completed');
+      loadOrder();
+      onStatusChange();
+      toast('进货单已完成', 'success');
+    } catch (error) {
+      console.error('[OrderDetail] 完成失败:', error);
+      toast('操作失败', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) return null;
+
+  if (loading) {
+    return <div className="text-center py-8 text-slate-500">加载中...</div>;
+  }
+
+  if (!order) {
+    return <div className="text-center py-8 text-slate-500">未找到订单</div>;
+  }
+
+  const statusInfo = statusLabels[order.status] || { label: order.status, variant: 'secondary' as const };
+  const totalAmount = order.items.reduce((sum, item) => sum + item.totalAmount, 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Badge variant={statusInfo.variant} className="text-sm px-3 py-1">{statusInfo.label}</Badge>
+          <span className="font-medium text-slate-800">
+            {order.batchNo || order.id.slice(-8)}
+          </span>
+        </div>
+        <div className="text-right">
+          <div className="text-sm text-slate-500">进货总额</div>
+          <div className="text-2xl font-bold text-green-600">{formatCurrency(totalAmount)}</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <div className="text-sm text-slate-500">进货日期</div>
+          <div>{formatDateTime(order.purchaseDate)}</div>
+        </div>
+        <div>
+          <div className="text-sm text-slate-500">供应商</div>
+          <div>{order.supplier?.name || order.supplierName || '-'}</div>
+        </div>
+        <div>
+          <div className="text-sm text-slate-500">商品种类</div>
+          <div>{order.items.length} 种</div>
+        </div>
+        <div>
+          <div className="text-sm text-slate-500">商品总数</div>
+          <div>{order.items.reduce((sum, item) => sum + item.quantity, 0)} 件</div>
+        </div>
+      </div>
+
+      {order.remark && (
+        <div>
+          <div className="text-sm text-slate-500">备注</div>
+          <div className="bg-slate-50 p-2 rounded">{order.remark}</div>
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        {order.status === 'draft' && (
+          <Button
+            onClick={handleSendToSupplier}
+            disabled={saving}
+            className="bg-orange-500 hover:bg-orange-600"
+          >
+            发送给供应商
+          </Button>
+        )}
+        {order.status === 'sent' && (
+          <Button
+            onClick={handleConfirmDelivery}
+            disabled={saving}
+            className="bg-green-500 hover:bg-green-600"
+          >
+            确认到货
+          </Button>
+        )}
+        {order.status === 'delivered' && (
+          <Button
+            onClick={handleComplete}
+            disabled={saving}
+          >
+            完成入库
+          </Button>
+        )}
+      </div>
+
+      <div>
+        <div className="text-sm font-medium text-slate-700 mb-2">商品明细</div>
+        <div className="space-y-2">
+          {order.items.map((item) => (
+            <div key={item.id} className="p-3 bg-slate-50 rounded-lg">
+              {editingItemId === item.id ? (
+                <div className="space-y-3">
+                  <div className="font-medium">{item.product?.name}</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-slate-500">数量</label>
+                      <Input
+                        type="number"
+                        value={editQuantity}
+                        onChange={(e) => setEditQuantity(e.target.value)}
+                        className="h-8"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-500">单价</label>
+                      <Input
+                        type="number"
+                        value={editUnitPrice}
+                        onChange={(e) => setEditUnitPrice(e.target.value)}
+                        className="h-8"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleSaveEdit} disabled={saving}>
+                      保存
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditingItemId(null)}>
+                      取消
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{item.product?.name}</div>
+                      <div className="text-sm text-slate-500">
+                        {item.product?.category?.name} | {item.product?.specification || '-'} | {item.product?.unit || '-'}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-medium">x{item.quantity}</div>
+                      <div className="text-sm text-slate-500">单价: {formatCurrency(item.unitPrice)}</div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center mt-2 pt-2 border-t">
+                    <div className="font-medium text-green-600">{formatCurrency(item.totalAmount)}</div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onViewPriceHistory(item.product!)}
+                      >
+                        价格历史
+                      </Button>
+                      {order.status === 'draft' && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditItem(item)}
+                          >
+                            编辑
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteItem(item.id)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            删除
+                          </Button>
+                        </>
+                      )}
+                      {(order.status === 'sent' || order.status === 'delivered') && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onOpenReturn(item)}
+                        >
+                          退货/换货
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

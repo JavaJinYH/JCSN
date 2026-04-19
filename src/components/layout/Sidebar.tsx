@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { toast } from '@/components/Toast';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -34,6 +35,7 @@ const menuGroups: MenuGroup[] = [
       { path: '/inventory', label: '库存管理', icon: '📦' },
       { path: '/purchases', label: '进货管理', icon: '📥' },
       { path: '/sales', label: '销售管理', icon: '💰' },
+      { path: '/sales/drafts', label: '暂存记录', icon: '📝' },
       { path: '/products', label: '商品管理', icon: '🏷️' },
     ],
   },
@@ -81,6 +83,24 @@ const menuGroups: MenuGroup[] = [
     ],
   },
 ];
+
+const handleRestart = async () => {
+  if (window.electronAPI?.app?.restart) {
+    toast('正在重启应用...', 'success');
+    await window.electronAPI.app.restart();
+  } else {
+    toast('刷新页面以加载新功能', 'success');
+    window.location.reload();
+  }
+};
+
+const handleReload = async () => {
+  if (window.electronAPI?.app?.reload) {
+    await window.electronAPI.app.reload();
+  } else {
+    window.location.reload();
+  }
+};
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const [expandedGroups, setExpandedGroups] = useState<string[]>(['首页', '业务管理', '客户与项目']);
@@ -208,7 +228,33 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         })}
       </nav>
 
-      <div className="flex-none p-2">
+      <div className="flex-none p-2 border-t border-slate-700 space-y-1">
+        {!collapsed ? (
+          <div className="flex gap-1">
+            <button
+              onClick={handleReload}
+              className="flex-1 py-2 bg-slate-700 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-600 transition-colors text-sm"
+              title="刷新页面"
+            >
+              🔄
+            </button>
+            <button
+              onClick={handleRestart}
+              className="flex-1 py-2 bg-slate-700 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-600 transition-colors text-sm"
+              title="重启应用"
+            >
+              🔁
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={handleReload}
+            className="w-full py-2 bg-slate-700 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-600 transition-colors"
+            title="刷新页面"
+          >
+            🔄
+          </button>
+        )}
         <button
           onClick={onToggle}
           className="w-full py-2 bg-slate-700 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-600 transition-colors"
