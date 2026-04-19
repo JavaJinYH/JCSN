@@ -359,3 +359,123 @@ useEffect(() => {
 5. 新功能有中文注释（复杂业务逻辑）
 6. 关键操作有错误处理
 7. 用户输入有验证
+
+---
+
+## 十五、Git 提交规范
+
+### 15.1 提交格式（Conventional Commits）
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+### 15.2 Type 类型说明
+
+| Type | 说明 | 示例 |
+|------|------|------|
+| feat | 新功能 | `feat(Sales): 添加销售单导出功能` |
+| fix | Bug修复 | `fix(SaleNew): 修复利润率计算错误` |
+| refactor | 重构（不改变功能） | `refactor(Sales): 拆分SaleStats组件` |
+| docs | 文档更新 | `docs(SPEC): 更新数据模型说明` |
+| style | 代码格式调整 | `style: 格式化import顺序` |
+| perf | 性能优化 | `perf(Products): 优化商品列表加载速度` |
+| test | 测试相关 | `test: 添加销售模块单元测试` |
+| chore | 构建/工具变更 | `chore: 升级Prisma版本` |
+| wip | 工作进行中 | `wip(SaleOrder): 开发新订单模型` |
+
+### 15.3 Scope 作用域
+
+使用受影响的主要模块名：
+
+| Scope | 说明 |
+|-------|------|
+| 无scope | 跨多个模块或小改动 |
+| Dashboard | 首页模块 |
+| Inventory | 库存模块 |
+| Sales | 销售模块 |
+| Products | 商品模块 |
+| Contacts | 联系人模块 |
+| Purchases | 进货模块 |
+| Customers | 旧客户管理模块 |
+| Reports | 报表模块 |
+| Settings | 系统设置模块 |
+| Hooks | 自定义Hooks |
+| Components | 通用组件 |
+| Service | Service层 |
+| Schema | 数据库模型 |
+| SPEC | 项目规格文档 |
+
+### 15.4 Commit Message 示例
+
+```bash
+# ✅ 好的提交信息
+git commit -m "feat(Sales): 拆分销售统计组件"
+git commit -m "fix(SaleNew): 修复亏本警告计算错误"
+git commit -m "refactor(Products): 使用通用useProducts Hook"
+git commit -m "docs(SPEC): 更新联系人-结账主体数据模型"
+git commit -m "chore: 升级Electron到v28"
+
+# ❌ 坏的提交信息
+git commit -m "更新代码"
+git commit -m "修复bug"
+git commit -m "asdf"
+```
+
+### 15.5 分支命名规范
+
+```
+main                    # 主分支（稳定版本）
+dev                     # 开发分支
+feat/<feature-name>     # 功能分支
+fix/<issue-name>        # 修复分支
+refactor/<module-name>  # 重构分支
+wip/<module-name>       # 工作进行中分支
+```
+
+### 15.6 如何回滚
+
+**回滚单个提交**：
+```bash
+# 查看提交历史
+git log --oneline
+
+# 回滚指定提交（会创建新的回滚提交）
+git revert <commit-hash>
+
+# 回滚最近一次提交
+git revert HEAD
+```
+
+**回滚到指定版本**：
+```bash
+# 回滚到指定版本（保留之后的提交）
+git revert <commit-hash>
+
+# 硬回滚到指定版本（慎用，会丢失之后的提交）
+git reset --hard <commit-hash>
+```
+
+**查看远程同步状态**：
+```bash
+# 查看远程仓库
+git remote -v
+
+# 推送到远程
+git push origin <branch-name>
+
+# 强制推送（慎用）
+git push --force origin <branch-name>
+```
+
+### 15.7 提交前自检清单
+
+- [ ] `npm run build` 通过
+- [ ] 无红色控制台错误
+- [ ] 提交信息符合规范
+- [ ] 只提交相关改动（避免混入无关修改）
+- [ ] 代码通过 lint 检查（如有）

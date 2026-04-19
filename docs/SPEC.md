@@ -2199,12 +2199,12 @@ supplier
 
 ---
 
-## 34. 版本更新记录（v4.8）
+## 34. 版本更新记录（v4.9）
 
 | 版本 | 日期 | 更新内容 | 变更人 |
 |------|------|----------|--------|
-| v4.8 | 2026-04-18 | **安全与备份功能**：<br>1. 新增息屏自动锁定功能（idleTimeoutMinutes + lockPassword）<br>2. 新增一键数据备份（JSON导出）<br>3. 新增一键数据恢复（JSON导入）<br>4. 新增照片索引重建功能<br>5. AppLayout集成ScreenLockOverlay组件<br>6. Settings页面新增安全设置卡片 | 系统 |
-| v4.7 | 2026-04-18 | **进货退货功能**：PurchaseReturn/PurchaseReturnItem、价格波动商品标记 | 系统 |
+| v4.9 | 2026-04-19 | **代码重构与架构优化**：<br>1. Sales.tsx 组件拆分（SaleStats/SaleTable/SaleDetail）<br>2. Products.tsx 组件拆分（ProductStats/ProductFilters/ProductTable/ProductImport）<br>3. 提取通用 Hooks（useProducts/useContacts/useCategories）<br>4. 建立 Service 层架构规范<br>5. 添加 Git 提交规范到全局规则 | 系统 |
+| v4.8 | 2026-04-18 | **安全与备份功能**：息屏锁定、数据备份恢复、照片索引检查 | 系统 |
 
 ---
 

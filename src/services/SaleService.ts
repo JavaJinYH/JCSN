@@ -1,6 +1,19 @@
 import { db } from '@/lib/db';
 import { generateInvoiceNo } from '@/lib/utils';
 
+export interface CreatePaymentDTO {
+  method: string;
+  amount: number;
+  payerName?: string | null;
+}
+
+export interface CreatePhotoDTO {
+  file?: File;
+  preview: string;
+  remark?: string;
+  type: string;
+}
+
 export interface CreateSaleOrderDTO {
   buyerId: string;
   payerId?: string | null;
@@ -19,7 +32,8 @@ export interface CreateSaleOrderDTO {
   deliveryAddress?: string | null;
   deliveryFee?: number;
   items: CreateOrderItemDTO[];
-  writtenInvoiceNoExists?: boolean;
+  payments?: CreatePaymentDTO[];
+  photos?: CreatePhotoDTO[];
 }
 
 export interface CreateOrderItemDTO {
@@ -37,9 +51,17 @@ export interface SaleOrderResult {
   items: any[];
   receivable?: any;
   deliveryRecord?: any;
+  photos?: any[];
 }
 
 export const SaleService = {
+  /**
+   * 创建销售订单
+   * @param data - 订单创建数据
+   * @returns 创建的订单结果
+   * @throws {Error} 手写单号已存在
+   * @throws {Error} 散客不存在
+   */
   async createSaleOrder(data: CreateSaleOrderDTO): Promise<SaleOrderResult> {
     if (data.writtenInvoiceNo) {
       const existing = await db.saleOrder.findFirst({
@@ -50,25 +72,36 @@ export const SaleService = {
       }
     }
 
-    const buyerId = data.buyerId === '__none__'
-      ? undefined
-      : data.buyerId;
+    let buyerId = data.buyerId;
+    if (data.buyerId === '__none__') {
+      const walkInCustomer = await db.contact.findFirst({
+        where: { name: '散客' },
+      });
+      if (!walkInCustomer) {
+        throw new Error('散客不存在，请先创建散客联系人');
+      }
+      buyerId = walkInCustomer.id;
+    }
 
-    const entityId = data.paymentEntityId === '__cash__'
-      ? undefined
-      : data.paymentEntityId;
+    let entityId = data.paymentEntityId;
+    if (data.paymentEntityId === '__cash__') {
+      const cashEntity = await db.entity.findFirst({
+        where: { entityType: 'cash' },
+      });
+      entityId = cashEntity?.id || '';
+    }
 
     const sale = await db.saleOrder.create({
       data: {
         invoiceNo: generateInvoiceNo(),
-        buyerId: buyerId!,
-        payerId: data.payerId === '__none__' ? null : data.payerId,
-        introducerId: data.introducerId === '__none__' ? null : data.introducerId,
-        pickerId: data.pickerId === '__none__' ? null : data.pickerId,
+        buyerId,
+        payerId: data.payerId === '__none__' ? null : data.payerId || null,
+        introducerId: data.introducerId === '__none__' ? null : data.introducerId || null,
+        pickerId: data.pickerId === '__none__' ? null : data.pickerId || null,
         pickerName: data.pickerName || null,
         pickerPhone: data.pickerPhone || null,
-        projectId: data.projectId === '__none__' ? null : data.projectId,
-        paymentEntityId: entityId!,
+        projectId: data.projectId === '__none__' ? null : data.projectId || null,
+        paymentEntityId: entityId,
         totalAmount: data.totalAmount,
         discount: data.discount,
         paidAmount: data.paidAmount,
@@ -88,6 +121,16 @@ export const SaleService = {
             sellingPriceSnapshot: item.sellingPriceSnapshot,
           })),
         },
+        payments: data.payments && data.payments.length > 0 ? {
+          create: data.payments
+            .filter(p => p.amount > 0)
+            .map(p => ({
+              amount: p.amount,
+              method: p.method,
+              payerName: p.payerName || null,
+              paidAt: new Date(),
+            })),
+        } : undefined,
       },
     });
 
@@ -106,7 +149,7 @@ export const SaleService = {
 
     let deliveryRecord;
     if (data.needDelivery) {
-      const contact = buyerId ? await db.contact.findUnique({ where: { id: buyerId } }) : null;
+      const contact = await db.contact.findUnique({ where: { id: buyerId } });
       deliveryRecord = await db.deliveryRecord.create({
         data: {
           saleOrderId: sale.id,
@@ -152,7 +195,28 @@ export const SaleService = {
       }
     }
 
-    return { sale, items: data.items, receivable, deliveryRecord };
+    let savedPhotos: any[] = [];
+    if (data.photos && data.photos.length > 0) {
+      for (const photo of data.photos) {
+        if (photo.file) {
+          const fileName = `sale_${sale.id}_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+          const result = await (window as any).electronAPI.photo.save(fileName, photo.preview, 'sales');
+          if (result.success) {
+            const savedPhoto = await db.saleOrderPhoto.create({
+              data: {
+                saleOrderId: sale.id,
+                photoPath: result.data.path,
+                photoType: photo.type,
+                photoRemark: photo.remark || null,
+              },
+            });
+            savedPhotos.push(savedPhoto);
+          }
+        }
+      }
+    }
+
+    return { sale, items: data.items, receivable, deliveryRecord, photos: savedPhotos };
   },
 
   async getSaleOrders(filters?: {

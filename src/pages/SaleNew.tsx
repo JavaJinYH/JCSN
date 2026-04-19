@@ -20,7 +20,7 @@ import {
 import { Combobox } from '@/components/Combobox';
 import { PhotoUpload } from '@/components/PhotoUpload';
 import { db } from '@/lib/db';
-import { formatCurrency, generateInvoiceNo } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import { sortByFrequency, recordFrequency } from '@/lib/frequency';
 import type { Product, Category, Contact, Entity, BizProject } from '@/lib/types';
@@ -29,6 +29,9 @@ import { SaleProductSelect } from '@/components/sale/SaleProductSelect';
 import { SaleContactSelect } from '@/components/sale/SaleContactSelect';
 import { SaleDelivery } from '@/components/sale/SaleDelivery';
 import { SalePayment } from '@/components/sale/SalePayment';
+import { SaleService } from '@/services/SaleService';
+import { ProductService } from '@/services/ProductService';
+import { ContactService } from '@/services/ContactService';
 
 interface PaymentInfo {
   method: string;
@@ -83,25 +86,19 @@ export function SaleNew() {
   const loadData = async () => {
     try {
       let [productsData, categoriesData, contactsData, entitiesData] = await Promise.all([
-        db.product.findMany({
-          include: { category: true },
-          orderBy: { name: 'asc' },
-        }),
+        ProductService.getProducts(),
         db.category.findMany({ orderBy: { sortOrder: 'asc' } }),
-        db.contact.findMany({ orderBy: { name: 'asc' } }),
+        ContactService.getContacts(),
         db.entity.findMany({ orderBy: { name: 'asc' } }),
       ]);
 
       let walkInCustomer = contactsData.find(c => c.name === '散客');
       if (!walkInCustomer) {
-        const randomCode = 'SK' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6).toUpperCase();
-        walkInCustomer = await db.contact.create({
-          data: {
-            name: '散客',
-            code: randomCode,
-            primaryPhone: '0000000000',
-            manualTag: '○',
-          },
+        walkInCustomer = await ContactService.createContact({
+          name: '散客',
+          code: 'SK' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6).toUpperCase(),
+          primaryPhone: '0000000000',
+          manualTag: '○',
         });
         contactsData = [...contactsData, walkInCustomer];
       }
@@ -196,7 +193,6 @@ export function SaleNew() {
       }
     } else {
       const historicalPrice = historicalPrices.get(product.id);
-      const hasUnitConversion = product.purchaseUnit && product.unitRatio && product.unitRatio > 1;
       setCart([
         ...cart,
         {
@@ -307,153 +303,51 @@ export function SaleNew() {
       return;
     }
 
-    if (writtenInvoiceNo) {
-      const existing = await db.saleOrder.findFirst({
-        where: { writtenInvoiceNo },
-      });
-      if (existing) {
-        toast('该手写单号已存在，请使用其他单号或留空', 'error');
-        return;
-      }
-    }
-
     setLoading(true);
     try {
-      const buyerId = selectedBuyer === '__none__'
-        ? contacts.find(c => c.name === '散客')?.id
-        : selectedBuyer;
-
-      const entityId = selectedEntity === '__cash__'
-        ? entities.find(e => e.entityType === 'cash')?.id || entities[0]?.id
-        : selectedEntity;
-
-      const sale = await db.saleOrder.create({
-        data: {
-          invoiceNo: generateInvoiceNo(),
-          buyerId: buyerId!,
-          payerId: selectedPayer === '__none__' ? null : selectedPayer,
-          introducerId: selectedIntroducer === '__none__' ? null : selectedIntroducer,
-          pickerName: pickerName || null,
-          pickerPhone: pickerPhone || null,
-          projectId: selectedProject === '__none__' ? null : selectedProject,
-          paymentEntityId: entityId!,
-          totalAmount: finalAmount,
-          discount: totalDiscount,
-          paidAmount,
-          saleDate: new Date(),
-          writtenInvoiceNo: writtenInvoiceNo || null,
-          remark: remark || null,
-          needDelivery: needsDelivery,
-          deliveryAddress: needsDelivery ? deliveryAddress : null,
-          deliveryFee: needsDelivery ? parseFloat(deliveryFee) || 0 : 0,
-          items: {
-            create: cart.map((item) => ({
-              productId: item.product.id,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              costPriceSnapshot: item.costPrice,
-              sellingPriceSnapshot: item.salePrice,
-              subtotal: item.unitPrice * item.quantity,
-            })),
-          },
-          payments: {
-            create: payments
-              .filter((p) => p.amount > 0)
-              .map((p) => ({
-                amount: p.amount,
-                method: p.method,
-                payerName: p.payerName || null,
-                paidAt: new Date(),
-              })),
-          },
-        },
+      const result = await SaleService.createSaleOrder({
+        buyerId: selectedBuyer,
+        payerId: selectedPayer,
+        introducerId: selectedIntroducer,
+        pickerName: pickerName || null,
+        pickerPhone: pickerPhone || null,
+        projectId: selectedProject,
+        paymentEntityId: selectedEntity,
+        totalAmount: finalAmount,
+        discount: totalDiscount,
+        paidAmount,
+        writtenInvoiceNo: writtenInvoiceNo || null,
+        remark: remark || null,
+        needDelivery: needsDelivery,
+        deliveryAddress: needsDelivery ? deliveryAddress : null,
+        deliveryFee: needsDelivery ? parseFloat(deliveryFee) || 0 : 0,
+        items: cart.map(item => ({
+          productId: item.product.id,
+          productName: item.product.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          subtotal: item.unitPrice * item.quantity,
+          costPriceSnapshot: item.costPrice,
+          sellingPriceSnapshot: item.salePrice,
+        })),
+        payments: payments.filter(p => p.amount > 0).map(p => ({
+          method: p.method,
+          amount: p.amount,
+          payerName: p.payerName || null,
+        })),
+        photos: photos.map(p => ({
+          file: p.file,
+          preview: p.preview,
+          remark: p.remark,
+          type: p.type,
+        })),
       });
-
-      await db.receivable.create({
-        data: {
-          orderId: sale.id,
-          originalAmount: finalAmount,
-          paidAmount: paidAmount,
-          remainingAmount: remainingAmount,
-        },
-      });
-
-      if (needsDelivery) {
-        await db.deliveryRecord.create({
-          data: {
-            saleOrderId: sale.id,
-            recipientName: selectedBuyer !== '__none__' ? contacts.find(c => c.id === selectedBuyer)?.name || pickerName || '客户' : pickerName || '客户',
-            recipientPhone: selectedBuyer !== '__none__' ? contacts.find(c => c.id === selectedBuyer)?.primaryPhone || pickerPhone : pickerPhone,
-            deliveryAddress: deliveryAddress,
-            totalFee: parseFloat(deliveryFee) || 0,
-            deliveryStatus: 'pending',
-            zoneName: '默认区域',
-          },
-        });
-      }
-
-      for (const item of cart) {
-        await db.product.update({
-          where: { id: item.product.id },
-          data: {
-            stock: { decrement: item.quantity },
-            lastPurchasePrice: item.product.lastPurchasePrice || undefined,
-          },
-        });
-
-        const existingPrice = await db.customerPrice.findUnique({
-          where: {
-            customerId_productId: {
-              customerId: selectedBuyer,
-              productId: item.product.id,
-            },
-          },
-        });
-        if (existingPrice) {
-          await db.customerPrice.update({
-            where: { id: existingPrice.id },
-            data: {
-              lastPrice: item.unitPrice,
-              transactionCount: existingPrice.transactionCount + 1,
-            },
-          });
-        } else {
-          await db.customerPrice.create({
-            data: {
-              customerId: selectedBuyer,
-              productId: item.product.id,
-              lastPrice: item.unitPrice,
-              transactionCount: 1,
-            },
-          });
-        }
-      }
-
-      if (photos.length > 0) {
-        for (const photo of photos) {
-          if (photo.file) {
-            const fileName = `sale_${sale.id}_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-            const dataUrl = photo.preview;
-            const result = await (window as any).electronAPI.photo.save(fileName, dataUrl, 'sales');
-            if (result.success) {
-              await db.saleOrderPhoto.create({
-                data: {
-                  saleOrderId: sale.id,
-                  photoPath: result.data.path,
-                  photoType: photo.type,
-                  photoRemark: photo.remark || null,
-                },
-              });
-            }
-          }
-        }
-      }
 
       toast('销售保存成功！', 'success');
       navigate('/sales');
-    } catch (error) {
+    } catch (error: any) {
       console.error('[SaleNew] 保存销售失败:', error);
-      toast('保存失败，请重试', 'error');
+      toast(error.message || '保存失败，请重试', 'error');
     } finally {
       setLoading(false);
     }
