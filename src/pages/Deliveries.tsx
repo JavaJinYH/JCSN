@@ -229,24 +229,22 @@ export function Deliveries() {
     const totalFee = (selectedFee?.baseFee || 0) + weightFee + distanceFee;
 
     try {
-      await db.deliveryRecord.create({
-        data: {
-          saleId: recordFormData.saleOrderId || null,
-          zoneName: zoneName,
-          recipientName: recordFormData.recipientName.trim(),
-          recipientPhone: recordFormData.recipientPhone.trim() || null,
-          deliveryAddress: recordFormData.deliveryAddress.trim(),
-          distance: distance,
-          weight: weight,
-          baseFee: selectedFee?.baseFee || 0,
-          distanceFee: distanceFee,
-          weightFee: weightFee,
-          totalFee: totalFee,
-          deliveryStatus: 'pending',
-          driverName: recordFormData.driverName.trim() || null,
-          driverPhone: recordFormData.driverPhone.trim() || null,
-          remark: recordFormData.remark.trim() || null,
-        },
+      await DeliveryService.createDeliveryRecord({
+        saleId: recordFormData.saleOrderId || null,
+        zoneName: zoneName,
+        recipientName: recordFormData.recipientName.trim(),
+        recipientPhone: recordFormData.recipientPhone.trim() || null,
+        deliveryAddress: recordFormData.deliveryAddress.trim(),
+        distance: distance,
+        weight: weight,
+        baseFee: selectedFee?.baseFee || 0,
+        distanceFee: distanceFee,
+        weightFee: weightFee,
+        totalFee: totalFee,
+        deliveryStatus: 'pending',
+        driverName: recordFormData.driverName.trim() || null,
+        driverPhone: recordFormData.driverPhone.trim() || null,
+        remark: recordFormData.remark.trim() || null,
       });
 
       setShowAddRecordDialog(false);

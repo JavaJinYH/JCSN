@@ -54,8 +54,9 @@ export function Entities() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [selectedEntity, setSelectedEntity] = useState<EntityWithRelations | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [selectedEntity, setSelectedEntity] = useState<EntityWithRelations | null>(null);
   const [entityProjects, setEntityProjects] = useState<BizProject[]>([]);
   const [entityOrders, setEntityOrders] = useState<SaleOrder[]>([]);
   const [entityStats, setEntityStats] = useState<Record<string, { total: number; paid: number; count: number }>>({});
@@ -63,6 +64,14 @@ export function Entities() {
   const [filterValues, setFilterValues] = useState<Record<string, any>>({});
 
   const [formData, setFormData] = useState({
+    name: '',
+    entityType: 'company' as 'company' | 'government' | 'personal',
+    contactId: '',
+    address: '',
+    remark: '',
+  });
+
+  const [editFormData, setEditFormData] = useState({
     name: '',
     entityType: 'company' as 'company' | 'government' | 'personal',
     contactId: '',
@@ -105,20 +114,7 @@ export function Entities() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const entitiesData = await EntityService.getEntities();
-
-      const stats: Record<string, { total: number; paid: number; count: number }> = {};
-      for (const entity of entitiesData) {
-        const orders = await db.saleOrder.findMany({
-          where: { paymentEntityId: entity.id },
-          select: { totalAmount: true, paidAmount: true },
-        });
-        stats[entity.id] = {
-          total: orders.reduce((sum, o) => sum + o.totalAmount, 0),
-          paid: orders.reduce((sum, o) => sum + o.paidAmount, 0),
-          count: orders.length,
-        };
-      }
+      const { entities: entitiesData, stats } = await EntityService.getAllEntitiesStats();
 
       setEntities(entitiesData);
       setEntityStats(stats);
@@ -209,6 +205,54 @@ export function Entities() {
       console.error('[Entities] 添加主体失败:', error);
       toast('添加失败，请重试', 'error');
     }
+  };
+
+  const handleEditEntity = async () => {
+    if (!editFormData.name) {
+      toast('请填写必填项（主体名称）', 'warning');
+      return;
+    }
+
+    if (!selectedEntity) {
+      toast('未选择要编辑的主体', 'error');
+      return;
+    }
+
+    try {
+      await EntityService.updateEntity(selectedEntity.id, {
+        name: editFormData.name,
+        entityType: editFormData.entityType,
+        contactId: editFormData.contactId || undefined,
+        address: editFormData.address || undefined,
+        remark: editFormData.remark || undefined,
+      });
+
+      setShowEditDialog(false);
+      setEditFormData({
+        name: '',
+        entityType: 'company',
+        contactId: '',
+        address: '',
+        remark: '',
+      });
+      loadData();
+      toast('主体修改成功', 'success');
+    } catch (error) {
+      console.error('[Entities] 修改主体失败:', error);
+      toast('修改失败，请重试', 'error');
+    }
+  };
+
+  const openEditDialog = (entity: EntityWithRelations) => {
+    setSelectedEntity(entity);
+    setEditFormData({
+      name: entity.name,
+      entityType: entity.entityType as 'company' | 'government' | 'personal',
+      contactId: entity.contact?.id || '',
+      address: entity.address || '',
+      remark: entity.remark || '',
+    });
+    setShowEditDialog(true);
   };
 
   const handleDeleteEntity = async (entityId: string) => {
@@ -448,6 +492,87 @@ export function Entities() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>编辑挂靠主体</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">
+                主体名称 <span className="text-red-500">*</span>
+              </label>
+              <Input
+                value={editFormData.name}
+                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                placeholder="例如: 江城装饰工程有限公司"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">主体类型</label>
+              <Select
+                value={editFormData.entityType}
+                onValueChange={(v) => setEditFormData({ ...editFormData, entityType: v as 'company' | 'government' | 'personal' })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {entityTypeOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">关联联系人</label>
+              <Select
+                value={editFormData.contactId || '__none__'}
+                onValueChange={(v) => setEditFormData({ ...editFormData, contactId: v === '__none__' ? '' : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择联系人（可选）" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">无</SelectItem>
+                  {contacts.map((contact) => (
+                    <SelectItem key={contact.id} value={contact.id}>
+                      {contact.name} ({contact.contactType === 'plumber' ? '水电工' : '客户'})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">主体地址</label>
+              <Input
+                value={editFormData.address}
+                onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                placeholder="例如: XX市XX区XX路XX号"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">备注</label>
+              <Input
+                value={editFormData.remark}
+                onChange={(e) => setEditFormData({ ...editFormData, remark: e.target.value })}
+                placeholder="可选"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>取消</Button>
+            <Button onClick={handleEditEntity} className="bg-blue-500 hover:bg-blue-600">保存修改</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -607,6 +732,9 @@ export function Entities() {
               <div className="flex justify-end gap-3">
                 <Button variant="outline" onClick={() => setShowDetailDialog(false)}>
                   关闭
+                </Button>
+                <Button onClick={() => { setShowDetailDialog(false); openEditDialog(selectedEntity); }} className="bg-blue-500 hover:bg-blue-600">
+                  编辑
                 </Button>
               </div>
             </div>

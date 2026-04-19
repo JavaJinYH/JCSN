@@ -73,6 +73,7 @@ export function SaleNew() {
   const [draftId, setDraftId] = useState<string | null>(null);
   const [manualFinalAmount, setManualFinalAmount] = useState<number | null>(null);
   const [showLossConfirm, setShowLossConfirm] = useState(false);
+  const [showLossDetails, setShowLossDetails] = useState(false);
 
   const [payments, setPayments] = useState<PaymentInfo[]>([
     { method: '现金', amount: 0, payerName: '' },
@@ -296,30 +297,32 @@ export function SaleNew() {
   const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const costTotal = cart.reduce((sum, item) => sum + item.costPrice * item.quantity, 0);
   const totalDiscount = discount + subtotal * (100 - discountRate) / 100;
+  const deliveryFeeAmount = needsDelivery ? parseFloat(deliveryFee) || 0 : 0;
   const calculatedFinalAmount = subtotal - totalDiscount;
-  const finalAmount = manualFinalAmount !== null ? manualFinalAmount : calculatedFinalAmount;
+  const finalAmount = calculatedFinalAmount + deliveryFeeAmount;
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
   const paidAmount = Math.min(totalPaid, finalAmount);
   const remainingAmount = Math.max(0, finalAmount - totalPaid);
-  const lossAmount = costTotal - finalAmount;
-  const profitRate = finalAmount > 0 ? ((finalAmount - costTotal) / finalAmount) * 100 : 0;
+  const totalCost = costTotal + deliveryFeeAmount;
+  const totalProfit = finalAmount - totalCost;
+  const productProfit = calculatedFinalAmount - costTotal;
+  const profitRate = finalAmount > 0 ? (totalProfit / finalAmount) * 100 : 0;
   const showLowProfitWarning = profitRate < 10 && profitRate >= 0 && finalAmount > 0;
-  const showLossWarning = finalAmount < costTotal && finalAmount > 0;
-  const totalProfit = finalAmount - costTotal;
+  const showLossWarning = totalProfit < 0 && finalAmount > 0;
 
   useEffect(() => {
-    if (finalAmount <= 0) {
+    if (subtotal <= 0) {
       setDeliverySuggestion('');
       return;
     }
-    if (totalProfit < 10) {
+    if (productProfit < 10) {
       setDeliverySuggestion('⚠️ 利润较低，建议加收配送费或由客户自提');
-    } else if (totalProfit < 50) {
+    } else if (productProfit < 50) {
       setDeliverySuggestion('💡 利润适中，建议根据距离酌情收取配送费');
     } else {
       setDeliverySuggestion('✅ 利润充足，可考虑免费配送');
     }
-  }, [totalProfit, finalAmount]);
+  }, [productProfit, subtotal]);
 
   const handleMoli = () => {
     const moliAmount = Math.floor(subtotal - totalDiscount);
@@ -380,7 +383,6 @@ export function SaleNew() {
         deliveryFee: needsDelivery ? parseFloat(deliveryFee) || 0 : 0,
         items: cart.map(item => ({
           productId: item.product.id,
-          productName: item.product.name,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           subtotal: item.unitPrice * item.quantity,
@@ -446,7 +448,6 @@ export function SaleNew() {
         deliveryFee: needsDelivery ? parseFloat(deliveryFee) || 0 : 0,
         items: cart.map(item => ({
           productId: item.product.id,
-          productName: item.product.name,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           subtotal: item.unitPrice * item.quantity,
@@ -571,87 +572,93 @@ export function SaleNew() {
           />
         </div>
 
-        <div className="space-y-4">
-          <SaleCart
-            cart={cart}
-            products={products}
-            historicalPrices={historicalPrices}
-            discount={discount}
-            discountRate={discountRate}
-            manualFinalAmount={manualFinalAmount}
-            onAddToCart={addToCart}
-            onUpdateCartQuantity={updateCartQuantity}
-            onRemoveFromCart={removeFromCart}
-            onUpdateCartItem={updateCartItem}
-            onSetDiscount={setDiscount}
-            onSetDiscountRate={setDiscountRate}
-            onSetManualFinalAmount={setManualFinalAmount}
-            onHandleMoli={handleMoli}
-          />
+        <div className="space-y-4 flex flex-col h-[calc(100vh-180px)]">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+            <SaleCart
+              cart={cart}
+              products={products}
+              historicalPrices={historicalPrices}
+              discount={discount}
+              discountRate={discountRate}
+              manualFinalAmount={manualFinalAmount}
+              needsDelivery={needsDelivery}
+              deliveryFee={deliveryFee}
+              onAddToCart={addToCart}
+              onUpdateCartQuantity={updateCartQuantity}
+              onRemoveFromCart={removeFromCart}
+              onUpdateCartItem={updateCartItem}
+              onSetDiscount={setDiscount}
+              onSetDiscountRate={setDiscountRate}
+              onSetManualFinalAmount={setManualFinalAmount}
+              onHandleMoli={handleMoli}
+            />
 
-          <SalePayment
-            payments={payments}
-            totalPaid={totalPaid}
-            remainingAmount={remainingAmount}
-            onPaymentsChange={setPayments}
-            onDistributeRemaining={distributeRemainingAmount}
-          />
+            <SalePayment
+              payments={payments}
+              totalPaid={totalPaid}
+              remainingAmount={remainingAmount}
+              onPaymentsChange={setPayments}
+              onDistributeRemaining={distributeRemainingAmount}
+            />
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">手写单号</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Input
-                placeholder="输入手写单号（可选）..."
-                value={writtenInvoiceNo}
-                onChange={(e) => setWrittenInvoiceNo(e.target.value)}
-              />
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">手写单号</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Input
+                  placeholder="输入手写单号（可选）..."
+                  value={writtenInvoiceNo}
+                  onChange={(e) => setWrittenInvoiceNo(e.target.value)}
+                />
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">备注</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Input
-                placeholder="添加备注信息..."
-                value={remark}
-                onChange={(e) => setRemark(e.target.value)}
-              />
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">备注</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Input
+                  placeholder="添加备注信息..."
+                  value={remark}
+                  onChange={(e) => setRemark(e.target.value)}
+                />
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">单据照片</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <PhotoUpload
-                photos={photos}
-                onChange={setPhotos}
-                maxPhotos={5}
-              />
-            </CardContent>
-          </Card>
-
-          <Button
-            className="flex-1 bg-orange-500 hover:bg-orange-600"
-            size="lg"
-            onClick={handleSubmit}
-            disabled={cart.length === 0 || loading}
-          >
-            {loading ? '保存中...' : '💾 保存销售'}
-          </Button>
-          <Button
-            variant="outline"
-            size="lg"
-            onClick={handleSaveDraft}
-            disabled={cart.length === 0 || loading}
-          >
-            📝 暂存
-          </Button>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">单据照片</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <PhotoUpload
+                  photos={photos}
+                  onChange={setPhotos}
+                  maxPhotos={5}
+                />
+              </CardContent>
+            </Card>
+          </div>
+          <div className="space-y-2 pt-2 border-t border-slate-200">
+            <Button
+              className="w-full bg-orange-500 hover:bg-orange-600"
+              size="lg"
+              onClick={handleSubmit}
+              disabled={cart.length === 0 || loading}
+            >
+              {loading ? '保存中...' : '💾 保存销售'}
+            </Button>
+            <Button
+              className="w-full"
+              variant="outline"
+              size="lg"
+              onClick={handleSaveDraft}
+              disabled={cart.length === 0 || loading}
+            >
+              📝 暂存
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -663,18 +670,27 @@ export function SaleNew() {
           <div className="py-4">
             {showLossWarning ? (
               <>
-                <p>成交价 <span className="font-bold text-red-600">{formatCurrency(finalAmount)}</span> 低于成本价 <span className="font-bold">{formatCurrency(costTotal)}</span></p>
-                <p className="mt-2 text-red-600">预计亏损：{formatCurrency(lossAmount)}</p>
+                <p>成交价 <span className="font-bold text-red-600">{formatCurrency(finalAmount)}</span> 低于成本价 <span className="font-bold">{formatCurrency(totalCost)}</span></p>
+                <p className="mt-2 text-red-600">预计亏损：{formatCurrency(Math.abs(totalProfit))}</p>
               </>
             ) : (
               <>
-                <p>订单利润率 <span className="font-bold text-yellow-600">{profitRate.toFixed(1)}%</span> 低于10%</p>
-                <p className="mt-2">成交总额：{formatCurrency(finalAmount)}</p>
-                <p>成本总额：{formatCurrency(costTotal)}</p>
-                <p>订单利润：{formatCurrency(finalAmount - costTotal)}</p>
+                <p>订单利润率 <span className="font-bold text-yellow-600">{profitRate.toFixed(1)}%</span> 低于10%，是否确认继续？</p>
+                <button
+                  onClick={() => setShowLossDetails(!showLossDetails)}
+                  className="mt-2 text-sm text-slate-500 hover:text-slate-700"
+                >
+                  {showLossDetails ? '▲ 收起明细' : '▼ 点击查看明细'}
+                </button>
+                {showLossDetails && (
+                  <div className="mt-2 text-sm text-slate-600 space-y-1">
+                    <p>成交总额：{formatCurrency(finalAmount)}</p>
+                    <p>成本总额：{formatCurrency(totalCost)}</p>
+                    <p>订单利润：{formatCurrency(totalProfit)}</p>
+                  </div>
+                )}
               </>
             )}
-            <p className="mt-4 text-sm text-slate-500">是否确认继续保存？</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowLossConfirm(false)}>

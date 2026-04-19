@@ -8,7 +8,7 @@ export interface CreateProductDTO {
   model?: string;
   unit?: string;
   purchaseUnit?: string;
-  unitRatio?: string;
+  unitRatio?: number | string;
   referencePrice?: number;
   lastPurchasePrice?: number;
   stock?: number;
@@ -23,18 +23,19 @@ export const ProductService = {
     return db.product.create({
       data: {
         name: data.name,
-        categoryId: data.categoryId || null,
+        categoryId: data.categoryId || undefined,
         brand: data.brand || null,
-        productSpec: data.specification || null,
+        specification: data.specification || null,
         model: data.model || null,
         unit: data.unit || '个',
         purchaseUnit: data.purchaseUnit || null,
-        unitRatio: data.unitRatio || '1',
+        unitRatio: typeof data.unitRatio === 'string' 
+          ? parseFloat(data.unitRatio) || 1 
+          : data.unitRatio || 1,
         referencePrice: data.referencePrice || null,
         lastPurchasePrice: data.lastPurchasePrice || null,
         stock: data.stock || 0,
         minStock: data.minStock || 0,
-        remark: data.remark || null,
         isPriceVolatile: data.isPriceVolatile || false,
       },
       include: { category: true },
@@ -56,7 +57,7 @@ export const ProductService = {
       where.OR = [
         { name: { contains: filters.keyword } },
         { brand: { contains: filters.keyword } },
-        { productSpec: { contains: filters.keyword } },
+        { specification: { contains: filters.keyword } },
         { model: { contains: filters.keyword } },
       ];
     }
@@ -84,25 +85,47 @@ export const ProductService = {
     });
   },
 
-  async updateProduct(id: string, data: Partial<CreateProductDTO>) {
+  async updateProduct(id: string, data: {
+    name?: string;
+    categoryId?: string;
+    brand?: string;
+    specification?: string;
+    model?: string;
+    unit?: string;
+    purchaseUnit?: string;
+    unitRatio?: number | string;
+    referencePrice?: number;
+    lastPurchasePrice?: number;
+    stock?: number | { increment?: number; decrement?: number };
+    minStock?: number;
+    remark?: string;
+    isPriceVolatile?: boolean;
+    photos?: string[];
+  }) {
+    const updateData: any = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
+    if (data.brand !== undefined) updateData.brand = data.brand;
+    if (data.specification !== undefined) updateData.specification = data.specification;
+    if (data.model !== undefined) updateData.model = data.model;
+    if (data.unit !== undefined) updateData.unit = data.unit;
+    if (data.purchaseUnit !== undefined) updateData.purchaseUnit = data.purchaseUnit;
+    if (data.unitRatio !== undefined) {
+      updateData.unitRatio = typeof data.unitRatio === 'string'
+        ? parseFloat(data.unitRatio) || 1
+        : data.unitRatio;
+    }
+    if (data.referencePrice !== undefined) updateData.referencePrice = data.referencePrice;
+    if (data.lastPurchasePrice !== undefined) updateData.lastPurchasePrice = data.lastPurchasePrice;
+    if (data.stock !== undefined) updateData.stock = data.stock;
+    if (data.minStock !== undefined) updateData.minStock = data.minStock;
+    if (data.remark !== undefined) updateData.remark = data.remark;
+    if (data.isPriceVolatile !== undefined) updateData.isPriceVolatile = data.isPriceVolatile;
+    if (data.photos !== undefined) updateData.photos = data.photos;
+
     return db.product.update({
       where: { id },
-      data: {
-        name: data.name,
-        categoryId: data.categoryId,
-        brand: data.brand,
-        productSpec: data.specification,
-        model: data.model,
-        unit: data.unit,
-        purchaseUnit: data.purchaseUnit,
-        unitRatio: data.unitRatio,
-        referencePrice: data.referencePrice,
-        lastPurchasePrice: data.lastPurchasePrice,
-        stock: data.stock,
-        minStock: data.minStock,
-        remark: data.remark,
-        isPriceVolatile: data.isPriceVolatile,
-      },
+      data: updateData,
       include: { category: true },
     });
   },
@@ -117,9 +140,10 @@ export const ProductService = {
       : { stock: { decrement: quantity } };
 
     return db.product.update({
-      where: { id },
-      data: updateData,
-    });
+       where: { id },
+       data: updateData,
+       include: { category: true },
+     });
   },
 
   async getLowStockProducts() {
@@ -169,7 +193,13 @@ export const ProductService = {
 
   async getProductNames() {
     return db.product.findMany({
-      select: { id: true, name: true, brand: true, specification: true },
+      select: { 
+        id: true, 
+        name: true, 
+        brand: true, 
+        specification: true,
+        categoryId: true 
+      },
     });
   },
 };

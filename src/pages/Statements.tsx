@@ -29,7 +29,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { db } from '@/lib/db';
+import { StatementService } from '@/services/StatementService';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { getAgingLevel, calculateAgingDays } from '@/lib/customerUtils';
 import { toast } from '@/components/Toast';
@@ -128,39 +128,11 @@ export function Statements() {
     try {
       if (activeTab === 'receivable') {
         const [contactsData, entitiesData, bizProjectsData, saleOrdersData, receivablesData] = await Promise.all([
-          db.contact.findMany({
-            where: { contactType: { in: ['customer', 'plumber'] } },
-            orderBy: { name: 'asc' },
-          }),
-          db.entity.findMany({
-            orderBy: { name: 'asc' },
-            include: { contact: true },
-          }),
-          db.bizProject.findMany({
-            where: { status: { in: ['进行中', '已暂停'] } },
-            include: { entity: true },
-            orderBy: { createdAt: 'desc' },
-          }),
-          db.saleOrder.findMany({
-            where: {
-              status: { in: ['pending', 'partial', 'completed'] },
-            },
-            include: {
-              buyer: true,
-              payer: true,
-              project: true,
-              paymentEntity: true,
-            },
-            orderBy: { saleDate: 'desc' },
-          }),
-          db.receivable.findMany({
-            where: {
-              status: { in: ['pending', 'partial'] },
-              remainingAmount: { gt: 0 },
-            },
-            include: { order: { include: { buyer: true, paymentEntity: true } } },
-            orderBy: { createdAt: 'desc' },
-          }),
+          StatementService.getContacts({ contactType: { in: ['customer', 'plumber'] } }),
+          StatementService.getEntities({ contact: true }),
+          StatementService.getProjects({ status: { in: ['进行中', '已暂停'] } }, { entity: true }),
+          StatementService.getSaleOrders({ status: { in: ['pending', 'partial', 'completed'] } }),
+          StatementService.getReceivables({ status: { in: ['pending', 'partial'] }, remainingAmount: { gt: 0 } }),
         ]);
 
         setContacts(contactsData);
@@ -170,20 +142,8 @@ export function Statements() {
         setReceivables(receivablesData);
       } else {
         const [suppliersData, purchasesData] = await Promise.all([
-          db.supplier.findMany({
-            orderBy: { name: 'asc' },
-            include: { supplierContact: true },
-          }),
-          db.purchase.findMany({
-            where: {
-              totalAmount: { gt: 0 },
-            },
-            include: {
-              product: true,
-              supplier: true,
-            },
-            orderBy: { purchaseDate: 'desc' },
-          }),
+          StatementService.getSuppliers({ supplierContact: true }),
+          StatementService.getPurchases({ totalAmount: { gt: 0 } }),
         ]);
 
         setSuppliers(suppliersData);
@@ -212,6 +172,7 @@ export function Statements() {
       const order = r.order;
       if (!order) return;
 
+      const adjusted = StatementService.calculateAdjustedReceivable(order);
       const contactId = order.buyerId;
       const existing = summaryMap.get(contactId);
       const agingDays = calculateAgingDays(r.agreedPaymentDate, r.createdAt);
@@ -220,9 +181,9 @@ export function Statements() {
       const entity = order.paymentEntity;
 
       if (existing) {
-        existing.totalReceivable += r.originalAmount;
-        existing.totalPaid += r.paidAmount;
-        existing.totalRemaining += r.remainingAmount;
+        existing.totalReceivable += adjusted.original;
+        existing.totalPaid += adjusted.paid;
+        existing.totalRemaining += adjusted.remaining;
         existing.recordCount += 1;
         if (!existing.oldestRecord || r.createdAt < existing.oldestRecord) {
           existing.oldestRecord = r.createdAt;
@@ -230,10 +191,10 @@ export function Statements() {
         if (!existing.newestRecord || r.createdAt > existing.newestRecord) {
           existing.newestRecord = r.createdAt;
         }
-        if (aging.level === 'normal') existing.agingDistribution.normal += r.remainingAmount;
-        else if (aging.level === 'attention') existing.agingDistribution.attention += r.remainingAmount;
-        else if (aging.level === 'warning') existing.agingDistribution.warning += r.remainingAmount;
-        else existing.agingDistribution.danger += r.remainingAmount;
+        if (aging.level === 'normal') existing.agingDistribution.normal += adjusted.remaining;
+        else if (aging.level === 'attention') existing.agingDistribution.attention += adjusted.remaining;
+        else if (aging.level === 'warning') existing.agingDistribution.warning += adjusted.remaining;
+        else existing.agingDistribution.danger += adjusted.remaining;
       } else {
         summaryMap.set(contactId, {
           contactId,
@@ -241,17 +202,17 @@ export function Statements() {
           contactType: contact?.contactType || 'customer',
           phone: contact?.primaryPhone || contact?.phones?.[0]?.phone || null,
           entityName: entity?.name || null,
-          totalReceivable: r.originalAmount,
-          totalPaid: r.paidAmount,
-          totalRemaining: r.remainingAmount,
+          totalReceivable: adjusted.original,
+          totalPaid: adjusted.paid,
+          totalRemaining: adjusted.remaining,
           recordCount: 1,
           oldestRecord: r.createdAt,
           newestRecord: r.createdAt,
           agingDistribution: {
-            normal: aging.level === 'normal' ? r.remainingAmount : 0,
-            attention: aging.level === 'attention' ? r.remainingAmount : 0,
-            warning: aging.level === 'warning' ? r.remainingAmount : 0,
-            danger: aging.level === 'danger' ? r.remainingAmount : 0,
+            normal: aging.level === 'normal' ? adjusted.remaining : 0,
+            attention: aging.level === 'attention' ? adjusted.remaining : 0,
+            warning: aging.level === 'warning' ? adjusted.remaining : 0,
+            danger: aging.level === 'danger' ? adjusted.remaining : 0,
           },
         });
       }
@@ -323,6 +284,7 @@ export function Statements() {
 
     return projectReceivables.map(r => {
       const order = r.order;
+      const adjusted = StatementService.calculateAdjustedReceivable(order);
       const project = bizProjects.find(p => p.id === order?.projectId);
       const entity = project?.entity;
 
@@ -330,9 +292,9 @@ export function Statements() {
         projectId: order?.projectId,
         projectName: project?.name || '未知项目',
         entityName: entity?.name || '-',
-        totalReceivable: r.originalAmount,
-        totalPaid: r.paidAmount,
-        totalRemaining: r.remainingAmount,
+        totalReceivable: adjusted.original,
+        totalPaid: adjusted.paid,
+        totalRemaining: adjusted.remaining,
         status: project?.status || '未知',
       };
     }).sort((a, b) => b.totalRemaining - a.totalRemaining);
@@ -447,7 +409,7 @@ export function Statements() {
         receivables: contactReceivables,
         summary,
         generatedAt: new Date(),
-        shopInfo: await db.systemSetting.findFirst(),
+        shopInfo: await StatementService.getShopInfo(),
       };
 
       setStatementDetailData(detailData);

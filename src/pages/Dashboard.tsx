@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { QuickActions } from '@/components/QuickActions';
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
-import { db } from '@/lib/db';
+import { DashboardService } from '@/services/DashboardService';
 import { formatCurrency } from '@/lib/utils';
 import {
   AreaChart,
@@ -116,41 +116,15 @@ export function Dashboard() {
         allNewOrders,
         newOrderItems,
       ] = await Promise.all([
-        db.product.findMany(),
-        db.sale.findMany({
-          where: { saleDate: { gte: today } },
-          include: { customer: true },
-        }),
-        db.sale.findMany({
-          where: { saleDate: { gte: weekAgo } },
-          orderBy: { saleDate: 'desc' },
-          take: 10,
-          include: { customer: true },
-        }),
-        db.sale.findMany({
-          where: { saleDate: { gte: weekAgo } },
-        }),
-        db.saleItem.findMany({
-          where: { createdAt: { gte: weekAgo } },
-          include: { product: true },
-        }),
-        db.saleOrder.findMany({
-          where: { saleDate: { gte: today } },
-          include: { buyer: true },
-        }),
-        db.saleOrder.findMany({
-          where: { saleDate: { gte: weekAgo } },
-          orderBy: { saleDate: 'desc' },
-          take: 10,
-          include: { buyer: true },
-        }),
-        db.saleOrder.findMany({
-          where: { saleDate: { gte: weekAgo } },
-        }),
-        db.orderItem.findMany({
-          where: { createdAt: { gte: weekAgo } },
-          include: { product: true },
-        }),
+        DashboardService.getAllProducts(),
+        DashboardService.getTodayLegacySales(today),
+        DashboardService.getRecentLegacySales(weekAgo),
+        DashboardService.getAllLegacySalesInPeriod(weekAgo),
+        DashboardService.getLegacySaleItemsInPeriod(weekAgo),
+        DashboardService.getTodayNewOrders(today),
+        DashboardService.getRecentNewOrders(weekAgo),
+        DashboardService.getAllNewOrdersInPeriod(weekAgo),
+        DashboardService.getNewOrderItemsInPeriod(weekAgo),
       ]);
 
       const lowStock = allProducts.filter(p => p.stock <= p.minStock && p.minStock > 0);
@@ -279,14 +253,8 @@ export function Dashboard() {
       }
 
       const [legacySalesInPeriod, newOrdersInPeriod] = await Promise.all([
-        db.sale.findMany({
-          where: { saleDate: { gte: startDate } },
-          include: { payments: true },
-        }),
-        db.saleOrder.findMany({
-          where: { saleDate: { gte: startDate } },
-          include: { payments: true },
-        }),
+        DashboardService.getLegacySalesInPeriod(startDate),
+        DashboardService.getNewOrdersInPeriod(startDate),
       ]);
 
       let cashAmount = 0;

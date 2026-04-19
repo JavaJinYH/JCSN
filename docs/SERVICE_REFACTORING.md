@@ -284,7 +284,13 @@ items.forEach(item => ...);
   - useCategories.ts - 分类数据 Hook
 - ✅ P3: Products.tsx 已使用通用 Hooks
 
-### 10.4 待做（可选）
+### 10.4 SaleNew.tsx Service层调用（v4.10 完成）
+- ✅ SaleService.createSaleOrder() 增强：添加支付方式和照片保存支持
+- ✅ SaleNew.tsx 移除直接 db.* 调用：改用 SaleService 处理订单创建
+- ✅ SaleNew.tsx 使用 ProductService、ContactService 加载初始数据
+- ✅ 消除代码泥球，提升可维护性
+
+### 10.5 待做（可选）
 - ⬜ ~~P2: 类型定义整理~~ - 经分析，当前类型结构已合理（业务模型在types.ts，组件Props在各自文件），无需过度重构
 - ⬜ ~~其他页面使用通用 Hooks~~ - 经分析，SaleNew/Purchases 有按需加载逻辑，直接替换降低效率，保持现有实现更合适
 - ⬜ Git 提交当前重构成果

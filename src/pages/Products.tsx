@@ -10,7 +10,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { DataTablePagination, useDataTable } from '@/components/DataTable';
-import { db } from '@/lib/db';
+import { ProductService } from '@/services/ProductService';
 import type { Product, Category, ProductSpec } from '@/lib/types';
 import { toast } from '@/components/Toast';
 import { ProductStats, ProductFilters, ProductTable, ProductImport } from '@/components/product';
@@ -66,7 +66,7 @@ export function Products() {
     if (!deleteProduct) return;
 
     try {
-      await db.product.delete({ where: { id: deleteProduct.id } });
+      await ProductService.deleteProduct(deleteProduct.id);
       setDeleteProduct(null);
       refresh();
       toast('删除成功', 'success');
@@ -81,12 +81,9 @@ export function Products() {
 
     try {
       for (const item of importItems) {
-        await db.product.update({
-          where: { id: item.productId },
-          data: {
-            stock: { increment: item.quantity },
-            referencePrice: item.price,
-          },
+        await ProductService.updateProduct(item.productId, {
+          stock: { increment: item.quantity },
+          referencePrice: item.price,
         });
       }
       toast(`成功导入 ${importItems.length} 项库存`, 'success');

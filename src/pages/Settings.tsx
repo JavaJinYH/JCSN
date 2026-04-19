@@ -11,9 +11,9 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { db } from '@/lib/db';
 import { formatCurrency } from '@/lib/utils';
 import { toast } from '@/components/Toast';
+import { SettingsService } from '@/services/SettingsService';
 import type { SystemSetting, Category } from '@/lib/types';
 import * as XLSX from 'xlsx';
 
@@ -56,8 +56,8 @@ export function Settings() {
   const loadData = async () => {
     try {
       const [settingsData, categoriesData] = await Promise.all([
-        db.systemSetting.findUnique({ where: { id: 'default' } }),
-        db.category.findMany({ orderBy: { sortOrder: 'asc' } }),
+        SettingsService.getSettings(),
+        SettingsService.getCategories(),
       ]);
 
       if (settingsData) {
@@ -83,13 +83,10 @@ export function Settings() {
   const handleSaveShopInfo = async () => {
     setSaving(true);
     try {
-      await db.systemSetting.upsert({
-        where: { id: 'default' },
-        update: shopForm,
-        create: {
-          id: 'default',
-          ...shopForm,
-        },
+      await SettingsService.upsertSettings({
+        shopName: shopForm.shopName,
+        shopAddress: shopForm.address,
+        shopPhone: shopForm.phone,
       });
 
       toast('店铺信息保存成功！', 'success');
@@ -105,32 +102,7 @@ export function Settings() {
   const handleBackupData = async () => {
     setBackupLoading(true);
     try {
-      const modelsToBackup = [
-        'category', 'product', 'contact', 'entity', 'bizProject',
-        'saleOrder', 'orderItem', 'purchase', 'purchaseItem',
-        'payment', 'receivable', 'rebate', 'returnRecord',
-        'deliveryRecord', 'saleReturn', 'saleReturnItem',
-        'purchaseReturn', 'purchaseReturnItem', 'badDebtWriteOff',
-        'customerPrice', 'inventoryCheck', 'auditLog'
-      ];
-
-      const backup: Record<string, any[]> = {};
-
-      for (const model of modelsToBackup) {
-        try {
-          const data = await (db as any)[model].findMany();
-          backup[model] = data;
-        } catch (e) {
-          console.warn(`[Backup] ${model} not found or error:`, e);
-        }
-      }
-
-      const exportData = {
-        version: '1.0',
-        exportTime: new Date().toISOString(),
-        system: '折柳建材管理系统',
-        data: backup,
-      };
+      const exportData = await SettingsService.backupData();
 
       const jsonStr = JSON.stringify(exportData, null, 2);
       const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -175,27 +147,7 @@ export function Settings() {
       }
 
       const data = importData.data;
-      const modelOrder = [
-        'category', 'entity', 'contact', 'bizProject',
-        'product', 'customerPrice',
-        'saleOrder', 'orderItem', 'purchase', 'purchaseItem',
-        'payment', 'receivable', 'rebate', 'returnRecord',
-        'deliveryRecord', 'saleReturn', 'saleReturnItem',
-        'purchaseReturn', 'purchaseReturnItem', 'badDebtWriteOff',
-        'inventoryCheck', 'auditLog'
-      ];
-
-      for (const model of modelOrder) {
-        if (!data[model]) continue;
-        try {
-          await (db as any)[model].deleteMany({});
-          if (data[model].length > 0) {
-            await (db as any)[model].createMany({ data: data[model] });
-          }
-        } catch (e) {
-          console.warn(`[Restore] ${model} error:`, e);
-        }
-      }
+      await SettingsService.restoreData(data);
 
       setRestoreLoading(false);
       setShowRestoreDialog(false);
@@ -280,11 +232,7 @@ export function Settings() {
     const value = parseInt(e.target.value);
     setIdleTimeoutMinutes(value);
     try {
-      await db.systemSetting.upsert({
-        where: { id: 'default' },
-        create: { id: 'default', shopName: '折柳建材', idleTimeoutMinutes: value, lockPassword },
-        update: { idleTimeoutMinutes: value },
-      });
+      await SettingsService.updateIdleTimeout(value);
       if (value === 0) {
         toast('息屏锁定已关闭', 'success');
       } else {
@@ -303,11 +251,7 @@ export function Settings() {
     }
     setLockPassword(newPassword);
     try {
-      await db.systemSetting.upsert({
-        where: { id: 'default' },
-        create: { id: 'default', shopName: '折柳建材', idleTimeoutMinutes, lockPassword: newPassword },
-        update: { lockPassword: newPassword },
-      });
+      await SettingsService.updateLockPassword(newPassword);
       toast('解锁密码已更新', 'success');
     } catch (error) {
       console.error('Failed to save password:', error);
@@ -322,11 +266,9 @@ export function Settings() {
     }
 
     try {
-      await db.category.create({
-        data: {
-          name: categoryName.trim(),
-          description: categoryDesc.trim() || null,
-        },
+      await SettingsService.createCategory({
+        name: categoryName.trim(),
+        description: categoryDesc.trim() || undefined,
       });
 
       setShowCategoryDialog(false);
@@ -347,12 +289,9 @@ export function Settings() {
     }
 
     try {
-      await db.category.update({
-        where: { id: editCategory.id },
-        data: {
-          name: categoryName.trim(),
-          description: categoryDesc.trim() || null,
-        },
+      await SettingsService.updateCategory(editCategory.id, {
+        name: categoryName.trim(),
+        description: categoryDesc.trim() || undefined,
       });
 
       setEditCategory(null);
@@ -368,7 +307,7 @@ export function Settings() {
 
   const handleDeleteCategory = async (id: string) => {
     try {
-      await db.category.delete({ where: { id } });
+      await SettingsService.deleteCategory(id);
       loadData();
       toast('分类删除成功', 'success');
     } catch (error) {

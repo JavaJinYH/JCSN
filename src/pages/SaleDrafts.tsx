@@ -15,6 +15,7 @@ import { db } from '@/lib/db';
 import { formatCurrency } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import type { SaleSlip } from '@/lib/types';
+import { SaleService } from '@/services/SaleService';
 
 export function SaleDrafts() {
   const navigate = useNavigate();
@@ -27,14 +28,7 @@ export function SaleDrafts() {
 
   const loadDrafts = async () => {
     try {
-      const draftsData = await db.saleSlip.findMany({
-        where: { status: 'draft' },
-        include: {
-          items: true,
-          customer: true,
-        },
-        orderBy: { updatedAt: 'desc' },
-      });
+      const draftsData = await SaleService.getSaleDrafts();
       setDrafts(draftsData);
     } catch (error) {
       console.error('Failed to load drafts:', error);
@@ -44,12 +38,12 @@ export function SaleDrafts() {
   };
 
   const handleContinueEdit = (slipId: string) => {
-    navigate(`/sales/draft/${slipId}`);
+    navigate(`/sales/new?draftId=${slipId}`);
   };
 
   const handleDeleteDraft = async (slipId: string) => {
     try {
-      await db.saleSlip.delete({ where: { id: slipId } });
+      await SaleService.deleteSaleDraft(slipId);
       loadDrafts();
       toast('删除成功', 'success');
     } catch (error) {
@@ -61,66 +55,7 @@ export function SaleDrafts() {
   const handleSubmitDraft = async (slip: SaleSlip) => {
     try {
       setLoading(true);
-
-      const payments = slip.payments ? JSON.parse(slip.payments) : [];
-      const sale = await db.sale.create({
-        data: {
-          invoiceNo: `S${Date.now()}`,
-          customerId: slip.customerId,
-          projectId: slip.projectId,
-          buyerCustomerId: slip.buyerCustomerId,
-          payerCustomerId: slip.payerCustomerId,
-          introducerCustomerId: slip.introducerCustomerId,
-          pickerCustomerId: slip.pickerCustomerId,
-          pickerName: slip.pickerName,
-          pickerPhone: slip.pickerPhone,
-          pickerType: slip.pickerType,
-          writtenInvoiceNo: slip.writtenInvoiceNo,
-          totalAmount: slip.totalAmount,
-          discount: slip.discount,
-          paidAmount: slip.paidAmount,
-          remark: slip.remark,
-          status: 'completed',
-          items: {
-            create: slip.items.map((item) => ({
-              productId: item.productId,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              costPriceSnapshot: 0,
-              sellingPriceSnapshot: item.unitPrice,
-              subtotal: item.subtotal,
-            })),
-          },
-          payments: {
-            create: payments
-              .filter((p: any) => p.amount > 0)
-              .map((p: any) => ({
-                amount: p.amount,
-                method: p.method,
-                payerName: p.payerName || null,
-                thirdPartyName: p.thirdPartyName || null,
-                paidAt: new Date(),
-              })),
-          },
-        },
-      });
-
-      await db.product.updateMany({
-        where: {
-          id: { in: slip.items.map((item) => item.productId) },
-        },
-        data: {
-          stock: {
-            decrement: 1,
-          },
-        },
-      });
-
-      await db.saleSlip.update({
-        where: { id: slip.id },
-        data: { status: 'completed' },
-      });
-
+      await SaleService.submitDraft(slip.id);
       toast('提交成功', 'success');
       navigate('/sales');
     } catch (error) {
@@ -189,7 +124,7 @@ export function SaleDrafts() {
                         minute: '2-digit',
                       })}
                     </TableCell>
-                    <TableCell>{slip.customer?.name || '散客'}</TableCell>
+                    <TableCell>{slip.buyerCustomer?.name || '散客'}</TableCell>
                     <TableCell>
                       <Badge variant="secondary">{slip.items.length} 种</Badge>
                     </TableCell>

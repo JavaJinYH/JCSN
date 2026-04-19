@@ -78,8 +78,31 @@ export interface Supplier {
   updatedAt: Date;
 }
 
+export interface PurchaseOrder {
+  id: string;
+  batchNo: string | null;
+  supplierId: string | null;
+  supplier?: Supplier | null;
+  supplierName: string | null;
+  purchaseDate: Date;
+  remark: string | null;
+  status: string;
+  sentDate: Date | null;
+  deliveredDate: Date | null;
+  completedDate: Date | null;
+  needDelivery: boolean;
+  deliveryStatus: string;
+  driverName: string | null;
+  driverPhone: string | null;
+  estimatedDeliveryDate: Date | null;
+  createdAt: Date;
+  items?: Purchase[];
+}
+
 export interface Purchase {
   id: string;
+  orderId: string | null;
+  order?: PurchaseOrder | null;
   productId: string;
   product?: Product;
   quantity: number;
@@ -90,7 +113,15 @@ export interface Purchase {
   supplierName: string | null;
   purchaseDate: Date;
   remark: string | null;
-  batchNo: string | null;
+  status: string;
+  sentDate: Date | null;
+  deliveredDate: Date | null;
+  completedDate: Date | null;
+  needDelivery: boolean;
+  deliveryStatus: string;
+  driverName: string | null;
+  driverPhone: string | null;
+  estimatedDeliveryDate: Date | null;
   createdAt: Date;
 }
 

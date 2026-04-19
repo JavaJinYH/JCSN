@@ -24,6 +24,7 @@ import { AuditLogs } from './pages/AuditLogs';
 import { InventoryCheckPage } from './pages/InventoryCheck';
 import { PhotoManagement } from './pages/PhotoManagement';
 import { LegacyBills } from './pages/LegacyBills';
+import { BadDebts } from './pages/BadDebts';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastContainer } from './components/Toast';
 
@@ -54,6 +55,7 @@ function App() {
           <Route path="settlements" element={<Settlements />} />
           <Route path="collections" element={<Collections />} />
           <Route path="statements" element={<Statements />} />
+          <Route path="bad-debts" element={<BadDebts />} />
           <Route path="audit-logs" element={<AuditLogs />} />
           <Route path="legacy-bills" element={<LegacyBills />} />
           <Route path="inventory/check" element={<InventoryCheckPage />} />

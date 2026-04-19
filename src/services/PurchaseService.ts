@@ -309,13 +309,14 @@ export const PurchaseService = {
     });
   },
 
-  async createPurchasePhoto(purchaseId: string, data: { url: string; remark?: string; type?: string }) {
+  async createPurchasePhoto(purchaseId: string, data: { url?: string; photoPath?: string; remark?: string; type?: string; photoType?: string; photoRemark?: string }) {
     return db.purchasePhoto.create({
       data: {
         purchaseId,
         url: data.url,
-        remark: data.remark,
-        type: data.type,
+        photoPath: data.photoPath,
+        type: data.type || data.photoType,
+        remark: data.remark || data.photoRemark,
       },
     });
   },

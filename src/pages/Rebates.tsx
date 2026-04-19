@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DataTablePagination, useDataTable } from '@/components/DataTable';
-import { db } from '@/lib/db';
+import { RebateService } from '@/services/RebateService';
 import { formatCurrency } from '@/lib/utils';
 import { Rebate, Sale, Contact } from '@/lib/types';
 import { toast } from '@/components/Toast';
@@ -51,14 +51,7 @@ export function Rebates() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const rebatesData = await db.rebate.findMany({
-        include: {
-          sale: true,
-          plumber: true,
-        },
-        orderBy: { recordedAt: 'desc' },
-        take: 100,
-      });
+      const rebatesData = await RebateService.getRebates();
       setRebates(rebatesData);
     } catch (error) {
       console.error('Failed to load rebates:', error);
@@ -69,14 +62,7 @@ export function Rebates() {
 
   const loadSales = async () => {
     try {
-      const salesData = await db.saleOrder.findMany({
-        include: {
-          buyer: true,
-          items: { include: { product: true } },
-        },
-        orderBy: { saleDate: 'desc' },
-        take: 50,
-      });
+      const salesData = await RebateService.getSaleOrders();
       setSales(salesData);
     } catch (error) {
       console.error('Failed to load sales:', error);
@@ -85,10 +71,7 @@ export function Rebates() {
 
   const loadContacts = async () => {
     try {
-      const contactsData = await db.contact.findMany({
-        where: { contactType: 'plumber' },
-        orderBy: { name: 'asc' },
-      });
+      const contactsData = await RebateService.getPlumbers();
       setContacts(contactsData);
     } catch (error) {
       console.error('Failed to load contacts:', error);
@@ -108,18 +91,16 @@ export function Rebates() {
     try {
       const selectedSale = sales.find(s => s.id === formData.saleId);
       const selectedContact = contacts.find(c => c.id === formData.plumberId);
-      const plumberId = formData.plumberId === '__none__' ? null : formData.plumberId;
-      await db.rebate.create({
-        data: {
-          saleId: formData.saleId,
-          plumberId,
-          supplierName: formData.supplierName || selectedContact?.name || '未知',
-          rebateAmount: parseFloat(formData.rebateAmount),
-          rebateType: formData.rebateType,
-          rebateRate: formData.rebateRate ? parseFloat(formData.rebateRate) : 0,
-          remark: formData.remark || null,
-          isHidden: formData.isHidden,
-        },
+      const plumberId = formData.plumberId === '__none__' ? undefined : formData.plumberId;
+      await RebateService.createRebate({
+        saleId: formData.saleId || undefined,
+        plumberId,
+        supplierName: formData.supplierName || selectedContact?.name || '未知',
+        rebateAmount: parseFloat(formData.rebateAmount),
+        rebateType: formData.rebateType,
+        rebateRate: formData.rebateRate ? parseFloat(formData.rebateRate) : undefined,
+        remark: formData.remark || undefined,
+        isHidden: formData.isHidden,
       });
 
       setShowAddDialog(false);
@@ -145,7 +126,7 @@ export function Rebates() {
     toast('确认删除功能开发中', 'info');
     return;
     try {
-      await db.rebate.delete({ where: { id } });
+      await RebateService.deleteRebate(id);
       loadData();
       toast('删除成功', 'success');
     } catch (error) {

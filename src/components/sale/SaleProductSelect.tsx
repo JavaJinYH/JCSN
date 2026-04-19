@@ -107,11 +107,6 @@ export function SaleProductSelect({
                         上次: {formatCurrency(historicalPrices.get(product.id)!)}
                       </span>
                     )}
-                    {product.lastPurchasePrice && (
-                      <span className="text-xs text-slate-400">
-                        进价: {formatCurrency(product.lastPurchasePrice)}
-                      </span>
-                    )}
                   </div>
                   <Badge
                     variant={product.stock === 0 ? 'destructive' : 'secondary'}

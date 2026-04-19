@@ -324,27 +324,7 @@ model DeliveryRecord {
   updatedAt       DateTime  @updatedAt
 }
 
-model AccountReceivable {
-  id                 String    @id @default(cuid())
-  contactId         String
-  contact           Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  saleId             String?
-  projectId          String?
-  entityId          String?
-  entity             Entity?   @relation(fields: [entityId], references: [id], onDelete: SetNull)
-  originalAmount     Float
-  paidAmount         Float     @default(0)
-  remainingAmount    Float
-  agreedPaymentDate  DateTime?
-  isOverdue          Boolean   @default(false)
-  overdueDays        Int       @default(0)
-  status             String    @default("pending")
-  settlementDate     DateTime?
-  remark             String?
-  collectionRecords  CollectionRecord[]
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-}
+
 
 model SettlementAdjustment {
   id           String    @id @default(cuid())
@@ -456,7 +436,7 @@ model CollectionRecord {
   customerId       String
   customer         Contact             @relation(fields: [customerId], references: [id], onDelete: Cascade)
   receivableId     String?
-  receivable       AccountReceivable?  @relation(fields: [receivableId], references: [id], onDelete: SetNull)
+  receivable       Receivable?        @relation(fields: [receivableId], references: [id], onDelete: SetNull)
   collectionDate   DateTime            @default(now())
   collectionTime   String?             @default("00:00")
   collectionMethod String
@@ -590,7 +570,6 @@ model Contact {
   ordersAsPicker   SaleOrder[]  @relation("PickerContact")
   personalEntity   Entity?
   rebatesAsPlumber Rebate[]
-  receivables      AccountReceivable[]
   supplierContacts Supplier[]
   badDebtWriteOffs BadDebtWriteOff[]
 
@@ -658,7 +637,6 @@ model Entity {
   roles   ContactEntityRole[]
   projects BizProject[]
   orders  SaleOrder[]
-  receivables AccountReceivable[]
 }
 
 model BizProject {
@@ -796,10 +774,16 @@ model BadDebtWriteOff {
   originalAmount  Float
   writtenOffAmount Float
   finalAmount     Float
+  // 坏账类型：negotiated - 协商减免；bad_debt - 真正坏账
+  writeOffType    String   @default("bad_debt")
   reason          String?
   operatorNote    String?
+  approvedBy      String?
+  approvedAt      DateTime?
+  status          String   @default("pending") // pending, approved, rejected
   createdAt       DateTime @default(now())
   createdBy       String?
+  updatedAt       DateTime @updatedAt
 }
 
 model OrderItem {
@@ -829,18 +813,44 @@ model OrderPayment {
 }
 
 model Receivable {
-  id                String   @id @default(cuid())
+  id                String               @id @default(cuid())
   orderId           String
-  order             SaleOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order             SaleOrder            @relation(fields: [orderId], references: [id], onDelete: Cascade)
   originalAmount    Float
-  paidAmount        Float    @default(0)
+  paidAmount        Float                @default(0)
   remainingAmount   Float
   agreedPaymentDate DateTime?
-  isOverdue         Boolean  @default(false)
-  overdueDays       Int      @default(0)
-  status            String   @default("pending")
+  isOverdue         Boolean              @default(false)
+  overdueDays       Int                  @default(0)
+  // 状态：pending - 待收款；partial - 部分还款；settled - 已结清；negotiated - 协商结清；bad_debt - 坏账核销
+  status            String               @default("pending")
   settlementDate     DateTime?
   remark            String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  collectionRecords CollectionRecord[]
+  auditLogs         ReceivableAuditLog[]
+}
+
+model ReceivableAuditLog {
+  id                String  @id @default(cuid())
+  receivableId      String
+  receivable        Receivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+  actionType        String
+  changeType        String
+  oldValue          String?
+  newValue          String?
+  oldAmount         Float?
+  newAmount         Float?
+  oldStatus         String?
+  newStatus         String?
+  operator          String?
+  reason            String?
+  remark            String?
   createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  
+  @@index([receivableId])
+  @@index([createdAt])
+  @@index([actionType])
 }

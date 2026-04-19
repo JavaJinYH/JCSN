@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { PhotoViewer } from '@/components/PhotoViewer';
 import { PhotoThumbnail } from '@/components/PhotoThumbnail';
-import { db } from '@/lib/db';
+import { PhotoService } from '@/services/PhotoService';
 import { toast } from '@/components/Toast';
 import dayjs from 'dayjs';
 
@@ -61,14 +61,8 @@ export function PhotoManagement() {
     try {
       setLoading(true);
       const [salePhotos, purchasePhotos] = await Promise.all([
-        db.salePhoto.findMany({
-          include: { sale: { include: { customer: true } } },
-          orderBy: { createdAt: 'desc' },
-        }),
-        db.purchasePhoto.findMany({
-          include: { purchase: { include: { product: true } } },
-          orderBy: { createdAt: 'desc' },
-        }),
+        PhotoService.getSalePhotos({ sale: true }),
+        PhotoService.getPurchasePhotos({ purchase: true }),
       ]);
 
       const allPhotos: PhotoItem[] = [

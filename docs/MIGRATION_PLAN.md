@@ -2301,12 +2301,10 @@ model BadDebtWriteOff {
    - 扩展 Contact 模型，添加 Customer 字段（creditLimit, creditUsed, creditLevel, riskLevel, blacklist, autoTag, manualTag 等）
    - 删除 Customer 模型
    - 更新所有外键关系（Sale, Project, SaleSlip 等）
-
 2. 前端变更：
    - 删除 Customers.tsx 页面
    - 从 Sidebar、App.tsx、Header.tsx 移除客户管理菜单
    - 更新 Sales.tsx、SaleDraftEdit.tsx、Collections.tsx、Settings.tsx 使用 Contact
-
 3. 数据库迁移：
    - 执行 `npx prisma migrate reset --force`
    - Customer 数据已映射到 Contact
@@ -2385,12 +2383,12 @@ model BadDebtWriteOff {
 
 **Phase 2: 数据迁移核心**
 
-| 任务ID  | 任务名称                 | 验证标准                      | 状态 |
-| ----- | -------------------- | ------------------------- | -- |
+| 任务ID  | 任务名称                 | 验证标准                      | 状态    |
+| ----- | -------------------- | ------------------------- | ----- |
 | P2-T1 | Customer数据导出脚本       | 脚本能正确读取Customer数据         | ✅ 已完成 |
 | P2-T2 | Customer→Contact迁移脚本 | Contact数据完整、contactType正确 | ✅ 已完成 |
-| P2-T3 | 供应商数据→Supplier迁移     | Supplier数据完整              | ⬜ |
-| P2-T4 | Purchase关联Supplier   | 进货单能正确显示供应商               | ⬜ |
+| P2-T3 | 供应商数据→Supplier迁移     | Supplier数据完整              | ⬜     |
+| P2-T4 | Purchase关联Supplier   | 进货单能正确显示供应商               | ⬜     |
 | P2-T5 | Rebate关联Contact      | 返点记录正确                    | ✅ 已完成 |
 | P2-T6 | 数据完整性验证              | 所有关联数据无断裂                 | ✅ 已完成 |
 

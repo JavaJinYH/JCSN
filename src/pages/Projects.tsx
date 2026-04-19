@@ -26,7 +26,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { DataTableFilters, DataTablePagination, useDataTable } from '@/components/DataTable';
-import { db } from '@/lib/db';
+import { ProjectService } from '@/services/ProjectService';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import { useNavigate } from 'react-router-dom';
@@ -99,9 +99,7 @@ export function Projects() {
 
   const loadEntities = async () => {
     try {
-      const entitiesData = await db.entity.findMany({
-        orderBy: { name: 'asc' },
-      });
+      const entitiesData = await ProjectService.getEntities();
       setEntities(entitiesData);
     } catch (error) {
       console.error('[Projects] 加载主体失败:', error);
@@ -111,17 +109,11 @@ export function Projects() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const projectsData = await db.bizProject.findMany({
-        include: { entity: true },
-        orderBy: { createdAt: 'desc' },
-      });
+      const projectsData = await ProjectService.getProjects();
 
       const stats: Record<string, { total: number; paid: number; count: number }> = {};
       for (const project of projectsData) {
-        const orders = await db.saleOrder.findMany({
-          where: { projectId: project.id },
-          select: { totalAmount: true, paidAmount: true },
-        });
+        const orders = await ProjectService.getOrdersByEntity(project.id);
         stats[project.id] = {
           total: orders.reduce((sum, o) => sum + o.totalAmount, 0),
           paid: orders.reduce((sum, o) => sum + o.paidAmount, 0),
@@ -174,16 +166,7 @@ export function Projects() {
     setViewLoading(true);
     setSelectedProject(project);
     try {
-      const ordersData = await db.saleOrder.findMany({
-        where: { projectId: project.id },
-        include: {
-          buyer: true,
-          payer: true,
-          project: true,
-          paymentEntity: true,
-        },
-        orderBy: { saleDate: 'desc' },
-      });
+      const ordersData = await ProjectService.getOrdersByProject(project.id);
       setProjectOrders(ordersData);
       setShowDetailDialog(true);
     } catch (error) {
@@ -206,16 +189,14 @@ export function Projects() {
     }
 
     try {
-      await db.bizProject.create({
-        data: {
-          name: formData.name,
-          entityId: formData.entityId,
-          address: formData.address || null,
-          status: formData.status,
-          startDate: formData.startDate ? new Date(formData.startDate) : null,
-          endDate: formData.endDate ? new Date(formData.endDate) : null,
-          remark: formData.remark || null,
-        },
+      await ProjectService.createProject({
+        name: formData.name,
+        entityId: formData.entityId,
+        address: formData.address || undefined,
+        status: formData.status,
+        startDate: formData.startDate ? new Date(formData.startDate) : undefined,
+        endDate: formData.endDate ? new Date(formData.endDate) : undefined,
+        remark: formData.remark || undefined,
       });
 
       setShowAddDialog(false);
@@ -231,14 +212,11 @@ export function Projects() {
       loadData();
       toast('项目添加成功', 'success');
 
-      await db.auditLog.create({
-        data: {
-          actionType: 'CREATE',
-          entityType: 'BizProject',
-          entityId: 'new',
-          newValue: JSON.stringify({ name: formData.name }),
-          timestamp: new Date(),
-        },
+      await ProjectService.createAuditLog({
+        action: 'CREATE',
+        entityType: 'BizProject',
+        entityId: 'new',
+        remark: JSON.stringify({ name: formData.name }),
       });
     } catch (error) {
       console.error('[Projects] 添加项目失败:', error);
@@ -248,10 +226,7 @@ export function Projects() {
 
   const handleUpdateProjectStatus = async (projectId: string, newStatus: string) => {
     try {
-      await db.bizProject.update({
-        where: { id: projectId },
-        data: { status: newStatus },
-      });
+      await ProjectService.updateProject(projectId, { status: newStatus });
       loadData();
       toast('状态更新成功', 'success');
     } catch (error) {

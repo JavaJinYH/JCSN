@@ -54,7 +54,7 @@ export const DeliveryService = {
         buyer: true,
         paymentEntity: true,
         project: true,
-        deliveryRecord: true,
+        deliveryRecords: true,
       },
       orderBy: { saleDate: 'desc' },
     });
@@ -76,7 +76,7 @@ export const DeliveryService = {
       where,
       include: {
         supplier: true,
-        deliveryRecord: true,
+        product: true,
       },
       orderBy: { purchaseDate: 'desc' },
     });
@@ -111,25 +111,45 @@ export const DeliveryService = {
   },
 
   async createDeliveryRecord(data: {
-    orderId: string;
-    orderType: string;
-    entityId: string;
-    driverName?: string;
-    driverPhone?: string;
+    orderId?: string;
+    orderType?: string;
+    entityId?: string;
+    saleId?: string | null;
+    zoneName?: string;
+    recipientName?: string;
+    recipientPhone?: string | null;
     deliveryAddress?: string;
-    deliveryFee?: number;
+    distance?: number;
+    weight?: number;
+    baseFee?: number;
+    distanceFee?: number;
+    weightFee?: number;
+    totalFee?: number;
     deliveryStatus?: string;
+    driverName?: string | null;
+    driverPhone?: string | null;
+    remark?: string | null;
   }) {
     return db.deliveryRecord.create({
       data: {
         orderId: data.orderId,
         orderType: data.orderType,
         entityId: data.entityId,
+        saleId: data.saleId,
+        zoneName: data.zoneName,
+        recipientName: data.recipientName,
+        recipientPhone: data.recipientPhone,
+        deliveryAddress: data.deliveryAddress,
+        distance: data.distance,
+        weight: data.weight,
+        baseFee: data.baseFee,
+        distanceFee: data.distanceFee,
+        weightFee: data.weightFee,
+        totalFee: data.totalFee,
+        deliveryStatus: data.deliveryStatus || 'pending',
         driverName: data.driverName,
         driverPhone: data.driverPhone,
-        deliveryAddress: data.deliveryAddress,
-        totalFee: data.deliveryFee || 0,
-        deliveryStatus: data.deliveryStatus || 'pending',
+        remark: data.remark,
       },
     });
   },
@@ -141,12 +161,13 @@ export const DeliveryService = {
     });
   },
 
-  async updatePurchaseDeliveryStatus(id: string, data: { deliveryStatus: string; deliveryRecordId?: string }) {
+  async updatePurchaseDeliveryStatus(id: string, data: { deliveryStatus: string; deliveredDate?: Date; status?: string }) {
     return db.purchase.update({
       where: { id },
       data: {
         deliveryStatus: data.deliveryStatus,
-        deliveryRecordId: data.deliveryRecordId,
+        deliveredDate: data.deliveredDate,
+        status: data.status,
       },
     });
   },

@@ -1,5 +1,7 @@
 import { db } from '@/lib/db';
 import { generateInvoiceNo } from '@/lib/utils';
+import { ContactService } from './ContactService';
+import { EntityService } from './EntityService';
 
 export interface CreatePaymentDTO {
   method: string;
@@ -66,7 +68,6 @@ export interface SaleDraftResult {
 
 export interface CreateOrderItemDTO {
   productId: string;
-  productName: string;
   quantity: number;
   unitPrice: number;
   subtotal: number;
@@ -101,22 +102,34 @@ export const SaleService = {
     }
 
     let buyerId = data.buyerId;
-    if (data.buyerId === '__none__') {
-      const walkInCustomer = await db.contact.findFirst({
-        where: { name: '散客' },
-      });
-      if (!walkInCustomer) {
-        throw new Error('散客不存在，请先创建散客联系人');
-      }
+    if (!buyerId || buyerId === '__none__') {
+      const walkInCustomer = await ContactService.ensureWalkInCustomer();
       buyerId = walkInCustomer.id;
+    } else {
+      const buyerExists = await db.contact.findUnique({ where: { id: buyerId } });
+      if (!buyerExists) {
+        throw new Error('选择的买家不存在，请重新选择');
+      }
     }
 
     let entityId = data.paymentEntityId;
-    if (data.paymentEntityId === '__cash__') {
-      const cashEntity = await db.entity.findFirst({
-        where: { entityType: 'cash' },
-      });
-      entityId = cashEntity?.id || '';
+    if (!entityId || entityId === '__none__' || entityId === '__cash__') {
+      const cashEntity = await EntityService.ensureCashEntity();
+      entityId = cashEntity.id;
+    } else {
+      const entityExists = await db.entity.findUnique({ where: { id: entityId } });
+      if (!entityExists) {
+        throw new Error('选择的挂靠主体不存在，请重新选择');
+      }
+    }
+
+    const productIds = data.items.map(item => item.productId);
+    const products = await db.product.findMany({
+      where: { id: { in: productIds } },
+    });
+    if (products.length !== productIds.length) {
+      const missingIds = productIds.filter(id => !products.find(p => p.id === id));
+      throw new Error(`商品不存在: ${missingIds.join(', ')}`);
     }
 
     const sale = await db.saleOrder.create({
@@ -141,7 +154,6 @@ export const SaleService = {
         items: {
           create: data.items.map(item => ({
             productId: item.productId,
-            productName: item.productName,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             subtotal: item.subtotal,
@@ -204,13 +216,13 @@ export const SaleService = {
       if (data.payerId && data.payerId !== '__none__') {
         await db.customerPrice.upsert({
           where: {
-            contactId_productId: {
-              contactId: data.payerId,
+            customerId_productId: {
+              customerId: data.payerId,
               productId: item.productId,
             },
           },
           create: {
-            contactId: data.payerId,
+            customerId: data.payerId,
             productId: item.productId,
             lastPrice: item.unitPrice,
             transactionCount: 1,
@@ -407,21 +419,22 @@ export const SaleService = {
    */
   async updateSaleDraft(slipId: string, data: Partial<CreateSaleDraftDTO>): Promise<SaleDraftResult> {
     let buyerId = data.buyerId;
-    if (data.buyerId === '__none__') {
-      const walkInCustomer = await db.contact.findFirst({
-        where: { name: '散客' },
-      });
-      buyerId = walkInCustomer?.id || '';
+    if (!buyerId || buyerId === '__none__') {
+      const walkInCustomer = await ContactService.ensureWalkInCustomer();
+      buyerId = walkInCustomer.id;
     }
 
     let entityId = data.paymentEntityId;
-    if (data.paymentEntityId === '__cash__') {
-      entityId = '__cash__';
-    } else if (data.paymentEntityId) {
+    if (!entityId || entityId === '__none__' || entityId === '__cash__') {
+      const cashEntity = await EntityService.ensureCashEntity();
+      entityId = cashEntity.id;
+    } else {
       const entity = await db.entity.findUnique({
-        where: { id: data.paymentEntityId },
+        where: { id: entityId },
       });
-      entityId = entity?.id || data.paymentEntityId;
+      if (!entity) {
+        throw new Error('选择的挂靠主体不存在，请重新选择');
+      }
     }
 
     const draft = await db.saleSlip.update({
@@ -540,7 +553,6 @@ export const SaleService = {
         items: {
           create: slip.items.map(item => ({
             productId: item.productId,
-            productName: '',
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             subtotal: item.subtotal,

@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { db } from '@/lib/db';
+import { InventoryCheckService } from '@/services/InventoryCheckService';
 import { formatCurrency } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import type { Product, InventoryCheck, InventoryCheckItem } from '@/lib/types';
@@ -44,9 +44,7 @@ export function InventoryCheckPage() {
 
   const loadData = async () => {
     try {
-      const productsData = await db.product.findMany({
-        orderBy: { name: 'asc' },
-      });
+      const productsData = await InventoryCheckService.getProducts();
 
       const productsWithStock: ProductWithStock[] = productsData.map(p => ({
         ...p,
@@ -56,10 +54,7 @@ export function InventoryCheckPage() {
       }));
       setProducts(productsWithStock);
 
-      const history = await db.inventoryCheck.findMany({
-        orderBy: { checkDate: 'desc' },
-        take: 10,
-      });
+      const history = await InventoryCheckService.getCheckHistory();
       setCheckHistory(history);
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -114,26 +109,24 @@ export function InventoryCheckPage() {
 
       const { totalItems, totalProfit, totalLoss } = calculateTotals();
 
-      const check = await db.inventoryCheck.create({
-        data: {
-          checkDate: new Date(),
-          operator: checkName || undefined,
-          totalItems,
-          totalProfit,
-          totalLoss,
-          status: 'completed',
-          items: {
-            create: products
-              .filter(p => p.actualStock !== 0)
-              .map(p => ({
-                productId: p.id,
-                systemStock: p.stock,
-                actualStock: p.actualStock,
-                profitLoss: p.profitLoss,
-                costPrice: p.costPrice,
-                amount: p.amount,
-              })),
-          },
+      const check = await InventoryCheckService.createCheck({
+        checkDate: new Date(),
+        operator: checkName || undefined,
+        totalItems,
+        totalProfit,
+        totalLoss,
+        status: 'completed',
+        items: {
+          create: products
+            .filter(p => p.actualStock !== 0)
+            .map(p => ({
+              productId: p.id,
+              systemStock: p.stock,
+              actualStock: p.actualStock,
+              profitLoss: p.profitLoss,
+              costPrice: p.costPrice,
+              amount: p.amount,
+            })),
         },
       });
 
@@ -141,10 +134,7 @@ export function InventoryCheckPage() {
       if (hasAdjustments) {
         for (const p of products) {
           if (p.actualStock !== p.stock) {
-            await db.product.update({
-              where: { id: p.id },
-              data: { stock: p.actualStock },
-            });
+            await InventoryCheckService.updateProductStock(p.id, p.actualStock);
           }
         }
         toast('盘点完成，库存已调整', 'success');

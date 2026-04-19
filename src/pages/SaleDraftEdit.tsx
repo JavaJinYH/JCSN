@@ -30,6 +30,11 @@ import { db } from '@/lib/db';
 import { formatCurrency, generateInvoiceNo, formatProductName } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import type { Product, Category, Contact, Project, SaleSlip } from '@/lib/types';
+import { SaleService } from '@/services/SaleService';
+import { ProductService } from '@/services/ProductService';
+import { ContactService } from '@/services/ContactService';
+import { EntityService } from '@/services/EntityService';
+import { ProjectService } from '@/services/ProjectService';
 
 interface CartItem {
   product: Product;
@@ -79,19 +84,17 @@ export function SaleDraftEdit() {
   }, [id]);
 
   const loadData = async () => {
-    if (!id) return;
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     try {
       const [slipData, productsData, categoriesData, customersData] = await Promise.all([
-        db.saleSlip.findUnique({
-          where: { id },
-          include: { items: true, customer: true },
-        }),
-        db.product.findMany({
-          include: { category: true },
-          orderBy: { name: 'asc' },
-        }),
-        db.category.findMany({ orderBy: { sortOrder: 'asc' } }),
-        db.contact.findMany({ orderBy: { name: 'asc' } }),
+        SaleService.getSaleDraftById(id),
+        ProductService.getProducts(),
+        EntityService.getCategories(),
+        ContactService.getContacts(),
       ]);
 
       if (!slipData) {
@@ -104,7 +107,7 @@ export function SaleDraftEdit() {
       setProducts(productsData);
       setCategories(categoriesData);
       setCustomers(customersData);
-      setSelectedCustomer(slipData.customerId || '');
+      setSelectedCustomer(slipData.buyerCustomerId || '');
       setSelectedProject(slipData.projectId || '');
       setSelectedBuyer(slipData.buyerCustomerId || '__none__');
       setSelectedPayer(slipData.payerCustomerId || '__none__');
@@ -133,6 +136,10 @@ export function SaleDraftEdit() {
       setCart(cartItems);
     } catch (error) {
       console.error('Failed to load data:', error);
+      toast('加载失败，请重试', 'error');
+      navigate('/sales/drafts');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -142,10 +149,7 @@ export function SaleDraftEdit() {
       return;
     }
     try {
-      const projectsData = await db.project.findMany({
-        where: { customerId: selectedCustomer, status: '进行中' },
-        orderBy: { createdAt: 'desc' },
-      });
+      const projectsData = await ProjectService.getProjectsByCustomer(selectedCustomer);
       setProjects(projectsData);
     } catch (error) {
       console.error('Failed to load projects:', error);

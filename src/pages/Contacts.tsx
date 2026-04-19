@@ -24,9 +24,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { DataTablePagination, useDataTable } from '@/components/DataTable';
-import { db } from '@/lib/db';
+import { ContactService } from '@/services/ContactService';
 import { formatCurrency } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import type { Contact, ContactPhone, Entity, BizProject } from '@/lib/types';
@@ -41,6 +42,12 @@ interface PersonInfo {
   remark: string | null;
   contactType: string;
   valueScore: number | null;
+  autoTag: string | null;
+  creditLevel: string;
+  riskLevel: string;
+  creditLimit: number;
+  blacklist: boolean;
+  blacklistReason: string | null;
   totalSpent: number;
   orderCount: number;
   lastOrderDate: Date | null;
@@ -61,6 +68,9 @@ export function Contacts() {
   const [detailSales, setDetailSales] = useState<any[]>([]);
   const [detailRebates, setDetailRebates] = useState<any[]>([]);
   const [detailProjects, setDetailProjects] = useState<any[]>([]);
+  const [blacklistReason, setBlacklistReason] = useState('');
+  const [showBlacklistDialog, setShowBlacklistDialog] = useState(false);
+  const [selectedContactForBlacklist, setSelectedContactForBlacklist] = useState<PersonInfo | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -77,27 +87,17 @@ export function Contacts() {
 
   const loadData = async () => {
     try {
-      const contactsData = await db.contact.findMany({
-        include: { phonesObj: true },
-        orderBy: { name: 'asc' },
-      });
+      const contactsData = await ContactService.getContacts();
 
       const contactPersons: PersonInfo[] = await Promise.all(
         contactsData.map(async (contact) => {
-          const orders = await db.saleOrder.findMany({
-            where: { buyerId: contact.id },
-          });
+          const orders = await ContactService.getContactOrders(contact.id);
           const totalSpent = orders.reduce((sum, o) => sum + o.paidAmount, 0);
           const lastOrder = orders.length > 0
-            ? await db.saleOrder.findFirst({
-                where: { buyerId: contact.id },
-                orderBy: { saleDate: 'desc' },
-              })
+            ? await ContactService.getContactLastOrder(contact.id)
             : null;
 
-          const personalEntity = await db.entity.findFirst({
-            where: { contactId: contact.id },
-          });
+          const personalEntity = await ContactService.getPersonalEntityByContact(contact.id);
 
           return {
             id: contact.id,
@@ -109,6 +109,12 @@ export function Contacts() {
             remark: contact.remark,
             contactType: contact.contactType,
             valueScore: contact.valueScore,
+            autoTag: contact.autoTag,
+            creditLevel: contact.creditLevel,
+            riskLevel: contact.riskLevel,
+            creditLimit: contact.creditLimit,
+            blacklist: contact.blacklist,
+            blacklistReason: contact.blacklistReason,
             totalSpent,
             orderCount: orders.length,
             lastOrderDate: lastOrder?.saleDate || null,
@@ -125,6 +131,122 @@ export function Contacts() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRecalculateScore = async (contact: PersonInfo) => {
+    try {
+      setLoading(true);
+      await ContactService.updateCustomerScore(contact.id);
+      toast('客户评分已更新', 'success');
+      await loadData();
+    } catch (error) {
+      console.error('[Contacts] 重新计算评分失败:', error);
+      toast('更新评分失败', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRecalculateAllScores = async () => {
+    try {
+      setLoading(true);
+      await ContactService.recalculateAllCustomerScores();
+      toast('所有客户评分已更新', 'success');
+      await loadData();
+    } catch (error) {
+      console.error('[Contacts] 重新计算所有评分失败:', error);
+      toast('更新评分失败', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleBlacklist = (contact: PersonInfo) => {
+    setSelectedContactForBlacklist(contact);
+    setBlacklistReason(contact._contactData.blacklistReason || '');
+    setShowBlacklistDialog(true);
+  };
+
+  const handleConfirmBlacklist = async () => {
+    if (!selectedContactForBlacklist) return;
+    try {
+      await ContactService.setBlacklist(
+        selectedContactForBlacklist.id,
+        !selectedContactForBlacklist.blacklist,
+        !selectedContactForBlacklist.blacklist ? blacklistReason : undefined
+      );
+      toast(selectedContactForBlacklist.blacklist ? '已从黑名单移除' : '已加入黑名单', 'success');
+      await loadData();
+    } catch (error) {
+      console.error('[Contacts] 更新黑名单失败:', error);
+      toast('操作失败', 'error');
+    } finally {
+      setShowBlacklistDialog(false);
+      setSelectedContactForBlacklist(null);
+      setBlacklistReason('');
+    }
+  };
+
+  const getCreditLevelLabel = (level: string) => {
+    const labels = {
+      excellent: '优秀',
+      good: '良好',
+      normal: '普通',
+      poor: '较差',
+      blocked: '冻结',
+    };
+    return labels[level as keyof typeof labels] || level;
+  };
+
+  const getCreditLevelColor = (level: string) => {
+    const colors = {
+      excellent: 'bg-green-500',
+      good: 'bg-blue-500',
+      normal: 'bg-gray-500',
+      poor: 'bg-orange-500',
+      blocked: 'bg-red-500',
+    };
+    return colors[level as keyof typeof colors] || 'bg-gray-500';
+  };
+
+  const getRiskLevelLabel = (level: string) => {
+    const labels = {
+      low: '低风险',
+      medium: '中风险',
+      high: '高风险',
+      critical: '极高风险',
+    };
+    return labels[level as keyof typeof labels] || level;
+  };
+
+  const getRiskLevelColor = (level: string) => {
+    const colors = {
+      low: 'bg-green-500',
+      medium: 'bg-yellow-500',
+      high: 'bg-orange-500',
+      critical: 'bg-red-500',
+    };
+    return colors[level as keyof typeof colors] || 'bg-gray-500';
+  };
+
+  const getAutoTagLabel = (tag: string | null) => {
+    const labels = {
+      star: '★高价值',
+      triangle: '△中等价值',
+      circle: '○普通价值',
+      cross: '×低价值',
+    };
+    return labels[tag as keyof typeof labels] || '-';
+  };
+
+  const getAutoTagColor = (tag: string | null) => {
+    const colors = {
+      star: 'text-yellow-500',
+      triangle: 'text-blue-500',
+      circle: 'text-gray-500',
+      cross: 'text-red-500',
+    };
+    return colors[tag as keyof typeof colors] || 'text-gray-500';
   };
 
   const filteredPersons = persons.filter((p) => {
@@ -154,26 +276,22 @@ export function Contacts() {
     }
 
     try {
-      const existing = await db.contact.findFirst({
-        where: { primaryPhone: formData.primaryPhone.trim() },
-      });
+      const existing = await ContactService.findContactByPhone(formData.primaryPhone.trim());
       if (existing) {
         toast('该手机号已被使用', 'warning');
         return;
       }
 
-      const contactCount = await db.contact.count();
+      const contactCount = await ContactService.countContacts();
       const newCode = `C${String(contactCount + 1).padStart(3, '0')}`;
 
-      await db.contact.create({
-        data: {
-          code: newCode,
-          name: formData.name.trim(),
-          primaryPhone: formData.primaryPhone.trim(),
-          address: formData.address.trim() || null,
-          remark: formData.remark.trim() || null,
-          contactType: formData.contactType,
-        },
+      await ContactService.createContact({
+        code: newCode,
+        name: formData.name.trim(),
+        primaryPhone: formData.primaryPhone.trim(),
+        address: formData.address.trim() || undefined,
+        remark: formData.remark.trim() || undefined,
+        contactType: formData.contactType,
       });
 
       setShowAddDialog(false);
@@ -212,27 +330,18 @@ export function Contacts() {
     }
 
     try {
-      const existing = await db.contact.findFirst({
-        where: {
-          primaryPhone: formData.primaryPhone.trim(),
-          NOT: { id: editContact.id },
-        },
-      });
+      const existing = await ContactService.checkPhoneExists(formData.primaryPhone.trim(), editContact.id);
       if (existing) {
         toast('该手机号已被其他联系人使用', 'warning');
         return;
       }
 
-      await db.contact.update({
-        where: { id: editContact.id },
-        data: {
-          name: formData.name.trim(),
-          primaryPhone: formData.primaryPhone.trim(),
-          address: formData.address.trim() || null,
-          remark: formData.remark.trim() || null,
-          contactType: formData.contactType,
-          valueScore: formData.valueScore,
-        },
+      await ContactService.updateContact(editContact.id, {
+        name: formData.name.trim(),
+        primaryPhone: formData.primaryPhone.trim(),
+        address: formData.address.trim() || undefined,
+        remark: formData.remark.trim() || undefined,
+        contactType: formData.contactType,
       });
 
       setEditContact(null);
@@ -251,27 +360,13 @@ export function Contacts() {
 
     try {
       const [sales, rebates, projects] = await Promise.all([
-        db.saleOrder.findMany({
-          where: { buyerId: person.id },
-          include: { project: true },
-          orderBy: { saleDate: 'desc' },
-          take: 10,
-        }),
-        db.rebate.findMany({
-          where: { plumberId: person.id },
-          orderBy: { recordedAt: 'desc' },
-          take: 10,
-        }),
-        db.contactProjectRole.findMany({
-          where: { contactId: person.id },
-          include: { project: true },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        }),
+        ContactService.getContactOrders(person.id),
+        ContactService.getContactRebates(person.id),
+        ContactService.getContactProjectRoles(person.id),
       ]);
-      setDetailSales(sales);
-      setDetailRebates(rebates);
-      setDetailProjects(projects.map((r: any) => r.project).filter(Boolean));
+      setDetailSales(sales.slice(0, 10));
+      setDetailRebates(rebates.slice(0, 10));
+      setDetailProjects(projects.slice(0, 10).map((r: any) => r.project).filter(Boolean));
     } catch (error) {
       console.error('[Contacts] 加载联系人详情失败:', error);
       toast('加载详情失败', 'error');
@@ -295,9 +390,14 @@ export function Contacts() {
           <h2 className="text-2xl font-bold text-slate-800">联系人管理</h2>
           <p className="text-slate-500 mt-1">统一管理联系人和客户数据</p>
         </div>
-        <Button className="bg-orange-500 hover:bg-orange-600" onClick={() => setShowAddDialog(true)}>
-          + 添加联系人
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleRecalculateAllScores}>
+            🔄 重新计算所有评分
+          </Button>
+          <Button className="bg-orange-500 hover:bg-orange-600" onClick={() => setShowAddDialog(true)}>
+            + 添加联系人
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -374,7 +474,10 @@ export function Contacts() {
                 <TableHead>编号</TableHead>
                 <TableHead>姓名</TableHead>
                 <TableHead>类型</TableHead>
-                <TableHead>评分</TableHead>
+                <TableHead>价值评分</TableHead>
+                <TableHead>信用等级</TableHead>
+                <TableHead>风险等级</TableHead>
+                <TableHead>信用额度</TableHead>
                 <TableHead>主手机号</TableHead>
                 <TableHead>其他电话</TableHead>
                 <TableHead>关联主体</TableHead>
@@ -387,7 +490,7 @@ export function Contacts() {
             <TableBody>
               {tableProps.total === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-slate-500">
+                  <TableCell colSpan={14} className="text-center py-8 text-slate-500">
                     暂无数据
                   </TableCell>
                 </TableRow>
@@ -395,7 +498,12 @@ export function Contacts() {
                 tableProps.data.map((person) => (
                   <TableRow key={person.id}>
                     <TableCell className="font-mono text-slate-500">{person.code}</TableCell>
-                    <TableCell className="font-medium">{person.name}</TableCell>
+                    <TableCell className="font-medium">
+                      {person.blacklist && (
+                        <Badge variant="destructive" className="mr-2">黑名单</Badge>
+                      )}
+                      {person.name}
+                    </TableCell>
                     <TableCell>
                       {person.contactType === 'customer' && <Badge variant="outline" className="bg-blue-50">客户</Badge>}
                       {person.contactType === 'plumber' && <Badge variant="outline" className="bg-green-50">水电工</Badge>}
@@ -406,10 +514,28 @@ export function Contacts() {
                         <div className="flex items-center gap-1">
                           <span className="font-bold text-orange-600">{person.valueScore.toFixed(1)}</span>
                           <span className="text-yellow-500">★</span>
+                          {person.autoTag && (
+                            <span className={`text-xs ${getAutoTagColor(person.autoTag)}`}>
+                              {getAutoTagLabel(person.autoTag)}
+                            </span>
+                          )}
                         </div>
                       ) : (
                         <span className="text-slate-400">-</span>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={getCreditLevelColor(person.creditLevel)}>
+                        {getCreditLevelLabel(person.creditLevel)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={getRiskLevelColor(person.riskLevel)}>
+                        {getRiskLevelLabel(person.riskLevel)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-mono">
+                      {formatCurrency(person.creditLimit)}
                     </TableCell>
                     <TableCell className="text-orange-600">{person.primaryPhone}</TableCell>
                     <TableCell className="text-slate-500 text-sm">
@@ -432,7 +558,7 @@ export function Contacts() {
                         : '-'}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -446,6 +572,21 @@ export function Contacts() {
                           onClick={() => openEditDialog(person)}
                         >
                           编辑
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRecalculateScore(person)}
+                          title="重新计算评分"
+                        >
+                          🔄
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleToggleBlacklist(person)}
+                        >
+                          {person.blacklist ? '移出黑名单' : '加入黑名单'}
                         </Button>
                       </div>
                     </TableCell>
@@ -666,6 +807,61 @@ export function Contacts() {
                 </div>
               </div>
 
+              {/* 信用评估卡片 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">信用评估</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <p className="text-sm text-slate-500">价值评分</p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl font-bold text-orange-600">
+                          {contactDetail.valueScore != null ? contactDetail.valueScore.toFixed(1) : '-'}
+                        </span>
+                        {contactDetail.valueScore != null && <span className="text-yellow-500 text-xl">★</span>}
+                        {contactDetail.autoTag && (
+                          <span className={`text-sm ${getAutoTagColor(contactDetail.autoTag)}`}>
+                            {getAutoTagLabel(contactDetail.autoTag)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500">信用等级</p>
+                      <Badge className={getCreditLevelColor(contactDetail.creditLevel)}>
+                        {getCreditLevelLabel(contactDetail.creditLevel)}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500">风险等级</p>
+                      <Badge className={getRiskLevelColor(contactDetail.riskLevel)}>
+                        {getRiskLevelLabel(contactDetail.riskLevel)}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500">信用额度</p>
+                      <span className="text-xl font-bold text-orange-600">
+                        {formatCurrency(contactDetail.creditLimit)}
+                      </span>
+                    </div>
+                  </div>
+                  {contactDetail.blacklist && (
+                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="flex items-center gap-2 text-red-700">
+                        <span className="text-sm">⚠️ 该联系人在黑名单中</span>
+                        {contactDetail._contactData.blacklistReason && (
+                          <span className="text-sm text-red-600">
+                            - {contactDetail._contactData.blacklistReason}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-50 rounded-lg">
                   <h4 className="font-medium mb-3">基本信息</h4>
@@ -841,6 +1037,51 @@ export function Contacts() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 黑名单对话框 */}
+      <Dialog open={showBlacklistDialog} onOpenChange={setShowBlacklistDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+            {selectedContactForBlacklist?.blacklist 
+              ? '移出黑名单' 
+              : '加入黑名单'} - {selectedContactForBlacklist?.name}
+          </DialogTitle>
+          <DialogDescription>
+            {selectedContactForBlacklist?.blacklist
+              ? '确认要将该联系人从黑名单中移除吗？'
+              : '请提供加入黑名单的原因，点击确认将该联系人加入黑名单。'}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          {!selectedContactForBlacklist?.blacklist && (
+            <div>
+              <label className="text-sm font-medium mb-1 block">
+                原因
+              </label>
+              <Input
+                value={blacklistReason}
+                onChange={(e) => setBlacklistReason(e.target.value)}
+                placeholder="请输入原因"
+              />
+            </div>
+          )}
+          {selectedContactForBlacklist?.blacklist && selectedContactForBlacklist?.blacklistReason && (
+            <div className="bg-slate-50 p-3 rounded-lg">
+              <p className="text-sm text-slate-500">当前原因: {selectedContactForBlacklist.blacklistReason}</p>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setShowBlacklistDialog(false)}>
+            取消
+          </Button>
+          <Button onClick={handleConfirmBlacklist}>
+            确认
+          </Button>
+        </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

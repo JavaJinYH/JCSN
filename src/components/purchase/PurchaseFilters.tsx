@@ -14,9 +14,11 @@ interface PurchaseFiltersProps {
   selectedCategory: string;
   searchTerm: string;
   dateRange: { start: string; end: string };
+  statusFilter: string;
   onCategoryChange: (value: string) => void;
   onSearchChange: (value: string) => void;
   onDateRangeChange: (range: { start: string; end: string }) => void;
+  onStatusChange: (value: string) => void;
   onReset: () => void;
 }
 
@@ -25,13 +27,31 @@ export function PurchaseFilters({
   selectedCategory,
   searchTerm,
   dateRange,
+  statusFilter,
   onCategoryChange,
   onSearchChange,
   onDateRangeChange,
+  onStatusChange,
   onReset,
 }: PurchaseFiltersProps) {
   return (
     <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-slate-500">进货状态:</span>
+        <Select value={statusFilter} onValueChange={onStatusChange}>
+          <SelectTrigger className="w-28 h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部</SelectItem>
+            <SelectItem value="draft">草稿</SelectItem>
+            <SelectItem value="sent">已发送</SelectItem>
+            <SelectItem value="delivered">已到货</SelectItem>
+            <SelectItem value="completed">已完成</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="flex items-center gap-2">
         <span className="text-sm text-slate-500">商品分类:</span>
         <Select value={selectedCategory} onValueChange={onCategoryChange}>

@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DataTablePagination, useDataTable } from '@/components/DataTable';
-import { db } from '@/lib/db';
 import { sortByFrequency } from '@/lib/frequency';
 import { generateBatchNo, formatCurrency, formatDateTime } from '@/lib/utils';
 import type { PurchaseOrder, Purchase, Product, Category, Supplier } from '@/lib/types';
@@ -221,13 +220,10 @@ export function Purchases() {
 
           await (window as any).electronAPI.photo.save(fileName, dataUrl, 'purchases');
 
-          await db.purchasePhoto.create({
-            data: {
-              purchaseId: createdItems[0].id,
-              photoPath: `purchases/${fileName}`,
-              photoType: photo.type,
-              photoRemark: photo.remark || null,
-            },
+          await PurchaseService.createPurchasePhoto(createdItems[0].id, {
+            url: `purchases/${fileName}`,
+            type: photo.type,
+            remark: photo.remark || undefined,
           });
         }
       }
@@ -718,13 +714,10 @@ function OrderDetail({
 
     setSaving(true);
     try {
-      await db.purchase.update({
-        where: { id: editingItemId },
-        data: {
-          quantity: qty,
-          unitPrice: price,
-          totalAmount: qty * price,
-        },
+      await PurchaseService.updatePurchase(editingItemId, {
+        quantity: qty,
+        unitPrice: price,
+        totalAmount: qty * price,
       });
       setEditingItemId(null);
       loadOrder();
@@ -745,7 +738,7 @@ function OrderDetail({
     }
 
     try {
-      await db.purchase.delete({ where: { id: itemId } });
+      await PurchaseService.deletePurchase(itemId);
       loadOrder();
       toast('删除成功', 'success');
     } catch (error) {

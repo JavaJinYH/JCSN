@@ -6,6 +6,10 @@ declare global {
     electronAPI: {
       getAppVersion: () => Promise<string>;
       getAppPath: () => Promise<string>;
+      app: {
+        restart: () => Promise<void>;
+        reload: () => Promise<void>;
+      };
       db: {
         findMany: (model: string, args?: any) => Promise<any>;
         findFirst: (model: string, args?: any) => Promise<any>;

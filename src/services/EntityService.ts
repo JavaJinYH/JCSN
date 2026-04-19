@@ -13,6 +13,37 @@ export const EntityService = {
     });
   },
 
+  async getEntityStats(entityId: string) {
+    const orders = await db.saleOrder.findMany({
+      where: { paymentEntityId: entityId },
+      select: { totalAmount: true, paidAmount: true },
+    });
+    return {
+      total: orders.reduce((sum, o) => sum + o.totalAmount, 0),
+      paid: orders.reduce((sum, o) => sum + o.paidAmount, 0),
+      count: orders.length,
+    };
+  },
+
+  async getAllEntitiesStats() {
+    const entities = await db.entity.findMany({
+      orderBy: { name: 'asc' },
+    });
+    const stats: Record<string, { total: number; paid: number; count: number }> = {};
+    for (const entity of entities) {
+      const orders = await db.saleOrder.findMany({
+        where: { paymentEntityId: entity.id },
+        select: { totalAmount: true, paidAmount: true },
+      });
+      stats[entity.id] = {
+        total: orders.reduce((sum, o) => sum + o.totalAmount, 0),
+        paid: orders.reduce((sum, o) => sum + o.paidAmount, 0),
+        count: orders.length,
+      };
+    }
+    return { entities, stats };
+  },
+
   async getProjectsByEntity(entityId: string, status?: string) {
     const where: any = { entityId };
     if (status) where.status = status;
@@ -78,9 +109,80 @@ export const EntityService = {
     });
   },
 
+  async updateEntity(id: string, data: { name?: string; entityType?: string; contactId?: string; address?: string; remark?: string }) {
+    return db.entity.update({
+      where: { id },
+      data: {
+        name: data.name,
+        entityType: data.entityType,
+        contactId: data.contactId,
+        address: data.address,
+        remark: data.remark,
+      },
+    });
+  },
+
   async deleteEntity(id: string) {
     return db.entity.delete({
       where: { id },
     });
+  },
+
+  async findCashEntity() {
+    return db.entity.findFirst({
+      where: { entityType: 'cash' },
+    });
+  },
+
+  async ensureCashEntity() {
+    let cashEntity = await this.findCashEntity();
+    if (!cashEntity) {
+      cashEntity = await db.entity.create({
+        data: {
+          name: '现金账户',
+          entityType: 'cash',
+          address: '系统内置',
+          creditLimit: 0,
+          remark: '系统内置现金账户，用于无挂靠主体销售',
+        },
+      });
+    }
+    return cashEntity;
+  },
+
+  async migratePersonalWalkInToCash() {
+    const personalWalkIn = await db.entity.findFirst({
+      where: {
+        name: '散客',
+        entityType: 'personal',
+      },
+    });
+
+    if (!personalWalkIn) {
+      return { message: '没有找到个人类型的散客实体，无需迁移', count: 0 };
+    }
+
+    const cashEntity = await this.ensureCashEntity();
+
+    const relatedOrders = await db.saleOrder.findMany({
+      where: { paymentEntityId: personalWalkIn.id },
+    });
+
+    if (relatedOrders.length === 0) {
+      await db.entity.delete({ where: { id: personalWalkIn.id } });
+      return { message: '散客实体没有关联订单，已直接删除', count: 0 };
+    }
+
+    await db.saleOrder.updateMany({
+      where: { paymentEntityId: personalWalkIn.id },
+      data: { paymentEntityId: cashEntity.id },
+    });
+
+    await db.entity.delete({ where: { id: personalWalkIn.id } });
+
+    return {
+      message: `已将 ${relatedOrders.length} 个销售订单迁移到现金账户，并删除散客实体`,
+      count: relatedOrders.length,
+    };
   },
 };

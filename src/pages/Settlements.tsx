@@ -25,8 +25,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { DataTableFilters, DataTablePagination, useDataTable } from '@/components/DataTable';
-import { db } from '@/lib/db';
+import { Textarea } from '@/components/ui/textarea';
+import { SettlementService } from '@/services/SettlementService';
+import { BadDebtService } from '@/services/BadDebtService';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import type { Entity, SaleOrder, Contact } from '@/lib/types';
@@ -51,7 +52,6 @@ const filters = [
     { value: 'all', label: '全部' },
     { value: 'personal', label: '个人' },
     { value: 'company', label: '公司' },
-    { value: 'government', label: '政府' },
   ]},
   { key: 'search', label: '关键词', type: 'text' as const, placeholder: '主体名称/联系人电话...' },
 ];
@@ -62,6 +62,8 @@ export function Settlements() {
   const [activeTab, setActiveTab] = useState<'receivables' | 'credits'>('receivables');
   const [filterValues, setFilterValues] = useState<Record<string, any>>({});
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [showNegotiatedDialog, setShowNegotiatedDialog] = useState(false);
+  const [showBadDebtDialog, setShowBadDebtDialog] = useState(false);
   const [showEntityDetailDialog, setShowEntityDetailDialog] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<EntityWithStats | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<SaleOrder | null>(null);
@@ -72,6 +74,12 @@ export function Settlements() {
     remark: '',
   });
 
+  const [writeOffFormData, setWriteOffFormData] = useState({
+    amount: '',
+    reason: '',
+    operatorNote: '',
+  });
+
   useEffect(() => {
     loadData();
   }, []);
@@ -79,26 +87,31 @@ export function Settlements() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const entitiesData = await db.entity.findMany({
-        include: { contact: true },
-        orderBy: { name: 'asc' },
-      });
+      const entitiesData = await SettlementService.getEntitiesWithContact();
 
       const entitiesWithStats: EntityWithStats[] = await Promise.all(
         entitiesData.map(async (entity) => {
-          const orders = await db.saleOrder.findMany({
-            where: { paymentEntityId: entity.id },
-            include: {
-              buyer: true,
-              project: true,
-              payments: true,
-            },
-            orderBy: { saleDate: 'desc' },
-          });
+          const orders = await SettlementService.getOrdersByEntity(entity.id);
+          
+          let totalReceivable = 0;
+          let totalPaid = 0;
 
-          const totalReceivable = orders.reduce((sum, o) => sum + o.totalAmount, 0);
-          const totalPaid = orders.reduce((sum, o) => sum + o.paidAmount, 0);
-          const totalRemaining = totalReceivable - totalPaid;
+          for (const order of orders) {
+            let orderTotal = order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0);
+            
+            for (const ret of order.returns || []) {
+              orderTotal -= ret.totalAmount;
+            }
+
+            for (const writeOff of order.badDebtWriteOffs || []) {
+              orderTotal -= writeOff.writtenOffAmount;
+            }
+
+            totalReceivable += orderTotal;
+            totalPaid += order.paidAmount;
+          }
+
+          const totalRemaining = Math.max(0, totalReceivable - totalPaid);
 
           return {
             ...entity,
@@ -119,6 +132,37 @@ export function Settlements() {
     }
   };
 
+  const calculateOrderBalance = (order: any) => {
+    let total = order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0);
+    let paid = order.paidAmount;
+
+    for (const ret of order.returns || []) {
+      total -= ret.totalAmount;
+    }
+
+    for (const writeOff of order.badDebtWriteOffs || []) {
+      total -= writeOff.writtenOffAmount;
+    }
+
+    return Math.max(0, total - paid);
+  };
+
+  const isOrderOverdue = (order: any) => {
+    const remaining = calculateOrderBalance(order);
+    const saleDate = new Date(order.saleDate);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    return remaining > 0 && saleDate < thirtyDaysAgo;
+  };
+
+  const getOrderStatus = (order: any) => {
+    const remaining = calculateOrderBalance(order);
+    if (remaining <= 0) return 'settled';
+    if (isOrderOverdue(order)) return 'overdue';
+    if (order.paidAmount > 0) return 'partial';
+    return 'pending';
+  };
+
   const handleFilterChange = (key: string, value: any) => {
     setFilterValues((prev) => ({ ...prev, [key]: value }));
   };
@@ -131,10 +175,7 @@ export function Settlements() {
     return entities.filter((entity) => {
       if (filterValues.status && filterValues.status !== 'all') {
         if (filterValues.status === 'overdue') {
-          if (!entity.orders?.some(o => {
-            const remaining = o.totalAmount - o.paidAmount;
-            return remaining > 0 && o.saleDate && new Date() > new Date(new Date(o.saleDate).getTime() + 30 * 24 * 60 * 60 * 1000);
-          })) return false;
+          if (!entity.orders?.some(o => isOrderOverdue(o) && calculateOrderBalance(o) > 0)) return false;
         } else if (filterValues.status === 'settled') {
           if (entity.totalRemaining > 0) return false;
         } else {
@@ -156,11 +197,6 @@ export function Settlements() {
     });
   }, [entities, filterValues]);
 
-  const tableProps = useDataTable<EntityWithStats>({
-    data: filteredEntities,
-    defaultPageSize: 20,
-  });
-
   const totalReceivable = useMemo(() => {
     return entities.reduce((sum, e) => sum + e.totalReceivable, 0);
   }, [entities]);
@@ -170,12 +206,9 @@ export function Settlements() {
   }, [entities]);
 
   const overdueCount = useMemo(() => {
-    return entities.filter(e => {
-      return e.orders?.some(o => {
-        const remaining = o.totalAmount - o.paidAmount;
-        return remaining > 0 && o.saleDate && new Date() > new Date(new Date(o.saleDate).getTime() + 30 * 24 * 60 * 60 * 1000);
-      });
-    }).length;
+    return entities.filter(e => 
+      e.orders?.some(o => isOrderOverdue(o) && calculateOrderBalance(o) > 0)
+    ).length;
   }, [entities]);
 
   const highCreditUsedCount = useMemo(() => {
@@ -184,7 +217,7 @@ export function Settlements() {
 
   const handleOpenPaymentDialog = (order: SaleOrder) => {
     setSelectedOrder(order);
-    const remaining = order.totalAmount - order.paidAmount;
+    const remaining = calculateOrderBalance(order);
     setPaymentFormData({
       amount: remaining.toFixed(2),
       method: '现金',
@@ -204,33 +237,29 @@ export function Settlements() {
 
     try {
       const newPaidAmount = selectedOrder.paidAmount + amount;
-      const remaining = selectedOrder.totalAmount - newPaidAmount;
+      const newRemaining = calculateOrderBalance(selectedOrder) - amount;
+      const newStatus = newRemaining <= 0 ? 'completed' : 'partial';
 
-      await db.saleOrder.update({
-        where: { id: selectedOrder.id },
-        data: {
-          paidAmount: newPaidAmount,
-          status: remaining <= 0 ? 'completed' : 'partial',
-        },
+      await SettlementService.updateOrderPayment(selectedOrder.id, {
+        paidAmount: newPaidAmount,
+        status: newStatus,
       });
 
-      await db.orderPayment.create({
-        data: {
-          orderId: selectedOrder.id,
-          amount,
-          method: paymentFormData.method,
-          payerName: selectedOrder.payer?.name || null,
-          paidAt: new Date(),
-          remark: paymentFormData.remark || '客户还款',
-        },
+      await SettlementService.createPayment({
+        orderId: selectedOrder.id,
+        amount,
+        method: paymentFormData.method,
+        payerName: selectedOrder.buyer?.name,
+        remark: paymentFormData.remark || '客户还款',
       });
 
-      await db.entity.update({
-        where: { id: selectedOrder.paymentEntityId },
-        data: {
-          creditUsed: Math.max(0, (selectedEntity?.creditUsed || 0) - amount),
-        },
-      });
+      if (selectedOrder.paymentEntityId) {
+        const entity = entities.find(e => e.id === selectedOrder.paymentEntityId);
+        if (entity) {
+          const newCreditUsed = Math.max(0, (entity.creditUsed || 0) - amount);
+          await SettlementService.updateEntityCredit(entity.id, newCreditUsed);
+        }
+      }
 
       setShowPaymentDialog(false);
       loadData();
@@ -252,27 +281,137 @@ export function Settlements() {
         return <Badge className="bg-blue-500">个人</Badge>;
       case 'company':
         return <Badge className="bg-purple-500">公司</Badge>;
-      case 'government':
-        return <Badge className="bg-green-500">政府</Badge>;
       default:
         return <Badge variant="secondary">{type}</Badge>;
     }
   };
 
   const getOrderStatusBadge = (order: SaleOrder) => {
-    const remaining = order.totalAmount - order.paidAmount;
-    const isOverdue = order.saleDate && new Date() > new Date(new Date(order.saleDate).getTime() + 30 * 24 * 60 * 60 * 1000);
+    const status = getOrderStatus(order);
 
-    if (remaining <= 0) {
-      return <Badge className="bg-green-500">已结清</Badge>;
+    switch (status) {
+      case 'settled':
+        return <Badge className="bg-green-500">已结清</Badge>;
+      case 'overdue':
+        return <Badge variant="destructive">已逾期</Badge>;
+      case 'partial':
+        return <Badge variant="warning">部分还款</Badge>;
+      default:
+        return <Badge variant="secondary">待收款</Badge>;
     }
-    if (isOverdue) {
-      return <Badge variant="destructive">已逾期</Badge>;
+  };
+
+  const getWriteOffStatusBadge = (type: string, status: string) => {
+    if (type === 'negotiated') {
+      return <Badge className="bg-blue-500">协商减免</Badge>;
+    } else if (type === 'bad_debt') {
+      if (status === 'pending') {
+        return <Badge className="bg-yellow-500">待审批坏账</Badge>;
+      } else if (status === 'approved') {
+        return <Badge className="bg-red-500">坏账核销</Badge>;
+      } else if (status === 'rejected') {
+        return <Badge variant="secondary">已拒绝</Badge>;
+      }
     }
-    if (order.paidAmount > 0) {
-      return <Badge variant="warning">部分还款</Badge>;
+    return <Badge variant="secondary">{type}</Badge>;
+  };
+
+  const handleOpenNegotiatedDialog = (order: SaleOrder) => {
+    setSelectedOrder(order);
+    const remaining = calculateOrderBalance(order);
+    setWriteOffFormData({
+      amount: remaining.toFixed(2),
+      reason: '',
+      operatorNote: '',
+    });
+    setShowNegotiatedDialog(true);
+  };
+
+  const handleOpenBadDebtDialog = (order: SaleOrder) => {
+    setSelectedOrder(order);
+    const remaining = calculateOrderBalance(order);
+    setWriteOffFormData({
+      amount: remaining.toFixed(2),
+      reason: '',
+      operatorNote: '',
+    });
+    setShowBadDebtDialog(true);
+  };
+
+  const handleNegotiatedSettlement = async () => {
+    if (!selectedOrder) return;
+
+    const amount = parseFloat(writeOffFormData.amount);
+    if (isNaN(amount) || amount <= 0) {
+      toast('请输入有效的减免金额', 'warning');
+      return;
     }
-    return <Badge variant="secondary">待收款</Badge>;
+    if (!writeOffFormData.reason.trim()) {
+      toast('请填写协商减免原因', 'warning');
+      return;
+    }
+
+    try {
+      const contactId = selectedOrder.buyerId || selectedOrder.payerId || '';
+      if (!contactId) {
+        toast('无法确定联系人', 'error');
+        return;
+      }
+
+      await BadDebtService.createNegotiatedSettlement({
+        saleOrderId: selectedOrder.id,
+        contactId,
+        writtenOffAmount: amount,
+        reason: writeOffFormData.reason,
+        operatorNote: writeOffFormData.operatorNote,
+        createdBy: '当前用户',
+      });
+
+      setShowNegotiatedDialog(false);
+      loadData();
+      toast('协商减免记录成功', 'success');
+    } catch (error) {
+      console.error('[Settlements] 协商减免失败:', error);
+      toast('操作失败，请重试', 'error');
+    }
+  };
+
+  const handleBadDebtWriteOff = async () => {
+    if (!selectedOrder) return;
+
+    const amount = parseFloat(writeOffFormData.amount);
+    if (isNaN(amount) || amount <= 0) {
+      toast('请输入有效的坏账金额', 'warning');
+      return;
+    }
+    if (!writeOffFormData.reason.trim()) {
+      toast('请填写坏账原因', 'warning');
+      return;
+    }
+
+    try {
+      const contactId = selectedOrder.buyerId || selectedOrder.payerId || '';
+      if (!contactId) {
+        toast('无法确定联系人', 'error');
+        return;
+      }
+
+      await BadDebtService.createBadDebtWriteOff({
+        saleOrderId: selectedOrder.id,
+        contactId,
+        writtenOffAmount: amount,
+        reason: writeOffFormData.reason,
+        operatorNote: writeOffFormData.operatorNote,
+        createdBy: '当前用户',
+      });
+
+      setShowBadDebtDialog(false);
+      loadData();
+      toast('坏账申请已提交，请等待审批', 'success');
+    } catch (error) {
+      console.error('[Settlements] 坏账申请失败:', error);
+      toast('操作失败，请重试', 'error');
+    }
   };
 
   if (loading) {
@@ -287,7 +426,7 @@ export function Settlements() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">结账对账管理</h2>
+          <h2 className="text-2xl font-bold text-slate-800">挂账结算</h2>
           <p className="text-slate-500 mt-1">按付款主体查询欠款 - 账目挂在主体下</p>
         </div>
       </div>
@@ -347,12 +486,35 @@ export function Settlements() {
       {activeTab === 'receivables' && (
         <Card>
           <CardHeader>
-            <DataTableFilters
-              filters={filters}
-              values={filterValues}
-              onChange={handleFilterChange}
-              onReset={handleResetFilters}
-            />
+            <div className="flex items-center gap-4 flex-wrap">
+              {filters.map((filter) => (
+                <div key={filter.key} className="flex items-center gap-2">
+                  <span className="text-sm text-slate-600">{filter.label}:</span>
+                  {filter.type === 'select' ? (
+                    <Select value={filterValues[filter.key] || 'all'} onValueChange={(v) => handleFilterChange(filter.key, v)}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filter.options.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      type="text"
+                      placeholder={filter.placeholder}
+                      value={filterValues[filter.key] || ''}
+                      onChange={(e) => handleFilterChange(filter.key, e.target.value)}
+                      className="w-48"
+                    />
+                  )}
+                </div>
+              ))}
+              <Button variant="outline" onClick={handleResetFilters}>重置筛选</Button>
+              <Button variant="outline" onClick={loadData}>刷新数据</Button>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
@@ -369,15 +531,15 @@ export function Settlements() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tableProps.data.length === 0 ? (
+                {filteredEntities.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8 text-slate-500">
                       暂无应收账款数据
                     </TableCell>
                   </TableRow>
                 ) : (
-                  tableProps.data.map((entity) => {
-                    const outstandingOrders = entity.orders?.filter(o => (o.totalAmount - o.paidAmount) > 0) || [];
+                  filteredEntities.map((entity) => {
+                    const outstandingOrders = entity.orders?.filter(o => calculateOrderBalance(o) > 0) || [];
                     return (
                       <TableRow key={entity.id}>
                         <TableCell>
@@ -413,15 +575,6 @@ export function Settlements() {
                 )}
               </TableBody>
             </Table>
-            <DataTablePagination
-              pagination={{
-                page: tableProps.page,
-                pageSize: tableProps.pageSize,
-                total: tableProps.total,
-              }}
-              onPageChange={tableProps.setPage}
-              onPageSizeChange={tableProps.setPageSize}
-            />
           </CardContent>
         </Card>
       )}
@@ -501,7 +654,7 @@ export function Settlements() {
                 <div className="font-mono">{selectedOrder.invoiceNo || selectedOrder.id.substring(0, 8)}</div>
                 <div className="text-sm text-slate-500 mt-2">订单金额: <span className="text-orange-600">{formatCurrency(selectedOrder.totalAmount)}</span></div>
                 <div className="text-sm text-slate-500">已付金额: <span className="text-green-600">{formatCurrency(selectedOrder.paidAmount)}</span></div>
-                <div className="text-sm text-slate-500">待收金额: <span className="text-red-600 font-bold">{formatCurrency(selectedOrder.totalAmount - selectedOrder.paidAmount)}</span></div>
+                <div className="text-sm text-slate-500">待收金额: <span className="text-red-600 font-bold">{formatCurrency(calculateOrderBalance(selectedOrder))}</span></div>
               </div>
               <div>
                 <label className="text-sm font-medium mb-2 block">还款金额</label>
@@ -642,14 +795,14 @@ export function Settlements() {
                       </TableRow>
                     ) : (
                       selectedEntity.orders?.map((order) => {
-                        const remaining = order.totalAmount - order.paidAmount;
+                        const remaining = calculateOrderBalance(order);
                         return (
                           <TableRow key={order.id}>
                             <TableCell className="font-mono text-sm">
                               {order.invoiceNo || order.id.substring(0, 8)}
                             </TableCell>
                             <TableCell className="text-slate-500">
-                              {new Date(order.saleDate).toLocaleDateString('zh-CN')}
+                              {formatDate(new Date(order.saleDate))}
                             </TableCell>
                             <TableCell>{order.buyer?.name || '-'}</TableCell>
                             <TableCell className="text-slate-500">
@@ -663,22 +816,40 @@ export function Settlements() {
                             </TableCell>
                             <TableCell>
                               {remaining > 0 && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedOrder(order);
-                                    const rem = order.totalAmount - order.paidAmount;
-                                    setPaymentFormData({
-                                      amount: rem.toFixed(2),
-                                      method: '现金',
-                                      remark: '',
-                                    });
-                                    setShowPaymentDialog(true);
-                                  }}
-                                >
-                                  还款
-                                </Button>
+                                <div className="flex gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedOrder(order);
+                                      const rem = calculateOrderBalance(order);
+                                      setPaymentFormData({
+                                        amount: rem.toFixed(2),
+                                        method: '现金',
+                                        remark: '',
+                                      });
+                                      setShowPaymentDialog(true);
+                                    }}
+                                  >
+                                    还款
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-blue-600"
+                                    onClick={() => handleOpenNegotiatedDialog(order)}
+                                  >
+                                    协商减免
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-600"
+                                    onClick={() => handleOpenBadDebtDialog(order)}
+                                  >
+                                    坏账处理
+                                  </Button>
+                                </div>
                               )}
                             </TableCell>
                           </TableRow>
@@ -696,6 +867,111 @@ export function Settlements() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showNegotiatedDialog} onOpenChange={setShowNegotiatedDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>协商减免</DialogTitle>
+          </DialogHeader>
+          {selectedOrder && (
+            <div className="space-y-4 py-4">
+              <div className="p-3 bg-blue-50 rounded-lg">
+                <div className="text-sm text-slate-500">销售单号</div>
+                <div className="font-mono">{selectedOrder.invoiceNo || selectedOrder.id.substring(0, 8)}</div>
+                <div className="text-sm text-slate-500 mt-2">订单金额: <span className="text-orange-600">{formatCurrency(selectedOrder.totalAmount)}</span></div>
+                <div className="text-sm text-slate-500">已付金额: <span className="text-green-600">{formatCurrency(selectedOrder.paidAmount)}</span></div>
+                <div className="text-sm text-slate-500">待收金额: <span className="text-red-600 font-bold">{formatCurrency(calculateOrderBalance(selectedOrder))}</span></div>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">减免金额</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={writeOffFormData.amount}
+                  onChange={(e) => setWriteOffFormData({ ...writeOffFormData, amount: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">协商减免原因 *</label>
+                <Textarea
+                  value={writeOffFormData.reason}
+                  onChange={(e) => setWriteOffFormData({ ...writeOffFormData, reason: e.target.value })}
+                  placeholder="请填写协商减免原因，如：客户困难协商减免..."
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">备注说明</label>
+                <Textarea
+                  value={writeOffFormData.operatorNote}
+                  onChange={(e) => setWriteOffFormData({ ...writeOffFormData, operatorNote: e.target.value })}
+                  placeholder="可选"
+                  rows={2}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNegotiatedDialog(false)}>取消</Button>
+            <Button onClick={handleNegotiatedSettlement} className="bg-blue-600 hover:bg-blue-700">确认协商减免</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showBadDebtDialog} onOpenChange={setShowBadDebtDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>坏账处理申请</DialogTitle>
+          </DialogHeader>
+          {selectedOrder && (
+            <div className="space-y-4 py-4">
+              <div className="p-3 bg-red-50 rounded-lg">
+                <div className="text-sm text-slate-500">销售单号</div>
+                <div className="font-mono">{selectedOrder.invoiceNo || selectedOrder.id.substring(0, 8)}</div>
+                <div className="text-sm text-slate-500 mt-2">订单金额: <span className="text-orange-600">{formatCurrency(selectedOrder.totalAmount)}</span></div>
+                <div className="text-sm text-slate-500">已付金额: <span className="text-green-600">{formatCurrency(selectedOrder.paidAmount)}</span></div>
+                <div className="text-sm text-slate-500">待收金额: <span className="text-red-600 font-bold">{formatCurrency(calculateOrderBalance(selectedOrder))}</span></div>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">坏账金额</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={writeOffFormData.amount}
+                  onChange={(e) => setWriteOffFormData({ ...writeOffFormData, amount: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">坏账原因 *</label>
+                <Textarea
+                  value={writeOffFormData.reason}
+                  onChange={(e) => setWriteOffFormData({ ...writeOffFormData, reason: e.target.value })}
+                  placeholder="请填写坏账原因，如：客户失联、长期拖欠无法收回..."
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">备注说明</label>
+                <Textarea
+                  value={writeOffFormData.operatorNote}
+                  onChange={(e) => setWriteOffFormData({ ...writeOffFormData, operatorNote: e.target.value })}
+                  placeholder="可选"
+                  rows={2}
+                />
+              </div>
+              <div className="p-3 bg-yellow-50 rounded-lg text-sm text-yellow-800">
+                ⚠️ 提示：坏账申请提交后需要审批，审批通过后才会正式核销
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBadDebtDialog(false)}>取消</Button>
+            <Button onClick={handleBadDebtWriteOff} className="bg-red-600 hover:bg-red-700">提交坏账申请</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

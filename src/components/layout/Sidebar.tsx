@@ -63,6 +63,8 @@ const menuGroups: MenuGroup[] = [
       { path: '/settlements', label: '挂账结算', icon: '📋' },
       { path: '/collections', label: '催账记录', icon: '📞' },
       { path: '/statements', label: '欠款统计', icon: '📄' },
+      { path: '/bad-debts', label: '坏账管理', icon: '💀' },
+      { path: '/reports', label: '报表统计', icon: '📈' },
     ],
   },
   {
@@ -70,7 +72,6 @@ const menuGroups: MenuGroup[] = [
     icon: '🛠️',
     items: [
       { path: '/photos', label: '照片管理', icon: '📷' },
-      { path: '/reports', label: '报表统计', icon: '📈' },
     ],
   },
   {

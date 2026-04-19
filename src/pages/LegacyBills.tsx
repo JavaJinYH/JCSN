@@ -25,7 +25,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { db } from '@/lib/db';
+import { LegacyBillService } from '@/services/LegacyBillService';
+import { ContactService } from '@/services/ContactService';
+import { ProjectService } from '@/services/ProjectService';
+import { formatCurrency, formatDate } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import type { Contact, AccountReceivable, BizProject } from '@/lib/types';
 
@@ -54,12 +57,8 @@ export function LegacyBills() {
     try {
       setLoading(true);
       const [contactsData, projectsData] = await Promise.all([
-        db.contact.findMany({
-          orderBy: { name: 'asc' },
-        }),
-        db.bizProject.findMany({
-          orderBy: { name: 'asc' },
-        }),
+        ContactService.getContacts(),
+        ProjectService.getProjects(),
       ]);
       setContacts(contactsData);
       setProjects(projectsData);
@@ -80,13 +79,7 @@ export function LegacyBills() {
     : contacts;
 
   const getContactBills = async (contactId: string) => {
-    const bills = await db.accountReceivable.findMany({
-      where: {
-        contactId,
-        saleId: null,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const bills = await LegacyBillService.getAccountReceivablesByContact(contactId);
     return bills;
   };
 
@@ -105,16 +98,13 @@ export function LegacyBills() {
       const paidAmount = parseFloat(formData.paidAmount) || 0;
       const remainingAmount = totalAmount - paidAmount;
 
-      await db.accountReceivable.create({
-        data: {
-          contactId: formData.contactId,
-          projectId: null,
-          originalAmount: totalAmount,
-          paidAmount: paidAmount,
-          remainingAmount: remainingAmount,
-          status: remainingAmount > 0 ? 'pending' : 'settled',
-          remark: formData.remark || `历史账单迁：${formData.projectName}`,
-        },
+      await LegacyBillService.createAccountReceivable({
+        contactId: formData.contactId,
+        originalAmount: totalAmount,
+        paidAmount: paidAmount,
+        remainingAmount: remainingAmount,
+        status: remainingAmount > 0 ? 'pending' : 'settled',
+        remark: formData.remark || `历史账单迁：${formData.projectName}`,
       });
 
       toast('历史账单添加成功', 'success');
@@ -134,15 +124,12 @@ export function LegacyBills() {
       const paidAmount = parseFloat(formData.paidAmount) || 0;
       const remainingAmount = totalAmount - paidAmount;
 
-      await db.accountReceivable.update({
-        where: { id: editingBill.id },
-        data: {
-          originalAmount: totalAmount,
-          paidAmount: paidAmount,
-          remainingAmount: remainingAmount,
-          status: remainingAmount > 0 ? 'pending' : 'settled',
-          remark: formData.remark || `历史账单：${formData.projectName}`,
-        },
+      await LegacyBillService.updateAccountReceivable(editingBill.id, {
+        originalAmount: totalAmount,
+        paidAmount: paidAmount,
+        remainingAmount: remainingAmount,
+        status: remainingAmount > 0 ? 'pending' : 'settled',
+        remark: formData.remark || `历史账单：${formData.projectName}`,
       });
 
       toast('账单更新成功', 'success');
@@ -156,9 +143,7 @@ export function LegacyBills() {
 
   const handleDeleteBill = async (bill: AccountReceivable) => {
     try {
-      await db.accountReceivable.delete({
-        where: { id: bill.id },
-      });
+      await LegacyBillService.deleteAccountReceivable(bill.id);
       toast('账单删除成功', 'success');
       loadData();
     } catch (error) {
@@ -409,13 +394,7 @@ function LegacyBillList({
   const loadBills = async () => {
     try {
       setLoading(true);
-      const data = await db.accountReceivable.findMany({
-        where: {
-          contactId,
-          saleId: null,
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+      const data = await LegacyBillService.getAccountReceivablesByContact(contactId);
       setBills(data);
     } catch (error) {
       console.error('[LegacyBillList] 加载失败:', error);

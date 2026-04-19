@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { db } from '@/lib/db';
+import { AuditLogService } from '@/services/AuditLogService';
 import { toast } from '@/components/Toast';
 import type { AuditLog } from '@/lib/types';
 
@@ -55,11 +55,7 @@ export function AuditLogs() {
         whereClause.timestamp = { gte: startDate };
       }
 
-      const data = await db.auditLog.findMany({
-        where: whereClause,
-        orderBy: { timestamp: 'desc' },
-        take: 500,
-      });
+      const data = await AuditLogService.getAuditLogs(whereClause);
 
       setLogs(data);
     } catch (error) {

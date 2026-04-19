@@ -1,10 +1,10 @@
 {
-  "version": "v2.15",
-  "lastUpdated": "2026-04-18",
-  "currentPhase": "Phase 9",
-  "currentTask": "集成测试完成",
-  "currentAction": "Phase 9 集成测试验证通过",
-  "completedPhases": ["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5", "Phase 6", "Phase 7", "Phase 8", "Phase 9"],
+  "version": "v2.16",
+  "lastUpdated": "2026-04-19",
+  "currentPhase": "Phase 10",
+  "currentTask": "进货单完整流程 - 全部完成",
+  "currentAction": "Phase 10 进货单流程全部完成！",
+  "completedPhases": ["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5", "Phase 6", "Phase 7", "Phase 8", "Phase 9", "Phase 10", "Phase 11"],
   "completedTasks": [
     "P1-T1", "P1-T2", "P1-T3", "P1-T4", "P1-T5", "P1-T6", "P1-T7", "P1-T8", "P1-T9",
     "P2-T1", "P2-T2", "P2-T3", "P2-T4", "P2-T5", "P2-T6",
@@ -18,37 +18,12 @@
     "CODE-REVIEW-1", "CODE-REVIEW-2", "CODE-REVIEW-3", "CODE-REVIEW-4",
     "BIZ-DOC-1", "BIZ-DOC-2", "BIZ-DOC-3", "BIZ-DOC-4",
     "BIZ-1", "BIZ-2", "BIZ-3",
-    "BUG-FIX-1"
+    "BUG-FIX-1",
+    "P10-T1", "P10-T2", "P10-T3", "P10-T4", "P10-T5", "P10-T6",
+    "P11-T1", "P11-T2", "P11-T3", "P11-T4"
   ],
-  "pendingTasks": [
-    {
-      "id": "PENDING-1",
-      "name": "进货单完整流程",
-      "description": "库存预警→勾选商品→一键生成进货单草稿→编辑→发送供应商→配送跟踪→到货核对→缺货/退货/换货处理",
-      "phase": "Phase 10",
-      "subTasks": [
-        "P10-T1: Purchase模型添加status字段(draft/sent/delivered/completed)",
-        "P10-T2: 库存预警页面添加'生成进货单'按钮",
-        "P10-T3: 创建PurchaseDraft编辑页面",
-        "P10-T4: 进货单配送状态管理",
-        "P10-T5: 到货核对功能",
-        "P10-T6: 供应商退货/换货处理"
-      ]
-    },
-    {
-      "id": "PENDING-2",
-      "name": "息屏自动锁定",
-      "description": "N分钟无操作后自动弹出登录框，界面模糊化，需输入密码解锁",
-      "phase": "Phase 11",
-      "subTasks": [
-        "P11-T1: 添加息屏时间设置(可在系统设置中配置)",
-        "P11-T2: 实现息屏检测逻辑(监听鼠标键盘事件)",
-        "P11-T3: 登录弹窗组件",
-        "P11-T4: 界面模糊化效果"
-      ]
-    }
-  ],
+  "pendingTasks": [],
   "inProgressFiles": [],
-  "nextSteps": ["P11-T1: 实现息屏自动锁定功能"],
-  "notes": "Phase 1-9全部完成！PENDING-1: 进货单完整流程(大任务), PENDING-2: 息屏自动锁定功能(即将实现)"
+  "nextSteps": [],
+  "notes": "所有计划任务已完成！Phase 10: 进货单完整流程，Phase 11: 息屏自动锁定功能"
 }

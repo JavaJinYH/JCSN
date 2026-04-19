@@ -2203,12 +2203,13 @@ supplier
 
 | 版本 | 日期 | 更新内容 | 变更人 |
 |------|------|----------|--------|
+| v4.10 | 2026-04-19 | **SaleNew.tsx Service层重构**：<br>1. SaleService.createSaleOrder() 添加支付方式和照片保存支持<br>2. SaleNew.tsx 移除直接 db.* 调用，改用 Service 层<br>3. 使用 ProductService 和 ContactService 加载初始数据<br>4. 消除代码泥球，提升可维护性<br>**Deliveries.tsx Bug修复**：<br>5. 修复"添加配送"按钮在费用标准tab时不显示对话框的问题<br>6. Dialog 组件添加 aria-describedby 可访问性支持 | 系统 |
 | v4.9 | 2026-04-19 | **代码重构与架构优化**：<br>1. Sales.tsx 组件拆分（SaleStats/SaleTable/SaleDetail）<br>2. Products.tsx 组件拆分（ProductStats/ProductFilters/ProductTable/ProductImport）<br>3. 提取通用 Hooks（useProducts/useContacts/useCategories）<br>4. 建立 Service 层架构规范<br>5. 添加 Git 提交规范到全局规则 | 系统 |
 | v4.8 | 2026-04-18 | **安全与备份功能**：息屏锁定、数据备份恢复、照片索引检查 | 系统 |
 
 ---
 
-*文档版本: 4.8*
+*文档版本: 4.10*
 *创建日期: 2024-01-15*
-*最后更新: 2026-04-18*
-*更新说明: v4.8更新 - 息屏锁定、数据备份恢复、照片索引检查*
+*最后更新: 2026-04-19*
+*更新说明: v4.10更新 - SaleService重构、Deliveries bug修复*

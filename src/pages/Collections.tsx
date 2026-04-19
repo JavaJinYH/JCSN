@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { db } from '@/lib/db';
+import { CollectionService } from '@/services/CollectionService';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { getAgingLevel } from '@/lib/customerUtils';
 import { toast } from '@/components/Toast';
@@ -53,16 +53,9 @@ export function Collections() {
   const loadData = async () => {
     try {
       const [recordsData, customersData, receivablesData] = await Promise.all([
-        db.collectionRecord.findMany({
-          include: { customer: true },
-          orderBy: { collectionDate: 'desc' },
-        }),
-        db.contact.findMany({ orderBy: { name: 'asc' } }),
-        db.accountReceivable.findMany({
-          where: { remainingAmount: { gt: 0 } },
-          include: { contact: true },
-          orderBy: { createdAt: 'desc' },
-        }),
+        CollectionService.getCollectionRecords(),
+        CollectionService.getContacts(),
+        CollectionService.getReceivables(),
       ]);
       setRecords(recordsData);
       setCustomers(customersData);
@@ -98,21 +91,19 @@ export function Collections() {
         }
       }
 
-      await db.collectionRecord.create({
-        data: {
-          customerId: selectedCustomer,
-          receivableId: selectedReceivable || null,
-          collectionDate,
-          collectionTime: formData.collectionTime || null,
-          collectionMethod: formData.collectionMethod,
-          collectionResult: formData.collectionResult,
-          collectionAmount: formData.collectionAmount ? parseFloat(formData.collectionAmount) : null,
-          followUpDate: formData.followUpDate ? new Date(formData.followUpDate) : null,
-          followUpTime: formData.followUpTime || null,
-          communication: formData.communication || null,
-          nextPlan: formData.nextPlan || null,
-          remark: formData.remark || null,
-        },
+      await CollectionService.createCollectionRecord({
+        customerId: selectedCustomer,
+        receivableId: selectedReceivable || undefined,
+        collectionDate,
+        collectionTime: formData.collectionTime || undefined,
+        collectionMethod: formData.collectionMethod,
+        collectionResult: formData.collectionResult,
+        collectionAmount: formData.collectionAmount ? parseFloat(formData.collectionAmount) : undefined,
+        followUpDate: formData.followUpDate ? new Date(formData.followUpDate) : undefined,
+        followUpTime: formData.followUpTime || undefined,
+        communication: formData.communication || undefined,
+        nextPlan: formData.nextPlan || undefined,
+        remark: formData.remark || undefined,
       });
 
       setShowAddDialog(false);
@@ -139,7 +130,7 @@ export function Collections() {
 
   const handleDeleteRecord = async (id: string) => {
     try {
-      await db.collectionRecord.delete({ where: { id } });
+      await CollectionService.deleteCollectionRecord(id);
       loadData();
       toast('删除成功', 'success');
     } catch (error) {

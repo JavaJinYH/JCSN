@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { formatCurrency, formatProductName } from '@/lib/utils';
+import { formatCurrency, formatProductName, generateBatchNo } from '@/lib/utils';
 import { db } from '@/lib/db';
 import type { Product } from '@/lib/types';
 import { toast } from '@/components/Toast';
@@ -12,6 +12,8 @@ interface PurchaseReturnProps {
     productId: string;
     quantity: number;
     unitPrice: number;
+    supplierId: string | null;
+    supplierName: string | null;
     product: Product;
   } | null;
   open: boolean;
@@ -28,6 +30,8 @@ export function PurchaseReturn({
   const [returnQuantity, setReturnQuantity] = useState('');
   const [marketPrice, setMarketPrice] = useState('');
   const [showMarketPriceDialog, setShowMarketPriceDialog] = useState(false);
+  const [returnType, setReturnType] = useState<'return' | 'exchange'>('return');
+  const [creating, setCreating] = useState(false);
 
   const handleConfirm = async () => {
     if (!purchase || !returnQuantity) {
@@ -50,6 +54,7 @@ export function PurchaseReturn({
   };
 
   const createReturn = async (qty: number, unitPrice: number) => {
+    setCreating(true);
     try {
       await db.purchaseReturn.create({
         data: {
@@ -72,14 +77,36 @@ export function PurchaseReturn({
         data: { stock: { decrement: qty } },
       });
 
+      if (returnType === 'exchange') {
+        const batchNo = generateBatchNo();
+        await db.purchase.create({
+          data: {
+            productId: purchase!.productId,
+            quantity: qty,
+            unitPrice: unitPrice,
+            totalAmount: qty * unitPrice,
+            supplierId: purchase!.supplierId,
+            supplierName: purchase!.supplierName,
+            batchNo,
+            purchaseDate: new Date(),
+            status: 'draft',
+            remark: `换货：替换原进货单 ${purchase!.id.slice(0, 8)}...`,
+          },
+        });
+        toast(`退货成功，换货进货单已生成（草稿状态）`, 'success');
+      } else {
+        toast('退货记录创建成功！', 'success');
+      }
+
       onOpenChange(false);
       setReturnQuantity('');
       setMarketPrice('');
       onSuccess();
-      toast('退货记录创建成功！', 'success');
     } catch (error) {
       console.error('Failed to create return:', error);
-      toast('退货失败，请重试', 'error');
+      toast('操作失败，请重试', 'error');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -103,6 +130,29 @@ export function PurchaseReturn({
         </div>
       </div>
 
+      <div className="flex gap-2">
+        <Button
+          variant={returnType === 'return' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setReturnType('return')}
+        >
+          退货
+        </Button>
+        <Button
+          variant={returnType === 'exchange' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setReturnType('exchange')}
+        >
+          换货（生成新进货单）
+        </Button>
+      </div>
+
+      {returnType === 'exchange' && (
+        <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg text-sm">
+          <span className="text-blue-700">💡 换货将：1) 减少库存退货数量；2) 自动生成一张进货单草稿，等待重新发货</span>
+        </div>
+      )}
+
       {purchase.product.isPriceVolatile && (
         <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg text-sm">
           <span className="text-yellow-700">⚠️ 这是价格波动商品，退货时需要输入当日市场价格</span>
@@ -111,7 +161,7 @@ export function PurchaseReturn({
 
       <div>
         <label className="text-sm font-medium mb-2 block">
-          退货数量 <span className="text-red-500">*</span>
+          {returnType === 'exchange' ? '换货数量' : '退货数量'} <span className="text-red-500">*</span>
         </label>
         <Input
           type="number"
@@ -122,13 +172,13 @@ export function PurchaseReturn({
           max={purchase.quantity}
         />
         <div className="text-xs text-slate-500 mt-1">
-          最多可退: {purchase.quantity} {purchase.product.unit}
+          最多可退/换: {purchase.quantity} {purchase.product.unit}
         </div>
       </div>
 
       {returnQuantity && (
         <div className="bg-orange-50 p-3 rounded-lg">
-          <div className="text-sm text-slate-500">退货金额</div>
+          <div className="text-sm text-slate-500">{returnType === 'exchange' ? '换货金额' : '退货金额'}</div>
           <div className="text-xl font-bold text-orange-600">
             {purchase.product.isPriceVolatile
               ? marketPrice
@@ -159,8 +209,12 @@ export function PurchaseReturn({
       )}
 
       <div className="flex justify-end gap-3">
-        <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
-        <Button onClick={handleConfirm}>确认退货</Button>
+        <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating}>
+          取消
+        </Button>
+        <Button onClick={handleConfirm} disabled={creating}>
+          {creating ? '处理中...' : returnType === 'exchange' ? '确认换货' : '确认退货'}
+        </Button>
       </div>
 
       {showMarketPriceDialog && (

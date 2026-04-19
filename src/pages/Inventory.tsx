@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,18 +19,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { DataTablePagination, useDataTable } from '@/components/DataTable';
-import { db } from '@/lib/db';
+import { ProductService } from '@/services/ProductService';
 import { formatCurrency } from '@/lib/utils';
 import type { Product, Category } from '@/lib/types';
 
 export function Inventory() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialFilter = searchParams.get('filter') || 'all';
+
   const [products, setProducts] = useState<(Product & { category: Category })[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [stockFilter, setStockFilter] = useState<string>('all');
+  const [stockFilter, setStockFilter] = useState<string>(initialFilter);
   const [loading, setLoading] = useState(true);
+
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadData();
@@ -44,20 +52,14 @@ export function Inventory() {
       }
 
       if (stockFilter === 'low') {
-        whereClause.stock = { lte: 10 };
+        whereClause.stock = { gt: 0 };
       } else if (stockFilter === 'out') {
         whereClause.stock = 0;
       }
 
       const [productsData, categoriesData] = await Promise.all([
-        db.product.findMany({
-          where: whereClause,
-          include: { category: true },
-          orderBy: { name: 'asc' },
-        }),
-        db.category.findMany({
-          orderBy: { sortOrder: 'asc' },
-        }),
+        ProductService.getProducts(),
+        ProductService.getCategories(),
       ]);
 
       setProducts(productsData);
@@ -69,13 +71,53 @@ export function Inventory() {
     }
   };
 
+  const isAlertMode = stockFilter === 'low' || stockFilter === 'out';
+
+  const toggleProductSelection = (productId: string) => {
+    const newSet = new Set(selectedProducts);
+    if (newSet.has(productId)) {
+      newSet.delete(productId);
+    } else {
+      newSet.add(productId);
+    }
+    setSelectedProducts(newSet);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedProducts.size === filteredProducts.length) {
+      setSelectedProducts(new Set());
+    } else {
+      setSelectedProducts(new Set(filteredProducts.map(p => p.id)));
+    }
+  };
+
+  const openGenerateDialog = () => {
+    const selectedItems = products
+      .filter(p => selectedProducts.has(p.id))
+      .map(p => ({
+        productId: String(p.id),
+        quantity: Math.max(1, (p.minStock || 10) - p.stock),
+        unitPrice: p.lastPurchasePrice || 0,
+      }));
+
+    console.log('[Inventory] 跳转前选中的商品:', selectedItems);
+    setSelectedProducts(new Set());
+    navigate('/purchases', {
+      state: {
+        openAdd: true,
+        prefilledItems: selectedItems
+      }
+    });
+  };
+
   const filteredProducts = products.filter((p) => {
+    const effectiveMinStock = p.minStock || 10;
     if (stockFilter === 'low') {
-      return p.stock > 0 && p.stock <= (p.minStock || 10);
+      return p.stock > 0 && p.stock <= effectiveMinStock && p.minStock > 0;
     } else if (stockFilter === 'out') {
       return p.stock === 0;
     } else if (stockFilter === 'normal') {
-      return p.stock > (p.minStock || 10);
+      return p.stock > effectiveMinStock || p.minStock === 0;
     }
     return true;
   });
@@ -119,7 +161,14 @@ export function Inventory() {
           <h2 className="text-2xl font-bold text-slate-800">库存管理</h2>
           <p className="text-slate-500 mt-1">管理店内建材水暖产品库存</p>
         </div>
-        <Button variant="outline">📥 导出库存</Button>
+        <div className="flex gap-2">
+          {isAlertMode && selectedProducts.size > 0 && (
+            <Button className="bg-orange-500 hover:bg-orange-600" onClick={openGenerateDialog}>
+              📝 生成进货单 ({selectedProducts.size})
+            </Button>
+          )}
+          <Button variant="outline">📥 导出库存</Button>
+        </div>
       </div>
 
       <Card>
@@ -171,6 +220,7 @@ export function Inventory() {
                 setSearchTerm('');
                 setSelectedCategory('all');
                 setStockFilter('all');
+                setSelectedProducts(new Set());
               }}
               className="h-8 text-slate-500"
             >
@@ -182,6 +232,7 @@ export function Inventory() {
           <Table>
             <TableHeader>
               <TableRow>
+                {isAlertMode && <TableHead className="w-10"></TableHead>}
                 <TableHead>商品名称</TableHead>
                 <TableHead>分类</TableHead>
                 <TableHead>规格型号</TableHead>
@@ -194,7 +245,7 @@ export function Inventory() {
             <TableBody>
               {tableProps.total === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-slate-500">
+                  <TableCell colSpan={isAlertMode ? 8 : 7} className="text-center py-8 text-slate-500">
                     暂无商品数据
                   </TableCell>
                 </TableRow>
@@ -203,6 +254,14 @@ export function Inventory() {
                   const status = getStockStatus(product);
                   return (
                     <TableRow key={product.id}>
+                      {isAlertMode && (
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedProducts.has(product.id)}
+                            onCheckedChange={() => toggleProductSelection(product.id)}
+                          />
+                        </TableCell>
+                      )}
                       <TableCell className="font-medium">{product.name}</TableCell>
                       <TableCell>{product.category.name}</TableCell>
                       <TableCell className="text-slate-500">
@@ -212,10 +271,10 @@ export function Inventory() {
                         {product.stock} {product.unit}
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {formatCurrency(product.costPrice)}
+                        {formatCurrency(product.lastPurchasePrice)}
                       </TableCell>
                       <TableCell className="text-right font-mono text-orange-600">
-                        {formatCurrency(product.salePrice)}
+                        {formatCurrency(product.referencePrice)}
                       </TableCell>
                       <TableCell>
                         <Badge variant={status.variant}>{status.label}</Badge>

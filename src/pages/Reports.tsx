@@ -33,12 +33,13 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { db } from '@/lib/db';
+import { ReportService } from '@/services/ReportService';
 import { formatCurrency } from '@/lib/utils';
+import type { Contact } from '@/lib/types';
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx';
 
-type ReportType = 'daily' | 'monthly' | 'yearly' | 'products' | 'profit' | 'customer';
+type ReportType = 'daily' | 'monthly' | 'yearly' | 'products' | 'profit' | 'customer' | 'returns' | 'baddebt';
 
 interface ReportData {
   totalSales: number;
@@ -49,6 +50,71 @@ interface ReportData {
 
 const COLORS = ['#f97316', '#3b82f6', '#22c55e', '#eab308', '#ef4444', '#8b5cf6'];
 
+// 信用等级显示
+const getCreditLevelLabel = (level: string) => {
+  const labels = {
+    excellent: '优秀',
+    good: '良好',
+    normal: '普通',
+    poor: '较差',
+    blocked: '冻结',
+  };
+  return labels[level as keyof typeof labels] || level;
+};
+
+const getCreditLevelColor = (level: string) => {
+  const colors = {
+    excellent: 'bg-green-500',
+    good: 'bg-blue-500',
+    normal: 'bg-gray-500',
+    poor: 'bg-orange-500',
+    blocked: 'bg-red-500',
+  };
+  return colors[level as keyof typeof colors] || 'bg-gray-500';
+};
+
+// 风险等级显示
+const getRiskLevelLabel = (level: string) => {
+  const labels = {
+    low: '低风险',
+    medium: '中风险',
+    high: '高风险',
+    critical: '极高风险',
+  };
+  return labels[level as keyof typeof labels] || level;
+};
+
+const getRiskLevelColor = (level: string) => {
+  const colors = {
+    low: 'bg-green-500',
+    medium: 'bg-yellow-500',
+    high: 'bg-orange-500',
+    critical: 'bg-red-500',
+  };
+  return colors[level as keyof typeof colors] || 'bg-gray-500';
+};
+
+// 价值标签显示
+const getAutoTagLabel = (tag: string | null) => {
+  const labels = {
+    star: '★高价值',
+    triangle: '△中等价值',
+    circle: '○普通价值',
+    cross: '×低价值',
+  };
+  return labels[tag as keyof typeof labels] || '-';
+};
+
+const getAutoTagColor = (tag: string | null) => {
+  const colors = {
+    star: 'text-yellow-500',
+    triangle: 'text-blue-500',
+    circle: 'text-gray-500',
+    cross: 'text-red-500',
+  };
+  return colors[tag as keyof typeof colors] || 'text-gray-500';
+};
+
 export function Reports() {
   const [reportType, setReportType] = useState<ReportType>('daily');
   const [startDate, setStartDate] = useState(dayjs().startOf('month').format('YYYY-MM-DD'));
@@ -57,6 +123,10 @@ export function Reports() {
   const [chartData, setChartData] = useState<any[]>([]);
   const [productRanking, setProductRanking] = useState<any[]>([]);
   const [customerRanking, setCustomerRanking] = useState<any[]>([]);
+  const [returnStats, setReturnStats] = useState<any>(null);
+  const [badDebtStats, setBadDebtStats] = useState<any>(null);
+  const [returns, setReturns] = useState<any[]>([]);
+  const [badDebtWriteOffs, setBadDebtWriteOffs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -84,6 +154,12 @@ export function Reports() {
         case 'customer':
           await loadCustomerReport(start, end);
           break;
+        case 'returns':
+          await loadReturnsReport(start, end);
+          break;
+        case 'baddebt':
+          await loadBadDebtReport(start, end);
+          break;
       }
     } catch (error) {
       console.error('Failed to load report:', error);
@@ -93,15 +169,25 @@ export function Reports() {
   };
 
   const loadSalesReport = async (start: Date, end: Date) => {
-    const orders = await db.saleOrder.findMany({
-      where: { saleDate: { gte: start, lte: end } },
-      include: { items: true },
+    const orders = await ReportService.getSalesInPeriod(start, end);
+
+    let totalSales = 0;
+    let totalCost = 0;
+    orders.forEach(order => {
+      const netSales = ReportService.calculateNetSales(order);
+      totalSales += netSales;
+
+      let orderCost = order.items.reduce((sum, item) => sum + item.costPriceSnapshot * item.quantity, 0);
+      let orderTotal = order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0);
+
+      if (orderTotal > 0) {
+        const retRatio = order.returns?.reduce((sum, r) => sum + r.totalAmount, 0) / orderTotal || 0;
+        const writeOffRatio = order.badDebtWriteOffs?.reduce((sum, w) => sum + w.writtenOffAmount, 0) / orderTotal || 0;
+        orderCost = orderCost * (1 - retRatio - writeOffRatio);
+      }
+      totalCost += Math.max(0, orderCost);
     });
 
-    const totalSales = orders.reduce((sum, s) => sum + s.paidAmount, 0);
-    const totalCost = orders.reduce((sum, s) => {
-      return sum + s.items.reduce((itemSum, item) => itemSum + item.costPriceSnapshot * item.quantity, 0);
-    }, 0);
     const totalProfit = totalSales - totalCost;
     const totalOrders = orders.length;
     const avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
@@ -120,7 +206,7 @@ export function Reports() {
       const key = dayjs(order.saleDate).format('MM-DD');
       const existing = dailyData.get(key);
       if (existing) {
-        existing.sales += order.paidAmount;
+        existing.sales += ReportService.calculateNetSales(order);
         existing.orders += 1;
       }
     });
@@ -135,14 +221,7 @@ export function Reports() {
   };
 
   const loadProductReport = async (start: Date, end: Date) => {
-    const orderItems = await db.orderItem.findMany({
-      where: {
-        order: {
-          saleDate: { gte: start, lte: end },
-        },
-      },
-      include: { product: true },
-    });
+    const orderItems = await ReportService.getOrderItemsInPeriod(start, end);
 
     const productMap = new Map<string, any>();
     orderItems.forEach((item) => {
@@ -171,10 +250,7 @@ export function Reports() {
   };
 
   const loadProfitReport = async (start: Date, end: Date) => {
-    const orders = await db.saleOrder.findMany({
-      where: { saleDate: { gte: start, lte: end } },
-      include: { items: true },
-    });
+    const orders = await ReportService.getSalesInPeriod(start, end);
 
     const dailyData = new Map<string, { revenue: number; cost: number; profit: number }>();
     const current = new Date(start);
@@ -188,10 +264,19 @@ export function Reports() {
       const key = dayjs(order.saleDate).format('MM-DD');
       const existing = dailyData.get(key);
       if (existing) {
-        const orderCost = order.items.reduce((sum, item) => sum + item.costPriceSnapshot * item.quantity, 0);
-        existing.revenue += order.paidAmount;
+        const netSales = ReportService.calculateNetSales(order);
+        let orderCost = order.items.reduce((sum, item) => sum + item.costPriceSnapshot * item.quantity, 0);
+        let orderTotal = order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0);
+
+        if (orderTotal > 0) {
+          const retRatio = order.returns?.reduce((sum, r) => sum + r.totalAmount, 0) / orderTotal || 0;
+          const writeOffRatio = order.badDebtWriteOffs?.reduce((sum, w) => sum + w.writtenOffAmount, 0) / orderTotal || 0;
+          orderCost = orderCost * (1 - retRatio - writeOffRatio);
+        }
+        
+        existing.revenue += netSales;
         existing.cost += orderCost;
-        existing.profit += order.paidAmount - orderCost;
+        existing.profit += netSales - orderCost;
       }
     });
 
@@ -204,10 +289,20 @@ export function Reports() {
       }))
     );
 
-    const totalRevenue = orders.reduce((sum, s) => sum + s.paidAmount, 0);
-    const totalCost = orders.reduce((sum, s) => {
-      return sum + s.items.reduce((itemSum, item) => itemSum + item.costPriceSnapshot * item.quantity, 0);
-    }, 0);
+    let totalRevenue = 0;
+    let totalCost = 0;
+    orders.forEach(order => {
+      totalRevenue += ReportService.calculateNetSales(order);
+      let orderCost = order.items.reduce((sum, item) => sum + item.costPriceSnapshot * item.quantity, 0);
+      let orderTotal = order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0);
+
+      if (orderTotal > 0) {
+        const retRatio = order.returns?.reduce((sum, r) => sum + r.totalAmount, 0) / orderTotal || 0;
+        const writeOffRatio = order.badDebtWriteOffs?.reduce((sum, w) => sum + w.writtenOffAmount, 0) / orderTotal || 0;
+        orderCost = orderCost * (1 - retRatio - writeOffRatio);
+      }
+      totalCost += Math.max(0, orderCost);
+    });
 
     setReportData({
       totalSales: totalRevenue,
@@ -218,27 +313,44 @@ export function Reports() {
   };
 
   const loadCustomerReport = async (start: Date, end: Date) => {
-    const orders = await db.saleOrder.findMany({
-      where: {
-        saleDate: { gte: start, lte: end },
-      },
-      include: { buyer: true },
-    });
+    const orders = await ReportService.getSalesInPeriod(start, end);
+    const contacts = await ReportService.getContacts() as Contact[];
 
-    const customerMap = new Map<string, any>();
+    const contactMap = new Map<string, Contact>(contacts.map(c => [c.id, c]));
+
+    const customerMap = new Map<string, {
+      name: string;
+      phone: string | null;
+      type: string;
+      amount: number;
+      orders: number;
+      valueScore: number | null;
+      autoTag: string | null;
+      creditLevel: string;
+      riskLevel: string;
+      blacklist: boolean;
+    }>();
+    
     orders.forEach((order) => {
       if (!order.buyer) return;
+      const netSales = ReportService.calculateNetSales(order);
       const existing = customerMap.get(order.buyerId);
       if (existing) {
-        existing.amount += order.paidAmount;
+        existing.amount += netSales;
         existing.orders += 1;
       } else {
+        const contact = contactMap.get(order.buyerId);
         customerMap.set(order.buyerId, {
           name: order.buyer.name,
           phone: order.buyer.primaryPhone,
           type: order.buyer.contactType,
-          amount: order.paidAmount,
+          amount: netSales,
           orders: 1,
+          valueScore: contact?.valueScore ?? null,
+          autoTag: contact?.autoTag ?? null,
+          creditLevel: contact?.creditLevel ?? 'normal',
+          riskLevel: contact?.riskLevel ?? 'low',
+          blacklist: contact?.blacklist ?? false,
         });
       }
     });
@@ -249,6 +361,30 @@ export function Reports() {
       .slice(0, 10);
 
     setCustomerRanking(ranking);
+  };
+
+  const loadReturnsReport = async (start: Date, end: Date) => {
+    const stats = await ReportService.getReturnStats(start, end);
+    const returnsData = await ReportService.getReturnsInPeriod(start, end);
+    
+    setReturnStats(stats);
+    setReturns(returnsData);
+    
+    if (stats.dailyReturns) {
+      setChartData(stats.dailyReturns);
+    }
+  };
+
+  const loadBadDebtReport = async (start: Date, end: Date) => {
+    const stats = await ReportService.getBadDebtStats(start, end);
+    const writeOffs = await ReportService.getBadDebtWriteOffsInPeriod(start, end);
+    
+    setBadDebtStats(stats);
+    setBadDebtWriteOffs(writeOffs);
+    
+    if (stats.dailyWriteOffs) {
+      setChartData(stats.dailyWriteOffs);
+    }
   };
 
   const exportToExcel = () => {
@@ -273,6 +409,24 @@ export function Reports() {
       case 'customer':
         dataToExport = customerRanking;
         filename = `客户消费排行_${startDate}_${endDate}`;
+        break;
+      case 'returns':
+        dataToExport = returns.map(r => ({
+          日期: dayjs(r.returnDate).format('YYYY-MM-DD'),
+          客户: r.saleOrder?.buyer?.name || '-',
+          退货金额: r.totalAmount,
+          备注: r.remark || '-'
+        }));
+        filename = `退货报表_${startDate}_${endDate}`;
+        break;
+      case 'baddebt':
+        dataToExport = badDebtWriteOffs.map(w => ({
+          日期: dayjs(w.createdAt).format('YYYY-MM-DD'),
+          客户: w.contact?.name || '-',
+          核销金额: w.writtenOffAmount,
+          原因: w.reason || '-'
+        }));
+        filename = `坏账报表_${startDate}_${endDate}`;
         break;
     }
 
@@ -311,6 +465,8 @@ export function Reports() {
                 <SelectItem value="products">商品排行</SelectItem>
                 <SelectItem value="profit">利润分析</SelectItem>
                 <SelectItem value="customer">客户分析</SelectItem>
+                <SelectItem value="returns">退货分析</SelectItem>
+                <SelectItem value="baddebt">坏账分析</SelectItem>
               </SelectContent>
             </Select>
 
@@ -337,7 +493,7 @@ export function Reports() {
         </CardHeader>
       </Card>
 
-      {reportData && (
+      {reportData && reportType !== 'returns' && reportType !== 'baddebt' && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <CardContent className="pt-6">
@@ -369,6 +525,48 @@ export function Reports() {
                 {formatCurrency(reportData.avgOrderValue)}
               </div>
               <div className="text-sm text-slate-500">平均客单价</div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {returnStats && reportType === 'returns' && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-red-600">
+                {returnStats.totalReturns}
+              </div>
+              <div className="text-sm text-slate-500">退货单数</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-red-600">
+                {formatCurrency(returnStats.totalReturnAmount)}
+              </div>
+              <div className="text-sm text-slate-500">退货总额</div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {badDebtStats && reportType === 'baddebt' && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-orange-600">
+                {badDebtStats.totalWriteOffs}
+              </div>
+              <div className="text-sm text-slate-500">坏账单数</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-orange-600">
+                {formatCurrency(badDebtStats.totalWriteOffAmount)}
+              </div>
+              <div className="text-sm text-slate-500">坏账总额</div>
             </CardContent>
           </Card>
         </div>
@@ -414,6 +612,136 @@ export function Reports() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {reportType === 'returns' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>退货趋势</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="date" stroke="#64748b" fontSize={12} />
+                    <YAxis stroke="#64748b" fontSize={12} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#fff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                      }}
+                      formatter={(value: number) => formatCurrency(value)}
+                    />
+                    <Legend />
+                    <Bar dataKey="amount" fill="#ef4444" name="退货金额" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="count" fill="#f97316" name="退货单数" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>退货商品 TOP10</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>排名</TableHead>
+                    <TableHead>商品名称</TableHead>
+                    <TableHead className="text-right">退货量</TableHead>
+                    <TableHead className="text-right">退货金额</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {returnStats?.topProducts?.map((item: any, index: number) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Badge variant={index < 3 ? 'default' : 'secondary'}>
+                          {index + 1}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-medium">{item.product?.name}</TableCell>
+                      <TableCell className="text-right">{item.quantity}</TableCell>
+                      <TableCell className="text-right font-mono text-red-600">
+                        {formatCurrency(item.amount)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {reportType === 'baddebt' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>坏账趋势</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="date" stroke="#64748b" fontSize={12} />
+                    <YAxis stroke="#64748b" fontSize={12} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#fff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                      }}
+                      formatter={(value: number) => formatCurrency(value)}
+                    />
+                    <Legend />
+                    <Bar dataKey="amount" fill="#f97316" name="坏账金额" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="count" fill="#ef4444" name="坏账单数" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>坏账客户 TOP10</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>排名</TableHead>
+                    <TableHead>客户名称</TableHead>
+                    <TableHead className="text-right">坏账单数</TableHead>
+                    <TableHead className="text-right">坏账金额</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {badDebtStats?.topContacts?.map((item: any, index: number) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Badge variant={index < 3 ? 'default' : 'secondary'}>
+                          {index + 1}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-medium">{item.contact?.name}</TableCell>
+                      <TableCell className="text-right">{item.count}</TableCell>
+                      <TableCell className="text-right font-mono text-orange-600">
+                        {formatCurrency(item.amount)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {reportType === 'products' && (
@@ -521,39 +849,144 @@ export function Reports() {
       )}
 
       {reportType === 'customer' && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>客户消费排行 TOP10</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>排名</TableHead>
+                    <TableHead>客户名称</TableHead>
+                    <TableHead>价值评分</TableHead>
+                    <TableHead>信用等级</TableHead>
+                    <TableHead>风险等级</TableHead>
+                    <TableHead>联系电话</TableHead>
+                    <TableHead>类型</TableHead>
+                    <TableHead className="text-right">消费金额</TableHead>
+                    <TableHead className="text-right">订单数</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {customerRanking.map((item, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Badge variant={index < 3 ? 'default' : 'secondary'}>
+                          {index + 1}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {item.blacklist && <Badge variant="destructive" className="mr-2">黑名单</Badge>}
+                        {item.name}
+                      </TableCell>
+                      <TableCell>
+                        {item.valueScore != null ? (
+                          <div className="flex items-center gap-1">
+                            <span className="font-bold text-orange-600">{item.valueScore.toFixed(1)}</span>
+                            <span className="text-yellow-500">★</span>
+                            {item.autoTag && (
+                              <span className={`text-xs ${getAutoTagColor(item.autoTag)}`}>
+                                {getAutoTagLabel(item.autoTag)}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {item.creditLevel ? (
+                          <Badge className={getCreditLevelColor(item.creditLevel)}>
+                            {getCreditLevelLabel(item.creditLevel)}
+                          </Badge>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {item.riskLevel ? (
+                          <Badge className={getRiskLevelColor(item.riskLevel)}>
+                            {getRiskLevelLabel(item.riskLevel)}
+                          </Badge>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-slate-500">{item.phone || '-'}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{item.type}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-orange-600">
+                        {formatCurrency(item.amount)}
+                      </TableCell>
+                      <TableCell className="text-right">{item.orders}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {reportType === 'returns' && (
         <Card>
           <CardHeader>
-            <CardTitle>客户消费排行 TOP10</CardTitle>
+            <CardTitle>退货明细</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>排名</TableHead>
-                  <TableHead>客户名称</TableHead>
-                  <TableHead>联系电话</TableHead>
-                  <TableHead>类型</TableHead>
-                  <TableHead className="text-right">消费金额</TableHead>
-                  <TableHead className="text-right">订单数</TableHead>
+                  <TableHead>日期</TableHead>
+                  <TableHead>客户</TableHead>
+                  <TableHead className="text-right">退货金额</TableHead>
+                  <TableHead>备注</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {customerRanking.map((item, index) => (
+                {returns.map((item, index) => (
                   <TableRow key={index}>
-                    <TableCell>
-                      <Badge variant={index < 3 ? 'default' : 'secondary'}>
-                        {index + 1}
-                      </Badge>
+                    <TableCell>{dayjs(item.returnDate).format('YYYY-MM-DD')}</TableCell>
+                    <TableCell>{item.saleOrder?.buyer?.name || '-'}</TableCell>
+                    <TableCell className="text-right font-mono text-red-600">
+                      {formatCurrency(item.totalAmount)}
                     </TableCell>
-                    <TableCell className="font-medium">{item.name}</TableCell>
-                    <TableCell className="text-slate-500">{item.phone || '-'}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{item.type}</Badge>
-                    </TableCell>
+                    <TableCell>{item.remark || '-'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {reportType === 'baddebt' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>坏账明细</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>日期</TableHead>
+                  <TableHead>客户</TableHead>
+                  <TableHead className="text-right">核销金额</TableHead>
+                  <TableHead>原因</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {badDebtWriteOffs.map((item, index) => (
+                  <TableRow key={index}>
+                    <TableCell>{dayjs(item.createdAt).format('YYYY-MM-DD')}</TableCell>
+                    <TableCell>{item.contact?.name || '-'}</TableCell>
                     <TableCell className="text-right font-mono text-orange-600">
-                      {formatCurrency(item.amount)}
+                      {formatCurrency(item.writtenOffAmount)}
                     </TableCell>
-                    <TableCell className="text-right">{item.orders}</TableCell>
+                    <TableCell>{item.reason || '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

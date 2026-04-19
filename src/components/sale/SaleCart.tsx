@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +33,8 @@ interface SaleCartProps {
   discount: number;
   discountRate: number;
   manualFinalAmount: number | null;
+  needsDelivery: boolean;
+  deliveryFee: string;
   onAddToCart: (product: Product) => void;
   onUpdateCartQuantity: (productId: string, quantity: number) => void;
   onRemoveFromCart: (productId: string) => void;
@@ -50,6 +52,8 @@ export function SaleCart({
   discount,
   discountRate,
   manualFinalAmount,
+  needsDelivery,
+  deliveryFee,
   onAddToCart,
   onUpdateCartQuantity,
   onRemoveFromCart,
@@ -59,21 +63,23 @@ export function SaleCart({
   onSetManualFinalAmount,
   onHandleMoli,
 }: SaleCartProps) {
+  const [showCostDetails, setShowCostDetails] = useState(false);
   const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const costTotal = cart.reduce((sum, item) => sum + item.costPrice * item.quantity, 0);
   const rateDiscount = subtotal * (100 - discountRate) / 100;
   const totalDiscount = discount + rateDiscount;
-  const totalPaid = 0;
-  const calculatedFinalAmount = subtotal - totalDiscount;
+  const deliveryFeeAmount = needsDelivery ? parseFloat(deliveryFee) || 0 : 0;
+  const calculatedFinalAmount = subtotal - totalDiscount + deliveryFeeAmount;
   const finalAmount = manualFinalAmount !== null ? manualFinalAmount : calculatedFinalAmount;
+  const totalPaid = 0;
   const paidAmount = Math.min(totalPaid, finalAmount);
   const remainingAmount = Math.max(0, finalAmount - totalPaid);
   const isManualFinalAmount = manualFinalAmount !== null;
-  const lossAmount = costTotal - finalAmount;
-  const profitRate = finalAmount > 0 ? ((finalAmount - costTotal) / finalAmount) * 100 : 0;
+  const totalCost = costTotal + deliveryFeeAmount;
+  const totalProfit = finalAmount - totalCost;
+  const profitRate = finalAmount > 0 ? (totalProfit / finalAmount) * 100 : 0;
   const showLowProfitWarning = profitRate < 10 && profitRate >= 0 && finalAmount > 0;
-  const showLossWarning = finalAmount < costTotal && finalAmount > 0;
-  const totalProfit = finalAmount - costTotal;
+  const showLossWarning = totalProfit < 0 && finalAmount > 0;
 
   const filteredProducts = sortByFrequency(
     products.filter((p) => {
@@ -124,24 +130,28 @@ export function SaleCart({
               请从上方选择商品
             </div>
           ) : (
-            <div className="space-y-3 max-h-[300px] overflow-y-auto">
+            <div className="space-y-3 max-h-[200px] overflow-y-auto">
               {cart.map((item) => (
                 <div
                   key={item.product.id}
                   className="flex flex-col gap-2 p-2 bg-slate-50 rounded-lg relative"
                 >
-                  {item.product.brand && (
-                    <span className="absolute top-1 right-12 text-xs bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
-                      {item.product.brand}
-                    </span>
-                  )}
-                  <div className="flex items-center justify-between pr-16">
-                    <div className="font-medium text-sm">
-                      {formatProductName(item.product)}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {item.product.brand && (
+                          <span className="text-xs bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded shrink-0">
+                            {item.product.brand}
+                          </span>
+                        )}
+                        <span className="font-medium text-sm truncate">
+                          {formatProductName(item.product)}
+                        </span>
+                      </div>
                     </div>
                     <button
                       onClick={() => onRemoveFromCart(item.product.id)}
-                      className="w-6 h-6 rounded bg-red-100 hover:bg-red-200 text-red-600"
+                      className="w-6 h-6 rounded bg-red-100 hover:bg-red-200 text-red-600 shrink-0"
                     >
                       ×
                     </button>
@@ -222,12 +232,6 @@ export function SaleCart({
                       = {formatCurrency(item.unitPrice * item.quantity)}
                     </div>
                   </div>
-
-                  {item.purchaseUnit && item.unitRatio > 1 && (
-                    <div className="text-xs text-slate-400">
-                      {item.purchaseUnit} = {item.unitRatio} {item.product.unit}，折合 {formatCurrency(item.salePrice)}/{item.product.unit}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
@@ -316,7 +320,7 @@ export function SaleCart({
             {showLossWarning && (
               <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-600">
                 <div className="font-medium">⚠️ 亏本警告</div>
-                <div>成交价低于成本价，预计亏损 {formatCurrency(lossAmount)}</div>
+                <div>成交价低于成本价，预计亏损 {formatCurrency(Math.abs(totalProfit))}</div>
               </div>
             )}
 
@@ -331,27 +335,35 @@ export function SaleCart({
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">费用汇总</CardTitle>
+        <CardHeader
+          className="cursor-pointer hover:bg-slate-50 -mb-2"
+          onClick={() => setShowCostDetails(!showCostDetails)}
+        >
+          <CardTitle className="text-base flex items-center justify-between">
+            <span>费用汇总</span>
+            <span className="text-xs text-slate-400">{showCostDetails ? '▲ 点击收起' : '▼ 点击展开'}</span>
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-slate-500">成本合计</span>
-            <span className="font-mono">{formatCurrency(costTotal)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-500">订单利润</span>
-            <span className={`font-mono ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCurrency(totalProfit)}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-500">利润率</span>
-            <span className={`font-mono ${profitRate >= 10 ? 'text-green-600' : profitRate >= 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-              {profitRate.toFixed(1)}%
-            </span>
-          </div>
-        </CardContent>
+        {showCostDetails && (
+          <CardContent className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-slate-500">成本合计</span>
+              <span className="font-mono">{formatCurrency(totalCost)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">订单利润</span>
+              <span className={`font-mono ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {formatCurrency(totalProfit)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">利润率</span>
+              <span className={`font-mono ${profitRate >= 10 ? 'text-green-600' : profitRate >= 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                {profitRate.toFixed(1)}%
+              </span>
+            </div>
+          </CardContent>
+        )}
       </Card>
     </div>
   );
