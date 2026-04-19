@@ -3,15 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Select,
   SelectContent,
@@ -29,21 +20,15 @@ import {
 import { Combobox } from '@/components/Combobox';
 import { PhotoUpload } from '@/components/PhotoUpload';
 import { db } from '@/lib/db';
-import { formatCurrency, generateInvoiceNo, formatProductName } from '@/lib/utils';
+import { formatCurrency, generateInvoiceNo } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import { sortByFrequency, recordFrequency } from '@/lib/frequency';
 import type { Product, Category, Contact, Entity, BizProject } from '@/lib/types';
-
-interface CartItem {
-  product: Product;
-  quantity: number;
-  unitPrice: number;
-  costPrice: number;
-  salePrice: number;
-  purchaseUnit: string | null;
-  saleUnit: string;
-  unitRatio: number;
-}
+import { SaleCart, CartItem } from '@/components/sale/SaleCart';
+import { SaleProductSelect } from '@/components/sale/SaleProductSelect';
+import { SaleContactSelect } from '@/components/sale/SaleContactSelect';
+import { SaleDelivery } from '@/components/sale/SaleDelivery';
+import { SalePayment } from '@/components/sale/SalePayment';
 
 interface PaymentInfo {
   method: string;
@@ -60,8 +45,6 @@ export function SaleNew() {
   const [projects, setProjects] = useState<BizProject[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [historicalPrices, setHistoricalPrices] = useState<Map<string, number>>(new Map());
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState('');
 
   const [selectedBuyer, setSelectedBuyer] = useState<string>('__none__');
   const [selectedEntity, setSelectedEntity] = useState<string>('');
@@ -74,7 +57,6 @@ export function SaleNew() {
   const [needsDelivery, setNeedsDelivery] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryFee, setDeliveryFee] = useState('0');
-
   const [deliverySuggestion, setDeliverySuggestion] = useState<string>('');
 
   const [discount, setDiscount] = useState(0);
@@ -85,16 +67,6 @@ export function SaleNew() {
   const [manualFinalAmount, setManualFinalAmount] = useState<number | null>(null);
   const [showLossConfirm, setShowLossConfirm] = useState(false);
 
-  const [showBuyerDialog, setShowBuyerDialog] = useState(false);
-  const [newBuyer, setNewBuyer] = useState({
-    name: '',
-    primaryPhone: '',
-    address: '',
-    remark: '',
-    contactType: 'customer',
-  });
-
-  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [payments, setPayments] = useState<PaymentInfo[]>([
     { method: '现金', amount: 0, payerName: '' },
   ]);
@@ -160,26 +132,12 @@ export function SaleNew() {
     }
   };
 
-  const contactOptions = useMemo(() => {
-    return contacts.map(c => ({
-      value: c.id,
-      label: `${c.name} (${c.primaryPhone || '无电话'})`,
-    }));
-  }, [contacts]);
-
   const entityOptions = useMemo(() => {
     return entities.map(e => ({
       value: e.id,
       label: `${e.name} ${e.entityType === 'personal' ? '(个人)' : e.entityType === 'company' ? '(公司)' : e.entityType === 'team' ? '(施工队)' : ''}`,
     }));
   }, [entities]);
-
-  const projectOptions = useMemo(() => {
-    return projects.map(p => ({
-      value: p.id,
-      label: `${p.name} ${p.address ? `- ${p.address}` : ''}`,
-    }));
-  }, [projects]);
 
   const loadHistoricalPrices = async (contactId: string) => {
     try {
@@ -222,19 +180,6 @@ export function SaleNew() {
       setHistoricalPrices(new Map());
     }
   }, [selectedBuyer]);
-
-  const filteredProducts = sortByFrequency(
-    products.filter((p) => {
-      const matchesCategory =
-        selectedCategory === 'all' || p.categoryId === selectedCategory;
-      const matchesSearch =
-        !searchTerm ||
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.specification?.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesCategory && matchesSearch;
-    }),
-    'product'
-  );
 
   const addToCart = (product: Product) => {
     recordFrequency('product', product.id);
@@ -295,28 +240,20 @@ export function SaleNew() {
     );
   };
 
-  const subtotal = cart.reduce(
-    (sum, item) => sum + item.unitPrice * item.quantity,
-    0
-  );
-  const costTotal = cart.reduce(
-    (sum, item) => sum + item.costPrice * item.quantity,
-    0
-  );
-  const rateDiscount = subtotal * (100 - discountRate) / 100;
-  const totalDiscount = discount + rateDiscount;
-  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+  const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  const costTotal = cart.reduce((sum, item) => sum + item.costPrice * item.quantity, 0);
+  const totalDiscount = discount + subtotal * (100 - discountRate) / 100;
   const calculatedFinalAmount = subtotal - totalDiscount;
   const finalAmount = manualFinalAmount !== null ? manualFinalAmount : calculatedFinalAmount;
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
   const paidAmount = Math.min(totalPaid, finalAmount);
   const remainingAmount = Math.max(0, finalAmount - totalPaid);
-  const isManualFinalAmount = manualFinalAmount !== null;
   const lossAmount = costTotal - finalAmount;
   const profitRate = finalAmount > 0 ? ((finalAmount - costTotal) / finalAmount) * 100 : 0;
   const showLowProfitWarning = profitRate < 10 && profitRate >= 0 && finalAmount > 0;
   const showLossWarning = finalAmount < costTotal && finalAmount > 0;
-
   const totalProfit = finalAmount - costTotal;
+
   useEffect(() => {
     if (finalAmount <= 0) {
       setDeliverySuggestion('');
@@ -336,47 +273,16 @@ export function SaleNew() {
     setDiscount(moliAmount);
   };
 
-  const handleAddBuyer = async () => {
-    if (!newBuyer.name.trim()) {
-      toast('请输入联系人姓名', 'warning');
-      return;
-    }
-    if (!newBuyer.primaryPhone.trim()) {
-      toast('请输入手机号', 'warning');
-      return;
-    }
-
-    try {
-      const existing = await db.contact.findFirst({
-        where: { primaryPhone: newBuyer.primaryPhone.trim() },
-      });
-      if (existing) {
-        toast('该手机号已被使用', 'warning');
-        return;
+  const distributeRemainingAmount = () => {
+    if (remainingAmount > 0 && payments.length > 0) {
+      const newPayments = [...payments];
+      const lastIndex = newPayments.findIndex((p) => p.amount === 0);
+      if (lastIndex >= 0) {
+        newPayments[lastIndex].amount = remainingAmount;
+      } else {
+        newPayments[newPayments.length - 1].amount += remainingAmount;
       }
-
-      const contactCount = await db.contact.count();
-      const newCode = `C${String(contactCount + 1).padStart(3, '0')}`;
-
-      const contact = await db.contact.create({
-        data: {
-          code: newCode,
-          name: newBuyer.name.trim(),
-          primaryPhone: newBuyer.primaryPhone.trim(),
-          address: newBuyer.address.trim() || null,
-          remark: newBuyer.remark.trim() || null,
-          contactType: newBuyer.contactType,
-        },
-      });
-
-      setContacts([...contacts, contact]);
-      setSelectedBuyer(contact.id);
-      setShowBuyerDialog(false);
-      setNewBuyer({ name: '', primaryPhone: '', address: '', remark: '', contactType: 'customer' });
-      toast('添加成功', 'success');
-    } catch (error) {
-      console.error('[SaleNew] 添加联系人失败:', error);
-      toast('添加失败，请重试', 'error');
+      setPayments(newPayments);
     }
   };
 
@@ -490,9 +396,7 @@ export function SaleNew() {
         await db.product.update({
           where: { id: item.product.id },
           data: {
-            stock: {
-              decrement: item.quantity,
-            },
+            stock: { decrement: item.quantity },
             lastPurchasePrice: item.product.lastPurchasePrice || undefined,
           },
         });
@@ -555,36 +459,9 @@ export function SaleNew() {
     }
   };
 
-  const addPaymentMethod = () => {
-    setPayments([
-      ...payments,
-      { method: '现金', amount: 0, payerName: '' },
-    ]);
-  };
-
-  const updatePayment = (index: number, field: keyof PaymentInfo, value: any) => {
-    const newPayments = [...payments];
-    newPayments[index] = { ...newPayments[index], [field]: value };
-    setPayments(newPayments);
-  };
-
-  const removePayment = (index: number) => {
-    if (payments.length > 1) {
-      setPayments(payments.filter((_, i) => i !== index));
-    }
-  };
-
-  const distributeRemainingAmount = () => {
-    if (remainingAmount > 0 && payments.length > 0) {
-      const newPayments = [...payments];
-      const lastIndex = newPayments.findIndex((p) => p.amount === 0);
-      if (lastIndex >= 0) {
-        newPayments[lastIndex].amount = remainingAmount;
-      } else {
-        newPayments[newPayments.length - 1].amount += remainingAmount;
-      }
-      setPayments(newPayments);
-    }
+  const handleConfirmLoss = () => {
+    setShowLossConfirm(false);
+    handleSubmit();
   };
 
   return (
@@ -601,211 +478,27 @@ export function SaleNew() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">选择商品</CardTitle>
-              <div className="flex items-center gap-4 mt-4">
-                <Select
-                  value={selectedCategory}
-                  onValueChange={setSelectedCategory}
-                >
-                  <SelectTrigger className="w-40">
-                    <SelectValue placeholder="全部分类" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">全部分类</SelectItem>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          <SaleProductSelect
+            products={products}
+            categories={categories}
+            historicalPrices={historicalPrices}
+            onAddToCart={addToCart}
+          />
 
-                <Input
-                  placeholder="搜索商品..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="flex-1"
-                />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto">
-                {filteredProducts.length === 0 ? (
-                  <div className="col-span-full text-center py-8 text-slate-500">
-                    {products.length === 0 ? '暂无商品，请先添加商品' : '当前分类下没有商品'}
-                  </div>
-                ) : (
-                  filteredProducts.map((product) => (
-                    <button
-                      key={product.id}
-                      onClick={() => addToCart(product)}
-                      disabled={product.stock === 0}
-                      className={`p-3 border rounded-lg text-left transition-colors relative ${
-                        product.stock === 0
-                          ? 'border-slate-200 opacity-50 cursor-not-allowed'
-                          : 'border-slate-200 hover:border-orange-300 hover:bg-orange-50'
-                      }`}
-                    >
-                      {product.brand && (
-                        <span className="absolute top-1 right-1 text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
-                          {product.brand}
-                        </span>
-                      )}
-                      <div className="font-medium text-slate-800 truncate pr-12">
-                        {product.name}
-                      </div>
-                      <div className="text-sm text-slate-500 truncate">
-                        {product.specification || product.model || '-'}
-                      </div>
-                      <div className="flex items-center justify-between mt-2">
-                        <div className="flex flex-col">
-                          <span className="text-orange-600 font-bold">
-                            {product.referencePrice ? formatCurrency(product.referencePrice) : '-'}
-                          </span>
-                          {historicalPrices.has(product.id) && (
-                            <span className="text-xs text-slate-400">
-                              上次: {formatCurrency(historicalPrices.get(product.id)!)}
-                            </span>
-                          )}
-                          {product.lastPurchasePrice && (
-                            <span className="text-xs text-slate-400">
-                              进价: {formatCurrency(product.lastPurchasePrice)}
-                            </span>
-                          )}
-                        </div>
-                        <Badge
-                          variant={product.stock === 0 ? 'destructive' : 'secondary'}
-                          className="text-xs"
-                        >
-                          {product.stock === 0 ? '缺货' : `库存: ${product.stock}`}
-                        </Badge>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">联系人信息</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <Combobox
-                    value={selectedBuyer === '__none__' ? '' : selectedBuyer}
-                    onValueChange={(v) => {
-                      setSelectedBuyer(v || '__none__');
-                      if (v) recordFrequency('contact', v);
-                    }}
-                    options={contactOptions}
-                    placeholder="选择联系人（散客可跳过）"
-                    emptyText="没有找到匹配的联系人"
-                  />
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowBuyerDialog(true)}
-                >
-                  + 新联系人
-                </Button>
-              </div>
-
-              <div className="border-t pt-4">
-                <h4 className="text-sm font-medium text-slate-600 mb-3">销售单角色（可选）</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">付款人</label>
-                    <Combobox
-                      value={selectedPayer === '__none__' ? '' : selectedPayer}
-                      onValueChange={(v) => setSelectedPayer(v || '__none__')}
-                      options={contactOptions}
-                      placeholder="选择付款人"
-                      emptyText="没有找到匹配的联系人"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">介绍人(水电工)</label>
-                    <Combobox
-                      value={selectedIntroducer === '__none__' ? '' : selectedIntroducer}
-                      onValueChange={(v) => setSelectedIntroducer(v || '__none__')}
-                      options={contactOptions}
-                      placeholder="选择介绍人"
-                      emptyText="没有找到匹配的联系人"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 mt-3">
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">提货人姓名</label>
-                    <Input
-                      placeholder="提货人姓名"
-                      value={pickerName}
-                      onChange={(e) => setPickerName(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">提货人电话</label>
-                    <Input
-                      placeholder="提货人电话"
-                      value={pickerPhone}
-                      onChange={(e) => setPickerPhone(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="border-t pt-4 mt-4">
-                  <div className="flex items-center gap-4 mb-3">
-                    <label className="text-sm font-medium text-slate-600 flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={needsDelivery}
-                        onChange={(e) => setNeedsDelivery(e.target.checked)}
-                        className="w-4 h-4"
-                      />
-                      需要配送
-                    </label>
-                    {deliverySuggestion && (
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        totalProfit < 10 ? 'bg-red-50 text-red-600' :
-                        totalProfit < 50 ? 'bg-yellow-50 text-yellow-600' :
-                        'bg-green-50 text-green-600'
-                      }`}>
-                        {deliverySuggestion}
-                      </span>
-                    )}
-                  </div>
-                  {needsDelivery && (
-                    <div className="space-y-3 pl-2 border-l-2 border-orange-200">
-                      <div>
-                        <label className="text-xs text-slate-500 mb-1 block">配送地址</label>
-                        <Input
-                          placeholder="输入配送地址"
-                          value={deliveryAddress}
-                          onChange={(e) => setDeliveryAddress(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-slate-500 mb-1 block">配送费 (元)</label>
-                        <Input
-                          type="number"
-                          placeholder="0.00"
-                          value={deliveryFee}
-                          onChange={(e) => setDeliveryFee(e.target.value)}
-                          min="0"
-                          step="0.01"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <SaleContactSelect
+            contacts={contacts}
+            selectedBuyer={selectedBuyer}
+            selectedPayer={selectedPayer}
+            selectedIntroducer={selectedIntroducer}
+            pickerName={pickerName}
+            pickerPhone={pickerPhone}
+            onSelectedBuyerChange={setSelectedBuyer}
+            onSelectedPayerChange={setSelectedPayer}
+            onSelectedIntroducerChange={setSelectedIntroducer}
+            onPickerNameChange={setPickerName}
+            onPickerPhoneChange={setPickerPhone}
+            onContactsChange={setContacts}
+          />
 
           <Card>
             <CardHeader>
@@ -852,265 +545,44 @@ export function SaleNew() {
               )}
             </CardContent>
           </Card>
+
+          <SaleDelivery
+            needsDelivery={needsDelivery}
+            deliveryAddress={deliveryAddress}
+            deliveryFee={deliveryFee}
+            deliverySuggestion={deliverySuggestion}
+            totalProfit={totalProfit}
+            onNeedsDeliveryChange={setNeedsDelivery}
+            onDeliveryAddressChange={setDeliveryAddress}
+            onDeliveryFeeChange={setDeliveryFee}
+          />
         </div>
 
         <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">当前订单</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {cart.length === 0 ? (
-                <div className="text-center py-8 text-slate-500">
-                  购物车为空
-                  <br />
-                  请从左侧选择商品
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-[250px] overflow-y-auto">
-                  {cart.map((item) => (
-                    <div
-                      key={item.product.id}
-                      className="flex flex-col gap-2 p-2 bg-slate-50 rounded-lg relative"
-                    >
-                      {item.product.brand && (
-                        <span className="absolute top-1 right-12 text-xs bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
-                          {item.product.brand}
-                        </span>
-                      )}
-                      <div className="flex items-center justify-between pr-16">
-                        <div className="font-medium text-sm">
-                          {formatProductName(item.product)}
-                        </div>
-                        <button
-                          onClick={() => removeFromCart(item.product.id)}
-                          className="w-6 h-6 rounded bg-red-100 hover:bg-red-200 text-red-600"
-                        >
-                          ×
-                        </button>
-                      </div>
+          <SaleCart
+            cart={cart}
+            products={products}
+            historicalPrices={historicalPrices}
+            discount={discount}
+            discountRate={discountRate}
+            manualFinalAmount={manualFinalAmount}
+            onAddToCart={addToCart}
+            onUpdateCartQuantity={updateCartQuantity}
+            onRemoveFromCart={removeFromCart}
+            onUpdateCartItem={updateCartItem}
+            onSetDiscount={setDiscount}
+            onSetDiscountRate={setDiscountRate}
+            onSetManualFinalAmount={setManualFinalAmount}
+            onHandleMoli={handleMoli}
+          />
 
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() =>
-                              updateCartQuantity(item.product.id, item.quantity - 1)
-                            }
-                            className="w-6 h-6 rounded bg-slate-200 hover:bg-slate-300 text-slate-600"
-                          >
-                            -
-                          </button>
-                          <Input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) =>
-                              updateCartQuantity(item.product.id, parseInt(e.target.value) || 1)
-                            }
-                            className="w-16 h-7 text-center text-sm"
-                            min="1"
-                          />
-                          <button
-                            onClick={() =>
-                              updateCartQuantity(item.product.id, item.quantity + 1)
-                            }
-                            disabled={item.quantity >= item.product.stock}
-                            className="w-6 h-6 rounded bg-slate-200 hover:bg-slate-300 text-slate-600 disabled:opacity-50"
-                          >
-                            +
-                          </button>
-                        </div>
-
-                        <Select
-                          value={item.saleUnit}
-                          onValueChange={(v) => {
-                            const newSaleUnit = v;
-                            const newUnitRatio = item.purchaseUnit && newSaleUnit === item.purchaseUnit ? item.unitRatio : 1;
-                            let newUnitPrice = item.salePrice;
-                            if (item.purchaseUnit && newSaleUnit === item.purchaseUnit) {
-                              newUnitPrice = item.salePrice * item.unitRatio;
-                            } else if (item.purchaseUnit && newSaleUnit === item.product.unit) {
-                              newUnitPrice = item.salePrice / item.unitRatio;
-                            }
-                            updateCartItem(item.product.id, {
-                              saleUnit: newSaleUnit,
-                              unitRatio: newUnitRatio,
-                              unitPrice: newUnitPrice,
-                            });
-                          }}
-                        >
-                          <SelectTrigger className="w-20 h-7 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={item.product.unit}>{item.product.unit}</SelectItem>
-                            {item.purchaseUnit && item.purchaseUnit !== item.product.unit && (
-                              <SelectItem value={item.purchaseUnit}>{item.purchaseUnit}</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-
-                        <div className="flex items-center gap-1 text-xs">
-                          <span className="text-slate-400">¥</span>
-                          <Input
-                            type="number"
-                            value={item.unitPrice}
-                            onChange={(e) =>
-                              updateCartItem(item.product.id, {
-                                unitPrice: parseFloat(e.target.value) || 0,
-                              })
-                            }
-                            className="w-20 h-7 text-sm"
-                            min="0"
-                            step="0.01"
-                          />
-                        </div>
-
-                        <div className="text-xs text-slate-400">
-                          = {formatCurrency(item.unitPrice * item.quantity)}
-                        </div>
-                      </div>
-
-                      {item.purchaseUnit && item.unitRatio > 1 && (
-                        <div className="text-xs text-slate-400">
-                          {item.purchaseUnit} = {item.unitRatio} {item.product.unit}，折合 {formatCurrency(item.salePrice)}/{item.product.unit}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="border-t border-slate-200 mt-4 pt-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">商品金额</span>
-                  <span className="font-mono">{formatCurrency(subtotal)}</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500">折扣率</span>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      value={discountRate}
-                      onChange={(e) =>
-                        setDiscountRate(Math.max(0, Math.min(100, parseFloat(e.target.value) || 100)))
-                      }
-                      className="w-20 h-8 text-right font-mono"
-                      min="0"
-                      max="100"
-                    />
-                    <span className="text-sm text-slate-500">%</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-500">抹零</span>
-                    <Button size="sm" variant="outline" onClick={handleMoli} className="h-8 px-2 text-xs">
-                      一键抹零
-                    </Button>
-                  </div>
-                  <Input
-                    type="number"
-                    value={discount}
-                    onChange={(e) =>
-                      setDiscount(Math.max(0, parseFloat(e.target.value) || 0))
-                    }
-                    className="w-24 h-8 text-right font-mono"
-                    min="0"
-                    step="0.01"
-                  />
-                </div>
-
-                {totalDiscount > 0 && (
-                  <div className="flex justify-between text-sm text-orange-500">
-                    <span>总优惠</span>
-                    <span className="font-mono">-{formatCurrency(totalDiscount)}</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between items-center text-lg font-bold pt-2 border-t border-slate-200">
-                  <div className="flex items-center gap-2">
-                    <span>应付金额</span>
-                    {isManualFinalAmount && (
-                      <Badge variant="outline" className="text-xs bg-yellow-50">手动</Badge>
-                    )}
-                  </div>
-                  {isManualFinalAmount ? (
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        value={manualFinalAmount}
-                        onChange={(e) => setManualFinalAmount(parseFloat(e.target.value) || 0)}
-                        className="w-28 h-8 text-right font-mono text-orange-600"
-                        step="0.01"
-                      />
-                      <Button size="sm" variant="ghost" onClick={() => setManualFinalAmount(null)}>
-                        重置
-                      </Button>
-                    </div>
-                  ) : (
-                    <span
-                      className="text-orange-600 font-mono cursor-pointer hover:text-orange-700"
-                      onClick={() => setManualFinalAmount(finalAmount)}
-                      title="点击手动修改应付金额"
-                    >
-                      {formatCurrency(finalAmount)}
-                    </span>
-                  )}
-                </div>
-
-                {showLossWarning && (
-                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-600">
-                    <div className="font-medium">⚠️ 亏本警告</div>
-                    <div>成交价低于成本价，预计亏损 {formatCurrency(lossAmount)}</div>
-                  </div>
-                )}
-
-                {showLowProfitWarning && !showLossWarning && (
-                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-600">
-                    <div className="font-medium">⚠️ 利润率过低警告</div>
-                    <div>利润率 {profitRate.toFixed(1)}% 低于10%，请确认是否继续</div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">支付方式</CardTitle>
-                <Button size="sm" variant="outline" onClick={() => setShowPaymentDialog(true)}>
-                  支付设置
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 text-sm">
-                {payments.filter(p => p.amount > 0).length === 0 ? (
-                  <div className="text-slate-500 text-center py-4">点击"支付设置"添加支付方式</div>
-                ) : (
-                  payments.filter(p => p.amount > 0).map((p, i) => (
-                    <div key={i} className="flex justify-between items-center p-2 bg-slate-50 rounded">
-                      <span>{p.method}</span>
-                      <span className="font-mono">{formatCurrency(p.amount)}</span>
-                    </div>
-                  ))
-                )}
-                <div className="flex justify-between items-center p-2 bg-green-50 rounded font-medium">
-                  <span>已付金额</span>
-                  <span className="text-green-600 font-mono">{formatCurrency(totalPaid)}</span>
-                </div>
-                {remainingAmount > 0 && (
-                  <div className="flex justify-between items-center p-2 bg-yellow-50 rounded text-yellow-700">
-                    <span>剩余待付</span>
-                    <span className="font-mono">{formatCurrency(remainingAmount)}</span>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <SalePayment
+            payments={payments}
+            totalPaid={totalPaid}
+            remainingAmount={remainingAmount}
+            onPaymentsChange={setPayments}
+            onDistributeRemaining={distributeRemainingAmount}
+          />
 
           <Card>
             <CardHeader>
@@ -1162,146 +634,6 @@ export function SaleNew() {
         </div>
       </div>
 
-      <Dialog open={showBuyerDialog} onOpenChange={setShowBuyerDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>添加新联系人</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm font-medium mb-1 block">
-                姓名 <span className="text-red-500">*</span>
-              </label>
-              <Input
-                value={newBuyer.name}
-                onChange={(e) => setNewBuyer({ ...newBuyer, name: e.target.value })}
-                placeholder="输入联系人姓名"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">
-                手机号 <span className="text-red-500">*</span>
-              </label>
-              <Input
-                value={newBuyer.primaryPhone}
-                onChange={(e) => setNewBuyer({ ...newBuyer, primaryPhone: e.target.value })}
-                placeholder="输入手机号（唯一标识）"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">联系人类型</label>
-              <Select value={newBuyer.contactType} onValueChange={(v) => setNewBuyer({ ...newBuyer, contactType: v })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="customer">客户</SelectItem>
-                  <SelectItem value="plumber">水电工</SelectItem>
-                  <SelectItem value="company">装修公司</SelectItem>
-                  <SelectItem value="other">其他</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">地址</label>
-              <Input
-                value={newBuyer.address}
-                onChange={(e) => setNewBuyer({ ...newBuyer, address: e.target.value })}
-                placeholder="输入地址（可选）"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">备注</label>
-              <Input
-                value={newBuyer.remark}
-                onChange={(e) => setNewBuyer({ ...newBuyer, remark: e.target.value })}
-                placeholder="输入备注（可选）"
-              />
-            </div>
-            <div className="flex justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setShowBuyerDialog(false)}
-              >
-                取消
-              </Button>
-              <Button onClick={handleAddBuyer}>保存</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>支付方式设置</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4 max-h-[400px] overflow-y-auto">
-            {payments.map((payment, index) => (
-              <div key={index} className="p-3 border border-slate-200 rounded-lg space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">支付方式 {index + 1}</span>
-                  {payments.length > 1 && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-red-500"
-                      onClick={() => removePayment(index)}
-                    >
-                      删除
-                    </Button>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">支付方式</label>
-                    <Select
-                      value={payment.method}
-                      onValueChange={(v) => updatePayment(index, 'method', v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="现金">现金</SelectItem>
-                        <SelectItem value="微信支付">微信支付</SelectItem>
-                        <SelectItem value="支付宝">支付宝</SelectItem>
-                        <SelectItem value="银行转账">银行转账</SelectItem>
-                        <SelectItem value="其他">其他</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">支付金额</label>
-                    <Input
-                      type="number"
-                      value={payment.amount}
-                      onChange={(e) => updatePayment(index, 'amount', parseFloat(e.target.value) || 0)}
-                      min="0"
-                      step="0.01"
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-            <Button variant="outline" className="w-full" onClick={addPaymentMethod}>
-              + 添加支付方式
-            </Button>
-            {remainingAmount > 0 && (
-              <Button variant="secondary" className="w-full" onClick={distributeRemainingAmount}>
-                自动填充剩余金额 {formatCurrency(remainingAmount)}
-              </Button>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPaymentDialog(false)}>
-              取消
-            </Button>
-            <Button onClick={() => setShowPaymentDialog(false)}>确认</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={showLossConfirm} onOpenChange={setShowLossConfirm}>
         <DialogContent>
           <DialogHeader>
@@ -1329,10 +661,7 @@ export function SaleNew() {
             </Button>
             <Button
               variant={showLossWarning ? 'destructive' : 'default'}
-              onClick={() => {
-                setShowLossConfirm(false);
-                handleSubmit();
-              }}
+              onClick={handleConfirmLoss}
             >
               {showLossWarning ? '确认亏本保存' : '确认保存'}
             </Button>
