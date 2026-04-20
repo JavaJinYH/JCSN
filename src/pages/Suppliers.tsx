@@ -71,6 +71,18 @@ export function Suppliers() {
   }, []);
 
   useEffect(() => {
+    if (showAddDialog) {
+      loadContacts();
+    }
+  }, [showAddDialog]);
+
+  useEffect(() => {
+    if (showEditDialog) {
+      loadContacts();
+    }
+  }, [showEditDialog]);
+
+  useEffect(() => {
     if (!showAddDialog) {
       setFormData({
         code: '',
@@ -349,12 +361,12 @@ export function Suppliers() {
             </div>
             <div>
               <label className="text-sm font-medium mb-2 block">关联联系人</label>
-              <Select value={formData.contactId} onValueChange={(v) => setFormData({ ...formData, contactId: v })}>
+              <Select value={formData.contactId || '__none__'} onValueChange={(v) => setFormData({ ...formData, contactId: v === '__none__' ? '' : v })}>
                 <SelectTrigger>
                   <SelectValue placeholder="选择联系人（可选）" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">无</SelectItem>
+                  <SelectItem value="__none__">无</SelectItem>
                   {contacts.map((contact) => (
                     <SelectItem key={contact.id} value={contact.id}>
                       {contact.name} ({contact.primaryPhone || '无电话'})
@@ -419,12 +431,12 @@ export function Suppliers() {
             </div>
             <div>
               <label className="text-sm font-medium mb-2 block">关联联系人</label>
-              <Select value={editFormData.contactId} onValueChange={(v) => setEditFormData({ ...editFormData, contactId: v })}>
+              <Select value={editFormData.contactId || '__none__'} onValueChange={(v) => setEditFormData({ ...editFormData, contactId: v === '__none__' ? '' : v })}>
                 <SelectTrigger>
                   <SelectValue placeholder="选择联系人（可选）" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">无</SelectItem>
+                  <SelectItem value="__none__">无</SelectItem>
                   {contacts.map((contact) => (
                     <SelectItem key={contact.id} value={contact.id}>
                       {contact.name} ({contact.primaryPhone || '无电话'})
