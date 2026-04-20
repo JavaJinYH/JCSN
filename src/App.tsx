@@ -26,6 +26,7 @@ import { LegacyBills } from './pages/LegacyBills';
 import { BadDebts } from './pages/BadDebts';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastContainer } from './components/Toast';
+import { Suppliers } from './pages/Suppliers';
 
 function App() {
   return (
@@ -50,6 +51,7 @@ function App() {
           <Route path="products/:id/edit" element={<ErrorBoundary><ProductEdit /></ErrorBoundary>} />
           <Route path="entities" element={<Entities />} />
           <Route path="contacts" element={<ErrorBoundary><Contacts /></ErrorBoundary>} />
+          <Route path="suppliers" element={<Suppliers />} />
           <Route path="projects" element={<ErrorBoundary><Projects /></ErrorBoundary>} />
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />

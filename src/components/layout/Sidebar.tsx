@@ -37,6 +37,7 @@ const menuGroups: MenuGroup[] = [
       { path: '/sales', label: '销售管理', icon: '💰' },
       { path: '/sales/drafts', label: '暂存记录', icon: '📝' },
       { path: '/products', label: '商品管理', icon: '🏷️' },
+      { path: '/suppliers', label: '供应商管理', icon: '🏭' },
     ],
   },
   {
