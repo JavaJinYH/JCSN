@@ -35,7 +35,6 @@ interface SaleCartProps {
   manualFinalAmount: number | null;
   needsDelivery: boolean;
   deliveryFee: string;
-  onAddToCart: (product: Product) => void;
   onUpdateCartQuantity: (productId: string, quantity: number) => void;
   onRemoveFromCart: (productId: string) => void;
   onUpdateCartItem: (productId: string, updates: Partial<CartItem>) => void;
@@ -54,7 +53,6 @@ export function SaleCart({
   manualFinalAmount,
   needsDelivery,
   deliveryFee,
-  onAddToCart,
   onUpdateCartQuantity,
   onRemoveFromCart,
   onUpdateCartItem,
@@ -81,43 +79,8 @@ export function SaleCart({
   const showLowProfitWarning = profitRate < 10 && profitRate >= 0 && finalAmount > 0;
   const showLossWarning = totalProfit < 0 && finalAmount > 0;
 
-  const filteredProducts = sortByFrequency(
-    products.filter((p) => {
-      const matchesSearch = !products.length || true;
-      return matchesSearch;
-    }),
-    'product'
-  );
-
-  const handleProductSelect = (productId: string) => {
-    const product = products.find(p => p.id === productId);
-    if (product) {
-      onAddToCart(product);
-    }
-  };
-
-  const productOptions = products.map(p => ({
-    value: p.id,
-    label: `${p.name} ${p.specification || ''} ${p.brand ? `(${p.brand})` : ''}`.trim(),
-  }));
-
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">添加商品</CardTitle>
-          <div className="mt-2">
-            <Combobox
-              value=""
-              onValueChange={handleProductSelect}
-              options={productOptions}
-              placeholder="搜索并选择商品..."
-              emptyText="没有找到商品"
-            />
-          </div>
-        </CardHeader>
-      </Card>
-
       <Card>
         <CardHeader>
           <CardTitle className="text-base">当前订单</CardTitle>
@@ -127,7 +90,7 @@ export function SaleCart({
             <div className="text-center py-8 text-slate-500">
               购物车为空
               <br />
-              请从上方选择商品
+              请从左侧选择商品
             </div>
           ) : (
             <div className="space-y-3 max-h-[200px] overflow-y-auto">

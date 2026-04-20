@@ -30,6 +30,7 @@ import { PhotoViewer } from '@/components/PhotoViewer';
 import { SettlementService } from '@/services/SettlementService';
 import { BadDebtService } from '@/services/BadDebtService';
 import { EntityService } from '@/services/EntityService';
+import { EntityCreditService } from '@/services/EntityCreditService';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import type { Entity, SaleOrder, Contact, BizProject } from '@/lib/types';
@@ -40,6 +41,10 @@ type EntityWithStats = Entity & {
   totalReceivable: number;
   totalPaid: number;
   totalRemaining: number;
+  creditScore?: number | null;
+  creditLevel?: string | null;
+  riskLevel?: string | null;
+  lastCreditEvalDate?: Date | null;
 };
 
 const filters = [
@@ -617,39 +622,89 @@ export function Settlements() {
       {activeTab === 'credits' && (
         <Card>
           <CardHeader>
-            <CardTitle>主体信用额度</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>主体信用额度</CardTitle>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    await EntityCreditService.batchUpdateAllEntities();
+                    toast('信用评分已更新', 'success');
+                    loadData();
+                  } catch (error) {
+                    console.error('[Settlements] 批量更新信用评分失败:', error);
+                    toast('更新失败，请重试', 'error');
+                  }
+                }}
+              >
+                重新计算信用评分
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>主体名称</TableHead>
-                  <TableHead>类型</TableHead>
-                  <TableHead>联系人</TableHead>
+                  <TableHead>信用评分</TableHead>
+                  <TableHead>信用等级</TableHead>
+                  <TableHead>风险等级</TableHead>
                   <TableHead>信用额度</TableHead>
                   <TableHead>已用额度</TableHead>
                   <TableHead>可用额度</TableHead>
                   <TableHead>使用比例</TableHead>
+                  <TableHead>操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {entities.filter(e => e.creditLimit > 0).length === 0 ? (
+                {entities.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-slate-500">
-                      暂无设置信用额度的主体
+                    <TableCell colSpan={9} className="text-center py-8 text-slate-500">
+                      暂无数据
                     </TableCell>
                   </TableRow>
                 ) : (
-                  entities.filter(e => e.creditLimit > 0).map((entity) => {
+                  entities.map((entity) => {
                     const availableCredit = entity.creditLimit - entity.creditUsed;
                     const usageRatio = entity.creditLimit > 0 ? (entity.creditUsed / entity.creditLimit * 100) : 0;
                     return (
                       <TableRow key={entity.id}>
                         <TableCell className="font-medium">{entity.name}</TableCell>
-                        <TableCell>{getEntityTypeBadge(entity.entityType)}</TableCell>
                         <TableCell>
-                          <div>{entity.contact?.name || '-'}</div>
-                          <div className="text-sm text-slate-500">{entity.contact?.primaryPhone || ''}</div>
+                          {entity.creditScore !== null && entity.creditScore !== undefined ? (
+                            <span className={`font-mono font-bold ${
+                              entity.creditScore >= 80 ? 'text-green-600' :
+                              entity.creditScore >= 60 ? 'text-yellow-600' : 'text-red-600'
+                            }`}>
+                              {entity.creditScore.toFixed(0)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {entity.creditLevel ? (
+                            <Badge variant={
+                              entity.creditLevel === 'AAA' || entity.creditLevel === 'AA' ? 'default' :
+                              entity.creditLevel === 'A' || entity.creditLevel === 'BBB' ? 'secondary' : 'destructive'
+                            }>
+                              {entity.creditLevel}
+                            </Badge>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {entity.riskLevel ? (
+                            <Badge variant={
+                              entity.riskLevel === '低' ? 'default' :
+                              entity.riskLevel === '中' ? 'secondary' : 'destructive'
+                            }>
+                              {entity.riskLevel}
+                            </Badge>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
                         </TableCell>
                         <TableCell className="font-mono">{formatCurrency(entity.creditLimit)}</TableCell>
                         <TableCell className="font-mono text-orange-600">{formatCurrency(entity.creditUsed)}</TableCell>
@@ -666,6 +721,24 @@ export function Settlements() {
                             </div>
                             <span className="text-sm text-slate-500">{usageRatio.toFixed(1)}%</span>
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                await EntityCreditService.updateEntityCredit(entity.id);
+                                toast('信用评分已更新', 'success');
+                                loadData();
+                              } catch (error) {
+                                console.error('[Settlements] 更新信用评分失败:', error);
+                                toast('更新失败，请重试', 'error');
+                              }
+                            }}
+                          >
+                            重新计算
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );
@@ -789,6 +862,38 @@ export function Settlements() {
                 <div className="p-4 bg-slate-50 rounded-lg">
                   <h4 className="font-medium mb-3">信用信息</h4>
                   <div className="space-y-2 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">信用评分:</span>
+                      <span className={`font-mono font-bold ${
+                        (selectedEntity.creditScore || 0) >= 80 ? 'text-green-600' :
+                        (selectedEntity.creditScore || 0) >= 60 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                        {selectedEntity.creditScore !== null && selectedEntity.creditScore !== undefined ? selectedEntity.creditScore.toFixed(0) : '-'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">信用等级:</span>
+                      {selectedEntity.creditLevel ? (
+                        <Badge variant={
+                          selectedEntity.creditLevel === 'AAA' || selectedEntity.creditLevel === 'AA' ? 'default' :
+                          selectedEntity.creditLevel === 'A' || selectedEntity.creditLevel === 'BBB' ? 'secondary' : 'destructive'
+                        }>
+                          {selectedEntity.creditLevel}
+                        </Badge>
+                      ) : <span className="text-slate-400">-</span>}
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">风险等级:</span>
+                      {selectedEntity.riskLevel ? (
+                        <Badge variant={
+                          selectedEntity.riskLevel === '低' ? 'default' :
+                          selectedEntity.riskLevel === '中' ? 'secondary' : 'destructive'
+                        }>
+                          {selectedEntity.riskLevel}
+                        </Badge>
+                      ) : <span className="text-slate-400">-</span>}
+                    </div>
+                    <div className="border-t border-slate-200 my-2" />
                     <div className="flex justify-between">
                       <span className="text-slate-500">信用额度:</span>
                       <span>{formatCurrency(selectedEntity.creditLimit)}</span>

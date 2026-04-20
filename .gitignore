@@ -39,5 +39,5 @@ build/
 release/
 
 # Electron
-main.js
-preload.js
+#main.js
+#preload.js

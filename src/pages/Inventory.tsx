@@ -20,10 +20,24 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { DataTablePagination, useDataTable } from '@/components/DataTable';
 import { ProductService } from '@/services/ProductService';
 import { formatCurrency } from '@/lib/utils';
+import { toast } from '@/components/Toast';
 import type { Product, Category } from '@/lib/types';
+
+interface StockEditItem {
+  productId: string;
+  originalStock: number;
+  newStock: number;
+}
 
 export function Inventory() {
   const navigate = useNavigate();
@@ -36,8 +50,14 @@ export function Inventory() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<string>(initialFilter);
   const [loading, setLoading] = useState(true);
-
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
+
+  // 批量编辑库存相关
+  const [showStockEditDialog, setShowStockEditDialog] = useState(false);
+  const [stockEditItems, setStockEditItems] = useState<StockEditItem[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editSearchTerm, setEditSearchTerm] = useState('');
+  const [editSelectedCategory, setEditSelectedCategory] = useState<string>('all');
 
   useEffect(() => {
     loadData();
@@ -45,18 +65,6 @@ export function Inventory() {
 
   const loadData = async () => {
     try {
-      const whereClause: any = {};
-
-      if (selectedCategory !== 'all') {
-        whereClause.categoryId = selectedCategory;
-      }
-
-      if (stockFilter === 'low') {
-        whereClause.stock = { gt: 0 };
-      } else if (stockFilter === 'out') {
-        whereClause.stock = 0;
-      }
-
       const [productsData, categoriesData] = await Promise.all([
         ProductService.getProducts(),
         ProductService.getCategories(),
@@ -70,6 +78,67 @@ export function Inventory() {
       setLoading(false);
     }
   };
+
+  // 打开批量编辑库存对话框
+  const openStockEditDialog = () => {
+    const items: StockEditItem[] = products.map(p => ({
+      productId: p.id,
+      originalStock: p.stock,
+      newStock: p.stock,
+    }));
+    setStockEditItems(items);
+    setShowStockEditDialog(true);
+  };
+
+  // 更新单个商品的编辑库存
+  const updateStockEditItem = (productId: string, newStock: number) => {
+    setStockEditItems(items => items.map(item =>
+      item.productId === productId ? { ...item, newStock: Math.max(0, newStock) } : item
+    ));
+  };
+
+  // 保存批量库存
+  const saveBatchStock = async () => {
+    setIsSaving(true);
+    try {
+      const itemsToUpdate = stockEditItems.filter(
+        item => item.newStock !== item.originalStock
+      );
+
+      for (const item of itemsToUpdate) {
+        await ProductService.updateProduct(item.productId, {
+          stock: item.newStock,
+        });
+      }
+
+      toast(`成功更新 ${itemsToUpdate.length} 项库存`, 'success');
+      setShowStockEditDialog(false);
+      loadData();
+    } catch (error) {
+      console.error('[Inventory] 批量更新库存失败:', error);
+      toast('更新失败，请重试', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 批量编辑的筛选
+  const filteredStockEditItems = stockEditItems.filter(item => {
+    const product = products.find(p => p.id === item.productId);
+    if (!product) return false;
+
+    const matchesSearch =
+      !editSearchTerm ||
+      product.name.toLowerCase().includes(editSearchTerm.toLowerCase()) ||
+      product.specification?.toLowerCase().includes(editSearchTerm.toLowerCase()) ||
+      product.model?.toLowerCase().includes(editSearchTerm.toLowerCase());
+
+    const matchesCategory =
+      editSelectedCategory === 'all' ||
+      product.categoryId === editSelectedCategory;
+
+    return matchesSearch && matchesCategory;
+  });
 
   const isAlertMode = stockFilter === 'low' || stockFilter === 'out';
 
@@ -162,6 +231,9 @@ export function Inventory() {
           <p className="text-slate-500 mt-1">管理店内建材水暖产品库存</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={openStockEditDialog}>
+            📋 批量盘点/录入库存
+          </Button>
           {isAlertMode && selectedProducts.size > 0 && (
             <Button className="bg-orange-500 hover:bg-orange-600" onClick={openGenerateDialog}>
               📝 生成进货单 ({selectedProducts.size})
@@ -328,6 +400,112 @@ export function Inventory() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 批量编辑库存对话框 */}
+      <Dialog open={showStockEditDialog} onOpenChange={setShowStockEditDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>批量盘点/录入库存</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-500">分类:</span>
+                <Select value={editSelectedCategory} onValueChange={setEditSelectedCategory}>
+                  <SelectTrigger className="w-36 h-8">
+                    <SelectValue placeholder="全部分类" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部分类</SelectItem>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Input
+                placeholder="搜索商品..."
+                value={editSearchTerm}
+                onChange={(e) => setEditSearchTerm(e.target.value)}
+                className="w-48 h-8"
+              />
+              <p className="text-xs text-slate-400">
+                提示：直接在“盘点库存”列中输入数量，会直接覆盖原有库存
+              </p>
+            </div>
+
+            <div className="border rounded-lg overflow-auto max-h-[50vh]">
+              <Table>
+                <TableHeader className="sticky top-0 bg-white z-10">
+                  <TableRow>
+                    <TableHead>商品名称</TableHead>
+                    <TableHead>分类</TableHead>
+                    <TableHead className="text-right">原有库存</TableHead>
+                    <TableHead className="text-right w-32">盘点库存</TableHead>
+                    <TableHead>状态</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredStockEditItems.map(item => {
+                    const product = products.find(p => p.id === item.productId);
+                    if (!product) return null;
+                    const hasChanged = item.originalStock !== item.newStock;
+                    return (
+                      <TableRow key={item.productId} className={hasChanged ? 'bg-orange-50' : ''}>
+                        <TableCell className="font-medium">{product.name}</TableCell>
+                        <TableCell>{product.category.name}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {item.originalStock} {product.unit}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            value={item.newStock}
+                            onChange={(e) => updateStockEditItem(item.productId, parseInt(e.target.value) || 0)}
+                            min="0"
+                            className="w-full h-8 text-right"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {hasChanged && (
+                            <Badge variant="warning">已修改</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-slate-500">
+                共 {filteredStockEditItems.length} 件商品，已修改 {stockEditItems.filter(i => i.originalStock !== i.newStock).length} 件
+              </p>
+              <DialogFooter className="gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowStockEditDialog(false);
+                    setStockEditItems([]);
+                  }}
+                >
+                  取消
+                </Button>
+                <Button
+                  onClick={saveBatchStock}
+                  disabled={isSaving}
+                  className="bg-orange-500 hover:bg-orange-600"
+                >
+                  {isSaving ? '保存中...' : '保存修改'}
+                </Button>
+              </DialogFooter>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

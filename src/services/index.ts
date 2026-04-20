@@ -19,3 +19,5 @@ export { PhotoService } from './PhotoService';
 export { InventoryCheckService } from './InventoryCheckService';
 export { ReceivableService } from './ReceivableService';
 export { BadDebtService } from './BadDebtService';
+export { EntityCreditService } from './EntityCreditService';
+export { ContactAnalyticsService } from './ContactAnalyticsService';

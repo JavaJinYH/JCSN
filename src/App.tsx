@@ -29,7 +29,12 @@ import { ToastContainer } from './components/Toast';
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
       <ToastContainer />
       <Routes>
         <Route path="/" element={<AppLayout />}>

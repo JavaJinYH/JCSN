@@ -34,12 +34,13 @@ import {
   Legend,
 } from 'recharts';
 import { ReportService } from '@/services/ReportService';
+import { ContactAnalyticsService } from '@/services/ContactAnalyticsService';
 import { formatCurrency } from '@/lib/utils';
 import type { Contact } from '@/lib/types';
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx';
 
-type ReportType = 'daily' | 'monthly' | 'yearly' | 'products' | 'profit' | 'customer' | 'returns' | 'baddebt';
+type ReportType = 'daily' | 'monthly' | 'yearly' | 'products' | 'profit' | 'contact' | 'returns' | 'baddebt';
 
 interface ReportData {
   totalSales: number;
@@ -128,6 +129,9 @@ export function Reports() {
   const [returns, setReturns] = useState<any[]>([]);
   const [badDebtWriteOffs, setBadDebtWriteOffs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [contactAsEntity, setContactAsEntity] = useState<any[]>([]);
+  const [contactAsIntroducer, setContactAsIntroducer] = useState<any[]>([]);
+  const [contactSubTab, setContactSubTab] = useState<'entity' | 'introducer'>('entity');
 
   useEffect(() => {
     loadReport();
@@ -151,8 +155,8 @@ export function Reports() {
         case 'profit':
           await loadProfitReport(start, end);
           break;
-        case 'customer':
-          await loadCustomerReport(start, end);
+        case 'contact':
+          await loadContactReport(start, end);
           break;
         case 'returns':
           await loadReturnsReport(start, end);
@@ -312,55 +316,10 @@ export function Reports() {
     });
   };
 
-  const loadCustomerReport = async (start: Date, end: Date) => {
-    const orders = await ReportService.getSalesInPeriod(start, end);
-    const contacts = await ReportService.getContacts() as Contact[];
-
-    const contactMap = new Map<string, Contact>(contacts.map(c => [c.id, c]));
-
-    const customerMap = new Map<string, {
-      name: string;
-      phone: string | null;
-      type: string;
-      amount: number;
-      orders: number;
-      valueScore: number | null;
-      autoTag: string | null;
-      creditLevel: string;
-      riskLevel: string;
-      blacklist: boolean;
-    }>();
-    
-    orders.forEach((order) => {
-      if (!order.buyer) return;
-      const netSales = ReportService.calculateNetSales(order);
-      const existing = customerMap.get(order.buyerId);
-      if (existing) {
-        existing.amount += netSales;
-        existing.orders += 1;
-      } else {
-        const contact = contactMap.get(order.buyerId);
-        customerMap.set(order.buyerId, {
-          name: order.buyer.name,
-          phone: order.buyer.primaryPhone,
-          type: order.buyer.contactType,
-          amount: netSales,
-          orders: 1,
-          valueScore: contact?.valueScore ?? null,
-          autoTag: contact?.autoTag ?? null,
-          creditLevel: contact?.creditLevel ?? 'normal',
-          riskLevel: contact?.riskLevel ?? 'low',
-          blacklist: contact?.blacklist ?? false,
-        });
-      }
-    });
-
-    const ranking = Array.from(customerMap.entries())
-      .map(([_, data]) => data)
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 10);
-
-    setCustomerRanking(ranking);
+  const loadContactReport = async (start: Date, end: Date) => {
+    const analytics = await ContactAnalyticsService.getAllContactAnalytics();
+    setContactAsEntity(analytics.asEntity);
+    setContactAsIntroducer(analytics.asIntroducer);
   };
 
   const loadReturnsReport = async (start: Date, end: Date) => {
@@ -406,9 +365,9 @@ export function Reports() {
         dataToExport = chartData;
         filename = `利润分析_${startDate}_${endDate}`;
         break;
-      case 'customer':
-        dataToExport = customerRanking;
-        filename = `客户消费排行_${startDate}_${endDate}`;
+      case 'contact':
+        dataToExport = contactSubTab === 'entity' ? contactAsEntity : contactAsIntroducer;
+        filename = `联系人分析_${startDate}_${endDate}`;
         break;
       case 'returns':
         dataToExport = returns.map(r => ({
@@ -464,7 +423,7 @@ export function Reports() {
                 <SelectItem value="yearly">年报</SelectItem>
                 <SelectItem value="products">商品排行</SelectItem>
                 <SelectItem value="profit">利润分析</SelectItem>
-                <SelectItem value="customer">客户分析</SelectItem>
+                <SelectItem value="contact">联系人分析</SelectItem>
                 <SelectItem value="returns">退货分析</SelectItem>
                 <SelectItem value="baddebt">坏账分析</SelectItem>
               </SelectContent>
@@ -848,88 +807,123 @@ export function Reports() {
         </Card>
       )}
 
-      {reportType === 'customer' && (
+      {reportType === 'contact' && (
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>客户消费排行 TOP10</CardTitle>
+              <div className="flex items-center gap-4">
+                <Button
+                  variant={contactSubTab === 'entity' ? 'default' : 'outline'}
+                  onClick={() => setContactSubTab('entity')}
+                >
+                  作为挂靠主体
+                </Button>
+                <Button
+                  variant={contactSubTab === 'introducer' ? 'default' : 'outline'}
+                  onClick={() => setContactSubTab('introducer')}
+                >
+                  作为介绍人
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>排名</TableHead>
-                    <TableHead>客户名称</TableHead>
-                    <TableHead>价值评分</TableHead>
-                    <TableHead>信用等级</TableHead>
-                    <TableHead>风险等级</TableHead>
-                    <TableHead>联系电话</TableHead>
-                    <TableHead>类型</TableHead>
-                    <TableHead className="text-right">消费金额</TableHead>
-                    <TableHead className="text-right">订单数</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {customerRanking.map((item, index) => (
-                    <TableRow key={index}>
-                      <TableCell>
-                        <Badge variant={index < 3 ? 'default' : 'secondary'}>
-                          {index + 1}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {item.blacklist && <Badge variant="destructive" className="mr-2">黑名单</Badge>}
-                        {item.name}
-                      </TableCell>
-                      <TableCell>
-                        {item.valueScore != null ? (
-                          <div className="flex items-center gap-1">
-                            <span className="font-bold text-orange-600">{item.valueScore.toFixed(1)}</span>
-                            <span className="text-yellow-500">★</span>
-                            {item.autoTag && (
-                              <span className={`text-xs ${getAutoTagColor(item.autoTag)}`}>
-                                {getAutoTagLabel(item.autoTag)}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-slate-400">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {item.creditLevel ? (
-                          <Badge className={getCreditLevelColor(item.creditLevel)}>
-                            {getCreditLevelLabel(item.creditLevel)}
-                          </Badge>
-                        ) : (
-                          <span className="text-slate-400">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {item.riskLevel ? (
-                          <Badge className={getRiskLevelColor(item.riskLevel)}>
-                            {getRiskLevelLabel(item.riskLevel)}
-                          </Badge>
-                        ) : (
-                          <span className="text-slate-400">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-slate-500">{item.phone || '-'}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{item.type}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-orange-600">
-                        {formatCurrency(item.amount)}
-                      </TableCell>
-                      <TableCell className="text-right">{item.orders}</TableCell>
+              {contactSubTab === 'entity' && (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>联系人名称</TableHead>
+                      <TableHead>挂靠主体</TableHead>
+                      <TableHead>总销售额</TableHead>
+                      <TableHead>订单数</TableHead>
+                      <TableHead>平均利润率</TableHead>
+                      <TableHead>信用评分</TableHead>
+                      <TableHead>信用等级</TableHead>
+                      <TableHead>风险等级</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {contactAsEntity.map((item: any, index: number) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-medium">{item.contactName}</TableCell>
+                        <TableCell>{item.entityName}</TableCell>
+                        <TableCell className="font-mono text-orange-600">{formatCurrency(item.totalSales)}</TableCell>
+                        <TableCell>{item.orderCount}</TableCell>
+                        <TableCell>{((item.avgProfitMargin || 0) * 100).toFixed(1)}%</TableCell>
+                        <TableCell>
+                          {item.creditScore != null ? (
+                            <span className={`font-bold ${
+                              item.creditScore >= 80 ? 'text-green-600' :
+                              item.creditScore >= 60 ? 'text-yellow-600' : 'text-red-600'
+                            }`}>{item.creditScore.toFixed(0)}</span>
+                          ) : '-'}
+                        </TableCell>
+                        <TableCell>
+                          {item.creditLevel ? (
+                            <Badge variant={
+                              item.creditLevel === 'AAA' || item.creditLevel === 'AA' ? 'default' :
+                              item.creditLevel === 'A' || item.creditLevel === 'BBB' ? 'secondary' : 'destructive'
+                            }>
+                              {item.creditLevel}
+                            </Badge>
+                          ) : '-'}
+                        </TableCell>
+                        <TableCell>
+                          {item.riskLevel ? (
+                            <Badge variant={
+                              item.riskLevel === '低' ? 'default' :
+                              item.riskLevel === '中' ? 'secondary' : 'destructive'
+                            }>
+                              {item.riskLevel}
+                            </Badge>
+                          ) : '-'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+
+              {contactSubTab === 'introducer' && (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>联系人名称</TableHead>
+                      <TableHead>推荐订单数</TableHead>
+                      <TableHead>推荐总销售额</TableHead>
+                      <TableHead>平均利润率</TableHead>
+                      <TableHead>坏账率</TableHead>
+                      <TableHead>复购率</TableHead>
+                      <TableHead>推荐价值评分</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {contactAsIntroducer.map((item: any, index: number) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-medium">{item.contactName}</TableCell>
+                        <TableCell>{item.introducedOrderCount}</TableCell>
+                        <TableCell className="font-mono text-orange-600">{formatCurrency(item.introducedTotalSales)}</TableCell>
+                        <TableCell>{((item.avgProfitMargin || 0) * 100).toFixed(1)}%</TableCell>
+                        <TableCell>{((item.badDebtRate || 0) * 100).toFixed(1)}%</TableCell>
+                        <TableCell>{((item.repeatRate || 0) * 100).toFixed(1)}%</TableCell>
+                        <TableCell>
+                          <Badge variant={
+                            item.introducerValueScore >= 80 ? 'default' :
+                            item.introducerValueScore >= 60 ? 'secondary' : 'destructive'
+                          }>
+                            {item.introducerValueScore.toFixed(0)}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </div>
       )}
+
+
 
       {reportType === 'returns' && (
         <Card>

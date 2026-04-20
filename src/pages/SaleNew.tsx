@@ -72,6 +72,7 @@ export function SaleNew() {
   const [manualFinalAmount, setManualFinalAmount] = useState<number | null>(null);
   const [showLossConfirm, setShowLossConfirm] = useState(false);
   const [showLossDetails, setShowLossDetails] = useState(false);
+  const [showPriceUpdateDialog, setShowPriceUpdateDialog] = useState(false);
 
   const [payments, setPayments] = useState<PaymentInfo[]>([
     { method: '现金', amount: 0, payerName: '' },
@@ -160,12 +161,7 @@ export function SaleNew() {
 
       let walkInCustomer = contactsData.find(c => c.name === '散客');
       if (!walkInCustomer) {
-        walkInCustomer = await ContactService.createContact({
-          name: '散客',
-          code: 'SK' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6).toUpperCase(),
-          primaryPhone: '0000000000',
-          manualTag: '○',
-        });
+        walkInCustomer = await ContactService.ensureWalkInCustomer();
         contactsData = [...contactsData, walkInCustomer];
       }
 
@@ -196,38 +192,45 @@ export function SaleNew() {
     }));
   }, [entities]);
 
-  const loadHistoricalPrices = async (contactId: string) => {
+  const loadHistoricalPrices = async (entityId: string) => {
     try {
-      const [customerPrices, orders] = await Promise.all([
-        ContactService.getCustomerPrices(contactId),
-        ContactService.getCustomerOrders(contactId),
-      ]);
-
-      const priceMap = new Map<string, number>();
-      customerPrices.forEach(cp => {
-        priceMap.set(cp.productId, cp.lastPrice);
-      });
-
-      orders.forEach(order => {
-        order.items?.forEach(item => {
-          if (!priceMap.has(item.productId)) {
-            priceMap.set(item.productId, item.unitPrice);
-          }
-        });
-      });
+      const priceMapObj = await EntityService.getEntityPrices(entityId);
+      const priceMap = new Map<string, number>(Object.entries(priceMapObj));
       setHistoricalPrices(priceMap);
     } catch (error) {
       console.error('[SaleNew] 加载历史价格失败:', error);
     }
   };
 
+  const [previousSelectedEntity, setPreviousSelectedEntity] = useState<string>('');
+
   useEffect(() => {
-    if (selectedBuyer && selectedBuyer !== '__none__') {
-      loadHistoricalPrices(selectedBuyer);
+    if (selectedEntity) {
+      loadHistoricalPrices(selectedEntity);
+      // 如果之前已经有商品，并且选择了新的挂靠主体（不是第一次选），提示是否更新购物车里的商品价格
+      if (cart.length > 0 && previousSelectedEntity !== selectedEntity && previousSelectedEntity !== '') {
+        setShowPriceUpdateDialog(true);
+      }
+      setPreviousSelectedEntity(selectedEntity);
     } else {
       setHistoricalPrices(new Map());
+      setPreviousSelectedEntity('');
     }
-  }, [selectedBuyer]);
+  }, [selectedEntity]);
+
+  const handleUpdateCartPrices = () => {
+    // 更新购物车里所有商品的价格，用历史价格
+    const updatedCart = cart.map(item => {
+      const historicalPrice = historicalPrices.get(item.product.id);
+      if (historicalPrice !== undefined) {
+        return { ...item, unitPrice: historicalPrice };
+      }
+      return item;
+    });
+    setCart(updatedCart);
+    setShowPriceUpdateDialog(false);
+  };
+
 
   const addToCart = (product: Product) => {
     recordFrequency('product', product.id);
@@ -483,27 +486,6 @@ export function SaleNew() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
-          <SaleProductSelect
-            products={products}
-            categories={categories}
-            historicalPrices={historicalPrices}
-            onAddToCart={addToCart}
-          />
-
-          <SaleContactSelect
-            contacts={contacts}
-            entities={entities.map(e => ({ id: e.id, name: e.name }))}
-            selectedBuyer={selectedBuyer}
-            selectedIntroducer={selectedIntroducer}
-            pickerName={pickerName}
-            pickerPhone={pickerPhone}
-            onSelectedBuyerChange={setSelectedBuyer}
-            onSelectedIntroducerChange={setSelectedIntroducer}
-            onPickerNameChange={setPickerName}
-            onPickerPhoneChange={setPickerPhone}
-            onContactsChange={setContacts}
-          />
-
           <Card>
             <CardHeader>
               <CardTitle className="text-base">挂靠主体</CardTitle>
@@ -564,6 +546,27 @@ export function SaleNew() {
             </CardContent>
           </Card>
 
+          <SaleProductSelect
+            products={products}
+            categories={categories}
+            historicalPrices={historicalPrices}
+            onAddToCart={addToCart}
+          />
+
+          <SaleContactSelect
+            contacts={contacts}
+            entities={entities.map(e => ({ id: e.id, name: e.name }))}
+            selectedBuyer={selectedBuyer}
+            selectedIntroducer={selectedIntroducer}
+            pickerName={pickerName}
+            pickerPhone={pickerPhone}
+            onSelectedBuyerChange={setSelectedBuyer}
+            onSelectedIntroducerChange={setSelectedIntroducer}
+            onPickerNameChange={setPickerName}
+            onPickerPhoneChange={setPickerPhone}
+            onContactsChange={setContacts}
+          />
+
           <SaleDelivery
             needsDelivery={needsDelivery}
             deliveryAddress={deliveryAddress}
@@ -587,7 +590,6 @@ export function SaleNew() {
               manualFinalAmount={manualFinalAmount}
               needsDelivery={needsDelivery}
               deliveryFee={deliveryFee}
-              onAddToCart={addToCart}
               onUpdateCartQuantity={updateCartQuantity}
               onRemoveFromCart={removeFromCart}
               onUpdateCartItem={updateCartItem}
@@ -665,6 +667,25 @@ export function SaleNew() {
           </div>
         </div>
       </div>
+
+      <Dialog open={showPriceUpdateDialog} onOpenChange={setShowPriceUpdateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>💡 已选择挂靠主体，是否更新购物车价格？</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p>已选择新的挂靠主体，购物车里有{cart.length}件商品，是否将它们的价格更新为该挂靠主体的历史购买价？</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPriceUpdateDialog(false)}>
+              不更新（保持当前价格）
+            </Button>
+            <Button className="bg-orange-500 hover:bg-orange-600" onClick={handleUpdateCartPrices}>
+              更新为历史价格
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showLossConfirm} onOpenChange={setShowLossConfirm}>
         <DialogContent>

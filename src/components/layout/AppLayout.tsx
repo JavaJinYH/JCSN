@@ -32,14 +32,24 @@ export function AppLayout() {
   }, []);
 
   const handleIdle = useCallback(() => {
-    if (idleTimeoutMinutes > 0) {
+    if (idleTimeoutMinutes > 0 && !isLocked) {
+      console.log('💤 系统闲置，自动锁定');
       setIsLocked(true);
     }
-  }, [idleTimeoutMinutes]);
+  }, [idleTimeoutMinutes, isLocked]);
+
+  const { wakeUp } = useIdleTimer({
+    timeout: idleTimeoutMinutes * 60 * 1000,
+    onIdle: handleIdle,
+    enabled: idleTimeoutMinutes > 0 && !isLocked, // 锁定时停止计时
+  });
 
   const handleUnlock = useCallback(() => {
     setIsLocked(false);
-  }, []);
+    // 解锁后重置闲置计时器
+    wakeUp();
+    console.log('🔓 系统已解锁');
+  }, [wakeUp]);
 
   const handleLogout = useCallback(() => {
     if (window.confirm('确定要关闭系统吗？')) {
@@ -51,12 +61,6 @@ export function AppLayout() {
       }
     }
   }, []);
-
-  useIdleTimer({
-    timeout: idleTimeoutMinutes * 60 * 1000,
-    onIdle: handleIdle,
-    enabled: idleTimeoutMinutes > 0 && !isLocked,
-  });
 
   return (
     <div className="min-h-screen bg-slate-50">

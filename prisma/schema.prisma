@@ -75,16 +75,16 @@ model ProductSpec {
   @@unique([productId, brandId, name])
 }
 
-model CustomerPrice {
+model EntityPrice {
   id            String   @id @default(cuid())
-  customerId    String
-  customer      Contact @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  entityId      String
+  entity        Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
   productId     String
   lastPrice     Float
   transactionCount Int   @default(1)
   updatedAt     DateTime @updatedAt
 
-  @@unique([customerId, productId])
+  @@unique([entityId, productId])
 }
 
 model PurchaseOrder {
@@ -393,7 +393,6 @@ model Contact {
   paymentPlans         PaymentPlan[]
   collectionRecords    CollectionRecord[]
   creditRecords        CreditRecord[]
-  customerPrices       CustomerPrice[]
   slipAsCustomer       SaleSlip[]
   slipAsBuyer          SaleSlip[]  @relation("SaleSlipBuyer")
   slipAsIntroducer     SaleSlip[]  @relation("SaleSlipIntroducer")
@@ -437,6 +436,10 @@ model Entity {
   defaultPayer String?
   creditLimit Float    @default(0)
   creditUsed  Float    @default(0)
+  creditScore      Float?
+  creditLevel      String?
+  riskLevel        String?
+  lastCreditEvalDate DateTime?
   address     String?
   remark      String?
   createdAt   DateTime @default(now())
@@ -446,6 +449,7 @@ model Entity {
   projects BizProject[]
   orders  SaleOrder[]
   legacyBills LegacyBill[]
+  entityPrices EntityPrice[]
 }
 
 model BizProject {

@@ -185,4 +185,51 @@ export const EntityService = {
       count: relatedOrders.length,
     };
   },
+
+  // 获取挂靠主体的历史商品价格
+  async getEntityPrices(entityId: string) {
+    const entityPrices = await db.entityPrice.findMany({
+      where: { entityId },
+    });
+    const priceMap: Record<string, number> = {};
+    for (const ep of entityPrices) {
+      priceMap[ep.productId] = ep.lastPrice;
+    }
+
+    // 如果 EntityPrice 里没有，尝试从历史订单里找
+    const orders = await db.saleOrder.findMany({
+      where: { paymentEntityId: entityId },
+      include: { items: true },
+      orderBy: { saleDate: 'desc' },
+      take: 20,
+    });
+
+    for (const order of orders) {
+      for (const item of order.items) {
+        if (!priceMap[item.productId]) {
+          priceMap[item.productId] = item.price;
+        }
+      }
+    }
+
+    return priceMap;
+  },
+
+  // 保存/更新挂靠主体的商品历史价格
+  async saveEntityPrice(entityId: string, productId: string, price: number) {
+    const existing = await db.entityPrice.findUnique({
+      where: { entityId_productId: { entityId, productId } },
+    });
+
+    if (existing) {
+      return db.entityPrice.update({
+        where: { entityId_productId: { entityId, productId } },
+        data: { lastPrice: price, transactionCount: existing.transactionCount + 1 },
+      });
+    } else {
+      return db.entityPrice.create({
+        data: { entityId, productId, lastPrice: price },
+      });
+    }
+  },
 };

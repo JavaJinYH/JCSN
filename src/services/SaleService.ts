@@ -187,16 +187,17 @@ export const SaleService = {
         },
       });
 
-      if (data.buyerId) {
-        await db.customerPrice.upsert({
+      // 更新挂靠主体的历史价格
+      if (data.paymentEntityId) {
+        await db.entityPrice.upsert({
           where: {
-            customerId_productId: {
-              customerId: data.buyerId,
+            entityId_productId: {
+              entityId: data.paymentEntityId,
               productId: item.productId,
             },
           },
           create: {
-            customerId: data.buyerId,
+            entityId: data.paymentEntityId,
             productId: item.productId,
             lastPrice: item.unitPrice,
             transactionCount: 1,

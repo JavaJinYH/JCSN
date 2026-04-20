@@ -13,7 +13,7 @@ import { DataTablePagination, useDataTable } from '@/components/DataTable';
 import { ProductService } from '@/services/ProductService';
 import type { Product, Category, ProductSpec } from '@/lib/types';
 import { toast } from '@/components/Toast';
-import { ProductStats, ProductFilters, ProductTable, ProductImport } from '@/components/product';
+import { ProductStats, ProductFilters, ProductTable } from '@/components/product';
 import { useProducts, useCategories } from '@/hooks';
 
 interface ProductWithDetails extends Product {
@@ -21,20 +21,11 @@ interface ProductWithDetails extends Product {
   productSpecs?: ProductSpec[];
 }
 
-interface ImportItem {
-  productId: string;
-  productName: string;
-  quantity: number;
-  price?: number;
-}
-
 export function Products() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<string>('all');
   const [deleteProduct, setDeleteProduct] = useState<ProductWithDetails | null>(null);
-  const [showImportDialog, setShowImportDialog] = useState(false);
-  const [importItems, setImportItems] = useState<ImportItem[]>([]);
 
   const { products: allProducts, loading, refresh } = useProducts({
     includeCategory: true,
@@ -76,26 +67,6 @@ export function Products() {
     }
   };
 
-  const handleImportStock = async () => {
-    if (importItems.length === 0) return;
-
-    try {
-      for (const item of importItems) {
-        await ProductService.updateProduct(item.productId, {
-          stock: { increment: item.quantity },
-          referencePrice: item.price,
-        });
-      }
-      toast(`成功导入 ${importItems.length} 项库存`, 'success');
-      setImportItems([]);
-      setShowImportDialog(false);
-      refresh();
-    } catch (error) {
-      console.error('[Products] 导入库存失败:', error);
-      toast('导入失败，请重试', 'error');
-    }
-  };
-
   const handleResetFilters = () => {
     setSearchTerm('');
     setSelectedCategory('all');
@@ -118,9 +89,6 @@ export function Products() {
           <p className="text-slate-500 mt-1">管理商品信息和价格</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowImportDialog(true)}>
-            导入初始库存
-          </Button>
           <Link to="/products/new">
             <Button className="bg-orange-500 hover:bg-orange-600">+ 添加商品</Button>
           </Link>
@@ -182,27 +150,6 @@ export function Products() {
               删除
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showImportDialog} onOpenChange={(open) => {
-        setShowImportDialog(open);
-        if (!open) setImportItems([]);
-      }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>导入初始库存</DialogTitle>
-          </DialogHeader>
-          <ProductImport
-            products={allProducts}
-            importItems={importItems}
-            onItemsChange={setImportItems}
-            onImport={handleImportStock}
-            onCancel={() => {
-              setShowImportDialog(false);
-              setImportItems([]);
-            }}
-          />
         </DialogContent>
       </Dialog>
     </div>

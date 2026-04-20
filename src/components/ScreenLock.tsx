@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { useIdleTimer } from '@/hooks/useIdleTimer';
 import { toast } from '@/components/Toast';
 
 interface ScreenLockProps {
@@ -16,15 +15,17 @@ interface ScreenLockProps {
 export function ScreenLock({ isLocked, onUnlock, idleTimeoutMinutes, onLogout, lockPassword }: ScreenLockProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [showLockDialog, setShowLockDialog] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
+  // 锁定时重置并聚焦输入框
   useEffect(() => {
     if (isLocked) {
-      setShowLockDialog(true);
       setError('');
       setPassword('');
-    } else {
-      setShowLockDialog(false);
+      // 稍微延迟一下，确保 DOM 更新后再聚焦
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
     }
   }, [isLocked]);
 
@@ -43,8 +44,13 @@ export function ScreenLock({ isLocked, onUnlock, idleTimeoutMinutes, onLogout, l
   };
 
   const handleLogout = () => {
-    if (window.confirm('确定要退出系统吗？')) {
+    if (confirm('确定要关闭系统吗？')) {
       onLogout();
+    } else {
+      // 取消后重新聚焦
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
     }
   };
 
@@ -68,6 +74,7 @@ export function ScreenLock({ isLocked, onUnlock, idleTimeoutMinutes, onLogout, l
 
                 <div className="space-y-2">
                   <Input
+                    ref={inputRef}
                     type="password"
                     placeholder="请输入密码"
                     value={password}
@@ -80,7 +87,6 @@ export function ScreenLock({ isLocked, onUnlock, idleTimeoutMinutes, onLogout, l
                         handleUnlock();
                       }
                     }}
-                    autoFocus
                   />
                   {error && (
                     <p className="text-red-500 text-sm text-center">{error}</p>
