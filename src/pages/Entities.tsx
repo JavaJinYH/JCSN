@@ -26,16 +26,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { DataTableFilters, DataTablePagination, useDataTable } from '@/components/DataTable';
-import { db } from '@/lib/db';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import { EntityService } from '@/services/EntityService';
 import { toast } from '@/components/Toast';
-import type { Entity, Contact, BizProject, SaleOrder } from '@/lib/types';
+import type { Entity, Contact } from '@/lib/types';
 
 type EntityWithRelations = Entity & {
   contact: Contact | null;
-  projects?: BizProject[];
-  orders?: SaleOrder[];
 };
 
 const entityTypeOptions = [
@@ -57,10 +54,7 @@ export function Entities() {
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<EntityWithRelations | null>(null);
-  const [entityProjects, setEntityProjects] = useState<BizProject[]>([]);
-  const [entityOrders, setEntityOrders] = useState<SaleOrder[]>([]);
   const [entityStats, setEntityStats] = useState<Record<string, { total: number; paid: number; count: number }>>({});
-  const [viewLoading, setViewLoading] = useState(false);
   const [filterValues, setFilterValues] = useState<Record<string, any>>({});
 
   const [formData, setFormData] = useState({
@@ -157,23 +151,9 @@ export function Entities() {
     defaultPageSize: 20,
   });
 
-  const handleViewEntity = async (entity: EntityWithRelations) => {
-    setViewLoading(true);
+  const handleViewEntity = (entity: EntityWithRelations) => {
     setSelectedEntity(entity);
-    try {
-      const [projectsData, ordersData] = await Promise.all([
-        EntityService.getProjectsByEntity(entity.id),
-        EntityService.getEntityOrders(entity.id),
-      ]);
-      setEntityProjects(projectsData);
-      setEntityOrders(ordersData);
-      setShowDetailDialog(true);
-    } catch (error) {
-      console.error('[Entities] 加载主体详情失败:', error);
-      toast('加载主体详情失败，请重试', 'error');
-    } finally {
-      setViewLoading(false);
-    }
+    setShowDetailDialog(true);
   };
 
   const handleAddEntity = async () => {
@@ -574,159 +554,67 @@ export function Entities() {
       </Dialog>
 
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>主体详情</DialogTitle>
           </DialogHeader>
 
           {selectedEntity && (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-slate-50 rounded-lg">
-                  <h4 className="font-medium mb-3">基本信息</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">主体名称:</span>
-                      <span className="font-medium">{selectedEntity.name}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">主体类型:</span>
-                      <span>{getEntityTypeBadge(selectedEntity.entityType)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">联系人:</span>
-                      <span>{selectedEntity.contact?.name || '-'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">联系电话:</span>
-                      <span>{selectedEntity.contact?.primaryPhone || '-'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">主体地址:</span>
-                      <span>{selectedEntity.address || '-'}</span>
-                    </div>
-                    {selectedEntity.remark && (
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">备注:</span>
-                        <span>{selectedEntity.remark}</span>
-                      </div>
-                    )}
+              <div className="p-4 bg-slate-50 rounded-lg">
+                <h4 className="font-medium mb-3">基本信息</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">主体名称:</span>
+                    <span className="font-medium">{selectedEntity.name}</span>
                   </div>
-                </div>
-
-                <div className="p-4 bg-slate-50 rounded-lg">
-                  <h4 className="font-medium mb-3">销售统计</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">关联订单:</span>
-                      <span className="font-bold text-orange-600">{entityStats[selectedEntity.id]?.count || 0} 笔</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">销售总额:</span>
-                      <span className="font-bold">{formatCurrency(entityStats[selectedEntity.id]?.total || 0)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">已收款:</span>
-                      <span className="text-green-600">{formatCurrency(entityStats[selectedEntity.id]?.paid || 0)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">待收款:</span>
-                      <span className="text-red-600 font-bold">
-                        {formatCurrency((entityStats[selectedEntity.id]?.total || 0) - (entityStats[selectedEntity.id]?.paid || 0))}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">关联项目:</span>
-                      <span>{entityProjects.length} 个</span>
-                    </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">主体类型:</span>
+                    <span>{getEntityTypeBadge(selectedEntity.entityType)}</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">联系人:</span>
+                    <span>{selectedEntity.contact?.name || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">联系电话:</span>
+                    <span>{selectedEntity.contact?.primaryPhone || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">主体地址:</span>
+                    <span>{selectedEntity.address || '-'}</span>
+                  </div>
+                  {selectedEntity.remark && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">备注:</span>
+                      <span>{selectedEntity.remark}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div>
-                <h4 className="font-medium mb-3">关联项目 ({entityProjects.length})</h4>
-                {entityProjects.length === 0 ? (
-                  <div className="text-center py-4 text-slate-500 bg-slate-50 rounded-lg">
-                    暂无关联项目
+              <div className="p-4 bg-slate-50 rounded-lg">
+                <h4 className="font-medium mb-3">销售统计</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">关联订单:</span>
+                    <span className="font-bold text-orange-600">{entityStats[selectedEntity.id]?.count || 0} 笔</span>
                   </div>
-                ) : (
-                  <div className="border rounded-lg overflow-hidden mb-4">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>项目名称</TableHead>
-                          <TableHead>状态</TableHead>
-                          <TableHead>开始日期</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {entityProjects.map((project) => (
-                          <TableRow key={project.id}>
-                            <TableCell className="font-medium">{project.name}</TableCell>
-                            <TableCell>
-                              <Badge variant={project.status === '进行中' ? 'default' : 'secondary'}>
-                                {project.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-slate-500 text-sm">
-                              {project.startDate ? formatDate(project.startDate) : '-'}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">销售总额:</span>
+                    <span className="font-bold">{formatCurrency(entityStats[selectedEntity.id]?.total || 0)}</span>
                   </div>
-                )}
-              </div>
-
-              <div>
-                <h4 className="font-medium mb-3">关联销售订单 ({entityOrders.length})</h4>
-                {entityOrders.length === 0 ? (
-                  <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-lg">
-                    暂无关联销售订单
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">已收款:</span>
+                    <span className="text-green-600">{formatCurrency(entityStats[selectedEntity.id]?.paid || 0)}</span>
                   </div>
-                ) : (
-                  <div className="border rounded-lg overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>单据号</TableHead>
-                          <TableHead>日期</TableHead>
-                          <TableHead>购货人</TableHead>
-                          <TableHead>项目</TableHead>
-                          <TableHead className="text-right">金额</TableHead>
-                          <TableHead className="text-right">已付</TableHead>
-                          <TableHead>状态</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {entityOrders.map((order) => (
-                          <TableRow key={order.id}>
-                            <TableCell className="font-mono text-sm">
-                              {order.invoiceNo || order.writtenInvoiceNo || order.id.substring(0, 8)}
-                            </TableCell>
-                            <TableCell className="text-slate-500 text-sm">
-                              {formatDate(order.saleDate)}
-                            </TableCell>
-                            <TableCell>{order.buyer?.name || '-'}</TableCell>
-                            <TableCell>{order.project?.name || '-'}</TableCell>
-                            <TableCell className="text-right font-mono">
-                              {formatCurrency(order.totalAmount)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-green-600">
-                              {formatCurrency(order.paidAmount)}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
-                                {order.status === 'completed' ? '已完成' : order.status}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">待收款:</span>
+                    <span className="text-red-600 font-bold">
+                      {formatCurrency((entityStats[selectedEntity.id]?.total || 0) - (entityStats[selectedEntity.id]?.paid || 0))}
+                    </span>
                   </div>
-                )}
+                </div>
               </div>
 
               <div className="flex justify-end gap-3">
@@ -741,14 +629,6 @@ export function Entities() {
           )}
         </DialogContent>
       </Dialog>
-
-      {viewLoading && (
-        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
-          <div className="bg-white p-4 rounded-lg">
-            <div className="text-slate-500">加载中...</div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

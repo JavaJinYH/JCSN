@@ -60,7 +60,10 @@ export function PhotoUpload({ photos, onChange, maxPhotos = 3 }: PhotoUploadProp
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium">单据照片（最多{maxPhotos}张）</label>
+        <div>
+          <label className="text-sm font-medium">单据照片（建议上传签字单，方便年底对账）</label>
+          <p className="text-xs text-slate-400">最多 {maxPhotos} 张，非必填</p>
+        </div>
         {photos.length < maxPhotos && (
           <Button
             variant="outline"

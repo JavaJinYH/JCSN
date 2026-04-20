@@ -26,11 +26,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { PhotoViewer } from '@/components/PhotoViewer';
 import { SettlementService } from '@/services/SettlementService';
 import { BadDebtService } from '@/services/BadDebtService';
+import { EntityService } from '@/services/EntityService';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { toast } from '@/components/Toast';
-import type { Entity, SaleOrder, Contact } from '@/lib/types';
+import type { Entity, SaleOrder, Contact, BizProject } from '@/lib/types';
 
 type EntityWithStats = Entity & {
   contact?: Contact | null;
@@ -65,8 +67,13 @@ export function Settlements() {
   const [showNegotiatedDialog, setShowNegotiatedDialog] = useState(false);
   const [showBadDebtDialog, setShowBadDebtDialog] = useState(false);
   const [showEntityDetailDialog, setShowEntityDetailDialog] = useState(false);
+  const [showOrderDetailDialog, setShowOrderDetailDialog] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<EntityWithStats | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<SaleOrder | null>(null);
+  const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
+  const [photoViewerIndex, setPhotoViewerIndex] = useState(0);
+  const [entityProjects, setEntityProjects] = useState<BizProject[]>([]);
+  const [entityOrders, setEntityOrders] = useState<SaleOrder[]>([]);
 
   const [paymentFormData, setPaymentFormData] = useState({
     amount: '',
@@ -270,8 +277,19 @@ export function Settlements() {
     }
   };
 
-  const handleOpenEntityDetail = (entity: EntityWithStats) => {
+  const handleOpenEntityDetail = async (entity: EntityWithStats) => {
     setSelectedEntity(entity);
+    try {
+      const [projectsData, ordersData] = await Promise.all([
+        EntityService.getProjectsByEntity(entity.id),
+        EntityService.getEntityOrders(entity.id),
+      ]);
+      setEntityProjects(projectsData);
+      setEntityOrders(ordersData);
+    } catch (error) {
+      console.error('[Settlements] 加载主体详情失败:', error);
+      toast('加载主体详情失败，请重试', 'error');
+    }
     setShowEntityDetailDialog(true);
   };
 
@@ -316,6 +334,23 @@ export function Settlements() {
     return <Badge variant="secondary">{type}</Badge>;
   };
 
+  const getOrdersByProject = (projectId: string | null) => {
+    if (projectId === null) {
+      return entityOrders.filter(order => !order.projectId);
+    }
+    return entityOrders.filter(order => order.projectId === projectId);
+  };
+
+  const getProjectTotal = (projectId: string | null) => {
+    const orders = getOrdersByProject(projectId);
+    return orders.reduce((sum, o) => sum + o.totalAmount, 0);
+  };
+
+  const getProjectPaid = (projectId: string | null) => {
+    const orders = getOrdersByProject(projectId);
+    return orders.reduce((sum, o) => sum + o.paidAmount, 0);
+  };
+
   const handleOpenNegotiatedDialog = (order: SaleOrder) => {
     setSelectedOrder(order);
     const remaining = calculateOrderBalance(order);
@@ -352,7 +387,7 @@ export function Settlements() {
     }
 
     try {
-      const contactId = selectedOrder.buyerId || selectedOrder.payerId || '';
+      const contactId = selectedOrder.paymentEntityId || selectedOrder.buyerId || '';
       if (!contactId) {
         toast('无法确定联系人', 'error');
         return;
@@ -390,7 +425,7 @@ export function Settlements() {
     }
 
     try {
-      const contactId = selectedOrder.buyerId || selectedOrder.payerId || '';
+      const contactId = selectedOrder.paymentEntityId || selectedOrder.buyerId || '';
       if (!contactId) {
         toast('无法确定联系人', 'error');
         return;
@@ -771,93 +806,233 @@ export function Settlements() {
               </div>
 
               <div>
-                <h4 className="font-medium mb-3">订单明细</h4>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>单号</TableHead>
-                      <TableHead>日期</TableHead>
-                      <TableHead>购货人</TableHead>
-                      <TableHead>项目</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead className="text-right">订单金额</TableHead>
-                      <TableHead className="text-right">已付</TableHead>
-                      <TableHead className="text-right">待收</TableHead>
-                      <TableHead>操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedEntity.orders?.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={9} className="text-center py-4 text-slate-500">
-                          暂无订单
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      selectedEntity.orders?.map((order) => {
-                        const remaining = calculateOrderBalance(order);
+                <h4 className="font-medium mb-3">项目列表 ({entityProjects.length})</h4>
+                {entityProjects.length === 0 && entityOrders.filter(o => !o.projectId).length === 0 ? (
+                  <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-lg">
+                    暂无关联项目或订单
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {entityProjects.map((project) => {
+                      const projectOrders = getOrdersByProject(project.id);
+                      const projectTotal = getProjectTotal(project.id);
+                      const projectPaid = getProjectPaid(project.id);
+
+                      return (
+                        <div key={project.id} className="border rounded-lg overflow-hidden">
+                          <div className="flex items-center justify-between p-4 bg-blue-50 border-b">
+                            <div className="flex items-center gap-3">
+                              <div className="font-medium text-lg">{project.name}</div>
+                              <Badge variant="outline">{project.status}</Badge>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm">
+                              <span>订单: <strong className="text-orange-600">{projectOrders.length}</strong> 笔</span>
+                              <span>总金额: <strong>{formatCurrency(projectTotal)}</strong></span>
+                              <span>已付: <strong className="text-green-600">{formatCurrency(projectPaid)}</strong></span>
+                            </div>
+                          </div>
+
+                          {projectOrders.length > 0 && (
+                            <div className="p-4">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>单据号</TableHead>
+                                    <TableHead>日期</TableHead>
+                                    <TableHead>购货人</TableHead>
+                                    <TableHead className="text-right">金额</TableHead>
+                                    <TableHead className="text-right">已付</TableHead>
+                                    <TableHead className="text-right">待收</TableHead>
+                                    <TableHead>状态</TableHead>
+                                    <TableHead>操作</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {projectOrders.map((order) => {
+                                    const remaining = calculateOrderBalance(order);
+                                    return (
+                                      <TableRow key={order.id} className="cursor-pointer hover:bg-slate-50" onClick={() => {
+                                        setSelectedOrder(order);
+                                        setShowOrderDetailDialog(true);
+                                      }}>
+                                        <TableCell className="font-mono text-sm">
+                                          {order.invoiceNo || order.writtenInvoiceNo || order.id.substring(0, 8)}
+                                        </TableCell>
+                                        <TableCell className="text-slate-500 text-sm">
+                                          {formatDate(new Date(order.saleDate))}
+                                        </TableCell>
+                                        <TableCell>{order.buyer?.name || '-'}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatCurrency(order.totalAmount)}</TableCell>
+                                        <TableCell className="text-right font-mono text-green-600">{formatCurrency(order.paidAmount)}</TableCell>
+                                        <TableCell className="text-right font-mono text-orange-600 font-bold">
+                                          {formatCurrency(remaining)}
+                                        </TableCell>
+                                        <TableCell>{getOrderStatusBadge(order)}</TableCell>
+                                        <TableCell onClick={(e) => e.stopPropagation()}>
+                                          {remaining > 0 && (
+                                            <div className="flex gap-1">
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => {
+                                                  setSelectedOrder(order);
+                                                  setPaymentFormData({
+                                                    amount: remaining.toFixed(2),
+                                                    method: '现金',
+                                                    remark: '',
+                                                  });
+                                                  setShowPaymentDialog(true);
+                                                }}
+                                              >
+                                                还款
+                                              </Button>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-blue-600"
+                                                onClick={() => handleOpenNegotiatedDialog(order)}
+                                              >
+                                                协商减免
+                                              </Button>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-red-600"
+                                                onClick={() => handleOpenBadDebtDialog(order)}
+                                              >
+                                                坏账处理
+                                              </Button>
+                                            </div>
+                                          )}
+                                          <Button variant="ghost" size="sm" onClick={() => {
+                                            setSelectedOrder(order);
+                                            setShowOrderDetailDialog(true);
+                                          }}>
+                                            查看明细
+                                          </Button>
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  })}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {(() => {
+                      const unclassifiedOrders = getOrdersByProject(null);
+                      if (unclassifiedOrders.length > 0) {
+                        const unclassifiedTotal = getProjectTotal(null);
+                        const unclassifiedPaid = getProjectPaid(null);
+
                         return (
-                          <TableRow key={order.id}>
-                            <TableCell className="font-mono text-sm">
-                              {order.invoiceNo || order.id.substring(0, 8)}
-                            </TableCell>
-                            <TableCell className="text-slate-500">
-                              {formatDate(new Date(order.saleDate))}
-                            </TableCell>
-                            <TableCell>{order.buyer?.name || '-'}</TableCell>
-                            <TableCell className="text-slate-500">
-                              {order.project?.name || '-'}
-                            </TableCell>
-                            <TableCell>{getOrderStatusBadge(order)}</TableCell>
-                            <TableCell className="text-right font-mono">{formatCurrency(order.totalAmount)}</TableCell>
-                            <TableCell className="text-right font-mono text-green-600">{formatCurrency(order.paidAmount)}</TableCell>
-                            <TableCell className="text-right font-mono text-orange-600 font-bold">
-                              {formatCurrency(remaining)}
-                            </TableCell>
-                            <TableCell>
-                              {remaining > 0 && (
-                                <div className="flex gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedOrder(order);
-                                      const rem = calculateOrderBalance(order);
-                                      setPaymentFormData({
-                                        amount: rem.toFixed(2),
-                                        method: '现金',
-                                        remark: '',
-                                      });
-                                      setShowPaymentDialog(true);
-                                    }}
-                                  >
-                                    还款
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-blue-600"
-                                    onClick={() => handleOpenNegotiatedDialog(order)}
-                                  >
-                                    协商减免
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-red-600"
-                                    onClick={() => handleOpenBadDebtDialog(order)}
-                                  >
-                                    坏账处理
-                                  </Button>
-                                </div>
-                              )}
-                            </TableCell>
-                          </TableRow>
+                          <div key="unclassified" className="border rounded-lg overflow-hidden">
+                            <div className="flex items-center justify-between p-4 bg-slate-50 border-b">
+                              <div className="flex items-center gap-3">
+                                <div className="font-medium text-lg">未分类订单</div>
+                                <Badge variant="secondary">无项目</Badge>
+                              </div>
+                              <div className="flex items-center gap-4 text-sm">
+                                <span>订单: <strong className="text-orange-600">{unclassifiedOrders.length}</strong> 笔</span>
+                                <span>总金额: <strong>{formatCurrency(unclassifiedTotal)}</strong></span>
+                                <span>已付: <strong className="text-green-600">{formatCurrency(unclassifiedPaid)}</strong></span>
+                              </div>
+                            </div>
+
+                            <div className="p-4">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>单据号</TableHead>
+                                    <TableHead>日期</TableHead>
+                                    <TableHead>购货人</TableHead>
+                                    <TableHead className="text-right">金额</TableHead>
+                                    <TableHead className="text-right">已付</TableHead>
+                                    <TableHead className="text-right">待收</TableHead>
+                                    <TableHead>状态</TableHead>
+                                    <TableHead>操作</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {unclassifiedOrders.map((order) => {
+                                    const remaining = calculateOrderBalance(order);
+                                    return (
+                                      <TableRow key={order.id} className="cursor-pointer hover:bg-slate-50" onClick={() => {
+                                        setSelectedOrder(order);
+                                        setShowOrderDetailDialog(true);
+                                      }}>
+                                        <TableCell className="font-mono text-sm">
+                                          {order.invoiceNo || order.writtenInvoiceNo || order.id.substring(0, 8)}
+                                        </TableCell>
+                                        <TableCell className="text-slate-500 text-sm">
+                                          {formatDate(new Date(order.saleDate))}
+                                        </TableCell>
+                                        <TableCell>{order.buyer?.name || '-'}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatCurrency(order.totalAmount)}</TableCell>
+                                        <TableCell className="text-right font-mono text-green-600">{formatCurrency(order.paidAmount)}</TableCell>
+                                        <TableCell className="text-right font-mono text-orange-600 font-bold">
+                                          {formatCurrency(remaining)}
+                                        </TableCell>
+                                        <TableCell>{getOrderStatusBadge(order)}</TableCell>
+                                        <TableCell onClick={(e) => e.stopPropagation()}>
+                                          {remaining > 0 && (
+                                            <div className="flex gap-1">
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => {
+                                                  setSelectedOrder(order);
+                                                  setPaymentFormData({
+                                                    amount: remaining.toFixed(2),
+                                                    method: '现金',
+                                                    remark: '',
+                                                  });
+                                                  setShowPaymentDialog(true);
+                                                }}
+                                              >
+                                                还款
+                                              </Button>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-blue-600"
+                                                onClick={() => handleOpenNegotiatedDialog(order)}
+                                              >
+                                                协商减免
+                                              </Button>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-red-600"
+                                                onClick={() => handleOpenBadDebtDialog(order)}
+                                              >
+                                                坏账处理
+                                              </Button>
+                                            </div>
+                                          )}
+                                          <Button variant="ghost" size="sm" onClick={() => {
+                                            setSelectedOrder(order);
+                                            setShowOrderDetailDialog(true);
+                                          }}>
+                                            查看明细
+                                          </Button>
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  })}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </div>
                         );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
+                      }
+                      return null;
+                    })()}
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-3">
@@ -974,6 +1149,154 @@ export function Settlements() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={showOrderDetailDialog} onOpenChange={setShowOrderDetailDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>订单明细 - {selectedOrder?.invoiceNo || selectedOrder?.id?.substring(0, 8)}</DialogTitle>
+          </DialogHeader>
+          {selectedOrder && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-slate-50 p-3 rounded-lg">
+                  <div className="text-xs text-slate-500">订单日期</div>
+                  <div className="font-medium">{formatDate(new Date(selectedOrder.saleDate))}</div>
+                </div>
+                <div className="bg-slate-50 p-3 rounded-lg">
+                  <div className="text-xs text-slate-500">购货人</div>
+                  <div className="font-medium">{selectedOrder.buyer?.name || '-'}</div>
+                </div>
+                <div className="bg-slate-50 p-3 rounded-lg">
+                  <div className="text-xs text-slate-500">项目</div>
+                  <div className="font-medium">{selectedOrder.project?.name || '-'}</div>
+                </div>
+                <div className="bg-slate-50 p-3 rounded-lg">
+                  <div className="text-xs text-slate-500">状态</div>
+                  <div>{getOrderStatusBadge(selectedOrder)}</div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-medium mb-3">商品明细</h4>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>商品名称</TableHead>
+                      <TableHead className="text-right">数量</TableHead>
+                      <TableHead className="text-right">单价</TableHead>
+                      <TableHead className="text-right">小计</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedOrder.items?.map((item: any, index: number) => (
+                      <TableRow key={item.id || index}>
+                        <TableCell>{item.product?.name || '-'}</TableCell>
+                        <TableCell className="text-right">{item.quantity}</TableCell>
+                        <TableCell className="text-right font-mono">{formatCurrency(item.unitPrice)}</TableCell>
+                        <TableCell className="text-right font-mono">{formatCurrency(item.subtotal)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-slate-50 rounded-lg">
+                  <h4 className="font-medium mb-3">金额汇总</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">订单金额:</span>
+                      <span className="font-mono">{formatCurrency(selectedOrder.totalAmount)}</span>
+                    </div>
+                    {selectedOrder.deliveryFee > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">配送费:</span>
+                        <span className="font-mono">{formatCurrency(selectedOrder.deliveryFee)}</span>
+                      </div>
+                    )}
+                    {selectedOrder.discount > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">优惠:</span>
+                        <span className="font-mono text-green-600">-{formatCurrency(selectedOrder.discount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold border-t pt-2">
+                      <span>应付:</span>
+                      <span className="font-mono">{formatCurrency(selectedOrder.totalAmount + (selectedOrder.deliveryFee || 0) - (selectedOrder.discount || 0))}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">已付:</span>
+                      <span className="font-mono text-green-600">{formatCurrency(selectedOrder.paidAmount)}</span>
+                    </div>
+                    <div className="flex justify-between text-orange-600">
+                      <span>待收:</span>
+                      <span className="font-mono font-bold">{formatCurrency(calculateOrderBalance(selectedOrder))}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded-lg">
+                  <h4 className="font-medium mb-3">照片附件</h4>
+                  {selectedOrder.photos && selectedOrder.photos.length > 0 ? (
+                    <div>
+                      <div className="text-sm text-slate-500 mb-2">
+                        共 {selectedOrder.photos.length} 张照片
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                        {selectedOrder.photos.slice(0, 4).map((photo: any, idx: number) => (
+                          <div
+                            key={photo.id}
+                            className="aspect-square bg-slate-200 rounded cursor-pointer hover:bg-slate-300 flex items-center justify-center overflow-hidden"
+                            onClick={() => {
+                              setPhotoViewerIndex(idx);
+                              setPhotoViewerOpen(true);
+                            }}
+                          >
+                            {photo.photoType === 'signature' ? (
+                              <span className="text-lg">✍️</span>
+                            ) : (
+                              <span className="text-lg">📷</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {selectedOrder.photos.length > 4 && (
+                        <div className="text-xs text-slate-400 mt-1">
+                          还有 {selectedOrder.photos.length - 4} 张...
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-slate-400">
+                      暂无照片<br/>
+                      <span className="text-xs">建议：上传签字单照片，方便年底对账</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {selectedOrder.photos && selectedOrder.photos.length > 0 && (
+                <div className="text-xs text-slate-400">
+                  💡 点击照片可查看大图和详情
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3">
+                <Button variant="outline" onClick={() => setShowOrderDetailDialog(false)}>
+                  关闭
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <PhotoViewer
+        photos={selectedOrder?.photos || []}
+        open={photoViewerOpen}
+        onOpenChange={setPhotoViewerOpen}
+        initialIndex={photoViewerIndex}
+      />
     </div>
   );
 }

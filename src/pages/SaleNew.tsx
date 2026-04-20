@@ -33,6 +33,7 @@ import { SaleService } from '@/services/SaleService';
 import { ProductService } from '@/services/ProductService';
 import { ContactService } from '@/services/ContactService';
 import { EntityService } from '@/services/EntityService';
+import { ProjectService } from '@/services/ProjectService';
 
 interface PaymentInfo {
   method: string;
@@ -42,8 +43,6 @@ interface PaymentInfo {
 
 export function SaleNew() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const draftIdFromUrl = searchParams.get('draftId');
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -55,7 +54,6 @@ export function SaleNew() {
   const [selectedBuyer, setSelectedBuyer] = useState<string>('__none__');
   const [selectedEntity, setSelectedEntity] = useState<string>('');
   const [selectedProject, setSelectedProject] = useState<string>('__none__');
-  const [selectedPayer, setSelectedPayer] = useState<string>('__none__');
   const [selectedIntroducer, setSelectedIntroducer] = useState<string>('__none__');
   const [pickerName, setPickerName] = useState('');
   const [pickerPhone, setPickerPhone] = useState('');
@@ -83,15 +81,15 @@ export function SaleNew() {
 
   useEffect(() => {
     loadData();
-  }, []);
-
-  useEffect(() => {
     loadProjects();
-  }, [selectedEntity]);
+  }, []);
 
   useEffect(() => {
     console.log('[SaleNew] selectedEntity 变化:', selectedEntity);
   }, [selectedEntity]);
+
+  const [searchParams] = useSearchParams();
+  const draftIdFromUrl = searchParams.get('draftId');
 
   useEffect(() => {
     if (draftIdFromUrl && dataLoaded && products.length > 0) {
@@ -108,9 +106,8 @@ export function SaleNew() {
       console.log('[SaleNew] paymentEntityId:', draft?.paymentEntityId);
       if (draft) {
         setDraftId(draft.id);
-        setSelectedBuyer(draft.buyerCustomerId || '__none__');
-        setSelectedPayer(draft.payerCustomerId || '__none__');
-        setSelectedIntroducer(draft.introducerCustomerId || '__none__');
+        setSelectedBuyer(draft.buyerId || '__none__');
+        setSelectedIntroducer(draft.introducerId || '__none__');
         setSelectedEntity(draft.paymentEntityId || '');
         console.log('[SaleNew] 设置 selectedEntity 为:', draft.paymentEntityId || '');
         setSelectedProject(draft.projectId || '__none__');
@@ -123,7 +120,7 @@ export function SaleNew() {
         setRemark(draft.remark || '');
         setWrittenInvoiceNo(draft.writtenInvoiceNo || '');
         setPayments(draft.payments ? JSON.parse(draft.payments) : [{ method: '现金', amount: 0, payerName: '' }]);
-        
+
         const productList = productsData || products;
         const cartItems: CartItem[] = [];
         for (const item of draft.items) {
@@ -184,12 +181,8 @@ export function SaleNew() {
   };
 
   const loadProjects = async () => {
-    if (!selectedEntity || selectedEntity === '__cash__') {
-      setProjects([]);
-      return;
-    }
     try {
-      const projectsData = await EntityService.getProjectsByEntity(selectedEntity);
+      const projectsData = await ProjectService.getProjects();
       setProjects(sortByFrequency(projectsData, 'project'));
     } catch (error) {
       console.error('[SaleNew] 加载项目失败:', error);
@@ -367,7 +360,6 @@ export function SaleNew() {
     try {
       const result = await SaleService.createSaleOrder({
         buyerId: selectedBuyer,
-        payerId: selectedPayer,
         introducerId: selectedIntroducer,
         pickerName: pickerName || null,
         pickerPhone: pickerPhone || null,
@@ -432,7 +424,6 @@ export function SaleNew() {
     try {
       const draftData = {
         buyerId: selectedBuyer,
-        payerId: selectedPayer,
         introducerId: selectedIntroducer,
         pickerName: pickerName || null,
         pickerPhone: pickerPhone || null,
@@ -501,13 +492,12 @@ export function SaleNew() {
 
           <SaleContactSelect
             contacts={contacts}
+            entities={entities.map(e => ({ id: e.id, name: e.name }))}
             selectedBuyer={selectedBuyer}
-            selectedPayer={selectedPayer}
             selectedIntroducer={selectedIntroducer}
             pickerName={pickerName}
             pickerPhone={pickerPhone}
             onSelectedBuyerChange={setSelectedBuyer}
-            onSelectedPayerChange={setSelectedPayer}
             onSelectedIntroducerChange={setSelectedIntroducer}
             onPickerNameChange={setPickerName}
             onPickerPhoneChange={setPickerPhone}
@@ -536,26 +526,40 @@ export function SaleNew() {
                 />
               </div>
 
-              {selectedEntity && selectedEntity !== '__cash__' && (
-                <div>
-                  <label className="text-xs text-slate-500 mb-1 block">关联项目（可选）</label>
-                  <Select
-                    value={selectedProject}
-                    onValueChange={(v) => { setSelectedProject(v); if (v && v !== '__none__') recordFrequency('project', v); }}
-                  >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder="选择项目（可选）" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">无项目</SelectItem>
-                      {projects.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name} {p.address ? `- ${p.address}` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">关联项目（可选）</label>
+                <Select
+                  value={selectedProject}
+                  onValueChange={(v) => {
+                    if (v && v !== '__none__') {
+                      // 找到选中的项目，并设置对应的挂靠主体
+                      const project = projects.find(p => p.id === v);
+                      if (project && project.entityId) {
+                        setSelectedEntity(project.entityId);
+                        recordFrequency('project', v);
+                      }
+                    }
+                    setSelectedProject(v);
+                  }}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="选择项目（可选）" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">无项目</SelectItem>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} {p.address ? `- ${p.address}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedProject && selectedProject !== '__none__' && (
+                <p className="text-xs text-amber-600 mt-2 bg-amber-50 px-2 py-1 rounded">
+                  已选择项目，挂靠主体已自动设定
+                </p>
               )}
             </CardContent>
           </Card>

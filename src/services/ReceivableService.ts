@@ -169,6 +169,27 @@ export const ReceivableService = {
     return updated
   },
 
+  async incrementRemainingByOrderId(orderId: string, incrementAmount: number) {
+    const receivable = await db.receivable.findFirst({
+      where: { orderId },
+    });
+
+    if (!receivable) {
+      throw new Error('应收款记录不存在');
+    }
+
+    const newRemainingAmount = receivable.remainingAmount + incrementAmount;
+    const newStatus = newRemainingAmount <= 0 ? 'settled' : (receivable.paidAmount > 0 ? 'partial' : 'pending');
+
+    return db.receivable.update({
+      where: { id: receivable.id },
+      data: {
+        remainingAmount: newRemainingAmount,
+        status: newStatus,
+      },
+    });
+  },
+
   async updateStatus(receivableId: string, newStatus: string, operator: string, reason: string) {
     const receivable = await this.getById(receivableId)
     if (!receivable) {

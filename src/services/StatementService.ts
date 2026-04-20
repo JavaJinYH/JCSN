@@ -29,7 +29,6 @@ export const StatementService = {
       where,
       include: include || {
         buyer: true,
-        payer: true,
         project: true,
         paymentEntity: true,
         returns: true,

@@ -35,6 +35,7 @@ export function ProductEdit() {
   }, [allProducts]);
 
   const [formData, setFormData] = useState({
+    code: '',
     name: '',
     categoryId: '',
     brand: '',
@@ -68,6 +69,7 @@ export function ProductEdit() {
       if (productData) {
         setProduct(productData);
         setFormData({
+          code: productData.code || '',
           name: productData.name,
           categoryId: productData.categoryId,
           brand: productData.brand || '',
@@ -163,6 +165,18 @@ export function ProductEdit() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="text-sm font-medium mb-2 block">
+                商品编码
+              </label>
+              <Input
+                value={formData.code}
+                readOnly
+                placeholder="无编码"
+                className="bg-slate-50"
+              />
+            </div>
+
             <div>
               <label className="text-sm font-medium mb-2 block">
                 商品名称 <span className="text-red-500">*</span>

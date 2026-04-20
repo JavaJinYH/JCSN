@@ -10,6 +10,7 @@ export interface Category {
 
 export interface Product {
   id: string;
+  code: string | null;
   name: string;
   categoryId: string;
   category?: Category;
@@ -410,14 +411,12 @@ export interface SaleSlip {
   customerId: string | null;
   customer?: Contact | null;
   projectId: string | null;
-  buyerCustomerId: string | null;
-  buyerCustomer?: Contact | null;
-  payerCustomerId: string | null;
-  payerCustomer?: Contact | null;
-  introducerCustomerId: string | null;
-  introducerCustomer?: Contact | null;
-  pickerCustomerId: string | null;
-  pickerCustomer?: Contact | null;
+  buyerId: string | null;
+  buyer?: Contact | null;
+  introducerId: string | null;
+  introducer?: Contact | null;
+  pickerId: string | null;
+  picker?: Contact | null;
   pickerName: string | null;
   pickerPhone: string | null;
   pickerType: string | null;
@@ -513,6 +512,7 @@ export interface Contact {
   saleSlipsAsPayer?: SaleSlip[];
   saleSlipsAsIntroducer?: SaleSlip[];
   saleSlipsAsPicker?: SaleSlip[];
+  legacyBills?: LegacyBill[];
 }
 
 export interface ContactPhone {
@@ -539,6 +539,7 @@ export interface Entity {
   roles?: ContactEntityRole[];
   projects?: BizProject[];
   orders?: SaleOrder[];
+  legacyBills?: LegacyBill[];
 }
 
 export interface BizProject {
@@ -587,7 +588,6 @@ export interface SaleOrder {
   writtenInvoiceNo: string | null;
   saleDate: Date;
   buyerId: string;
-  payerId: string | null;
   introducerId: string | null;
   pickerId: string | null;
   pickerName: string | null;
@@ -596,6 +596,7 @@ export interface SaleOrder {
   paymentEntityId: string;
   totalAmount: number;
   discount: number;
+  deliveryFee: number;
   paidAmount: number;
   writeOffAmount: number;
   status: string;
@@ -613,6 +614,7 @@ export interface SaleOrder {
   receivables?: Receivable[];
   returns?: SaleReturn[];
   badDebtWriteOffs?: BadDebtWriteOff[];
+  photos?: SaleOrderPhoto[];
 }
 
 export interface OrderItem {
@@ -700,4 +702,20 @@ export interface BadDebtWriteOff {
   operatorNote: string | null;
   createdAt: Date;
   createdBy: string | null;
+}
+
+export interface LegacyBill {
+  id: string;
+  entityId: string;
+  entity?: Entity;
+  projectId: string | null;
+  project?: BizProject | null;
+  billDate: Date;
+  originalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  status: string;
+  remark: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }

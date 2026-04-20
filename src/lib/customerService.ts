@@ -8,20 +8,17 @@ export async function calculateAndUpdateCustomerScore(customerId: string): Promi
   const now = new Date();
   const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
 
-  const sales = await db.sale.findMany({
+  const sales = await db.saleOrder.findMany({
     where: {
       OR: [
-        { customerId },
-        { buyerCustomerId: customerId },
-        { payerCustomerId: customerId },
-        { introducerCustomerId: customerId },
+        { buyerId: customerId },
+        { introducerId: customerId },
       ],
       saleDate: { gte: oneYearAgo },
     },
     include: {
       items: { include: { product: true } },
       payments: true,
-      rebates: { where: { plumberId: customerId } },
     },
   });
 
@@ -36,7 +33,6 @@ export async function calculateAndUpdateCustomerScore(customerId: string): Promi
   let totalSales = 0;
   let totalProfit = 0;
   let totalCost = 0;
-  let totalRebate = 0;
   const paymentDaysList: number[] = [];
   let overdueCount = 0;
   let totalOverdueDays = 0;
@@ -47,14 +43,10 @@ export async function calculateAndUpdateCustomerScore(customerId: string): Promi
 
     let saleCost = 0;
     for (const item of sale.items) {
-      saleCost += item.costPriceSnapshot * item.quantity;
+      saleCost += (item.costPriceSnapshot || 0) * item.quantity;
     }
     totalCost += saleCost;
     totalProfit += saleAmount - saleCost;
-
-    for (const rebate of sale.rebates) {
-      totalRebate += rebate.rebateAmount;
-    }
 
     const paymentDays = sale.payments.length > 0
       ? Math.max(...sale.payments.map(p => Math.floor((new Date(p.paidAt).getTime() - new Date(sale.saleDate).getTime()) / (1000 * 60 * 60 * 24))))
@@ -73,7 +65,6 @@ export async function calculateAndUpdateCustomerScore(customerId: string): Promi
     ? paymentDaysList.reduce((a, b) => a + b, 0) / paymentDaysList.length
     : 0;
   const overdueRate = sales.length > 0 ? overdueCount / sales.length : 0;
-  const rebateRatio = totalSales > 0 ? (totalRebate / totalSales) * 100 : 0;
 
   const input: CustomerScoreInput = {
     totalSales,
@@ -81,12 +72,12 @@ export async function calculateAndUpdateCustomerScore(customerId: string): Promi
     avgProfitMargin,
     avgPaymentDays,
     overdueRate: overdueRate * 100,
-    rebateRatio,
+    rebateRatio: 0,
   };
 
   const result = calculateCustomerScore(input);
 
-  await db.customer.update({
+  await db.contact.update({
     where: { id: customerId },
     data: {
       valueScore: result.score,
@@ -98,8 +89,8 @@ export async function calculateAndUpdateCustomerScore(customerId: string): Promi
 }
 
 export async function batchUpdateAllCustomerScores(): Promise<number> {
-  const customers = await db.customer.findMany({
-    where: { customerType: { not: '散客' } },
+  const customers = await db.contact.findMany({
+    where: { contactType: { not: '散客' } },
   });
 
   let updatedCount = 0;

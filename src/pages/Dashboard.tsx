@@ -107,20 +107,12 @@ export function Dashboard() {
 
       const [
         allProducts,
-        todayLegacySales,
-        recentLegacySales,
-        allLegacySales,
-        legacySaleItems,
         todayNewOrders,
         recentNewOrders,
         allNewOrders,
         newOrderItems,
       ] = await Promise.all([
         DashboardService.getAllProducts(),
-        DashboardService.getTodayLegacySales(today),
-        DashboardService.getRecentLegacySales(weekAgo),
-        DashboardService.getAllLegacySalesInPeriod(weekAgo),
-        DashboardService.getLegacySaleItemsInPeriod(weekAgo),
         DashboardService.getTodayNewOrders(today),
         DashboardService.getRecentNewOrders(weekAgo),
         DashboardService.getAllNewOrdersInPeriod(weekAgo),
@@ -128,10 +120,9 @@ export function Dashboard() {
       ]);
 
       const lowStock = allProducts.filter(p => p.stock <= p.minStock && p.minStock > 0);
-      const todayLegacySalesTotal = todayLegacySales.reduce((sum, s) => sum + s.paidAmount, 0);
       const todayNewOrdersTotal = todayNewOrders.reduce((sum, o) => sum + o.paidAmount, 0);
-      const todaySales = todayLegacySalesTotal + todayNewOrdersTotal;
-      const todayOrders = todayLegacySales.length + todayNewOrders.length;
+      const todaySales = todayNewOrdersTotal;
+      const todayOrders = todayNewOrders.length;
 
       setStats({
         todaySales,
@@ -147,22 +138,12 @@ export function Dashboard() {
         unit: p.unit,
       })));
 
-      const recentAll = [
-        ...recentLegacySales.map(s => ({
-          id: s.id,
-          paidAmount: s.paidAmount,
-          saleDate: s.saleDate,
-          customer: s.customer,
-          source: 'legacy' as const,
-        })),
-        ...recentNewOrders.map(o => ({
-          id: o.id,
-          paidAmount: o.paidAmount,
-          saleDate: o.saleDate,
-          customer: o.buyer,
-          source: 'new' as const,
-        })),
-      ].sort((a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime()).slice(0, 10);
+      const recentAll = recentNewOrders.map(o => ({
+        id: o.id,
+        paidAmount: o.paidAmount,
+        saleDate: o.saleDate,
+        customer: o.buyer,
+      })).sort((a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime()).slice(0, 10);
       setRecentSales(recentAll as any);
 
       const chartMap = new Map<string, { sales: number; orders: number }>();
@@ -171,15 +152,6 @@ export function Dashboard() {
         const dateStr = date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
         chartMap.set(dateStr, { sales: 0, orders: 0 });
       }
-
-      allLegacySales.forEach((sale) => {
-        const dateStr = new Date(sale.saleDate).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
-        const existing = chartMap.get(dateStr);
-        if (existing) {
-          existing.sales += sale.paidAmount;
-          existing.orders += 1;
-        }
-      });
 
       allNewOrders.forEach((order) => {
         const dateStr = new Date(order.saleDate).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
@@ -198,20 +170,6 @@ export function Dashboard() {
       setChartData(chartDataArray);
 
       const productMap = new Map<string, { name: string; quantity: number; amount: number }>();
-      legacySaleItems.forEach((item: any) => {
-        const existing = productMap.get(item.productId);
-        if (existing) {
-          existing.quantity += item.quantity;
-          existing.amount += item.subtotal;
-        } else {
-          productMap.set(item.productId, {
-            name: item.product?.name || '未知商品',
-            quantity: item.quantity,
-            amount: item.subtotal,
-          });
-        }
-      });
-
       newOrderItems.forEach((item: any) => {
         const existing = productMap.get(item.productId);
         if (existing) {
@@ -252,8 +210,7 @@ export function Dashboard() {
         startDate = new Date(today.getFullYear(), today.getMonth(), 1);
       }
 
-      const [legacySalesInPeriod, newOrdersInPeriod] = await Promise.all([
-        DashboardService.getLegacySalesInPeriod(startDate),
+      const [newOrdersInPeriod] = await Promise.all([
         DashboardService.getNewOrdersInPeriod(startDate),
       ]);
 
@@ -264,26 +221,6 @@ export function Dashboard() {
       let totalSales = 0;
       let newReceivable = 0;
       let orderCount = 0;
-
-      legacySalesInPeriod.forEach(sale => {
-        totalSales += sale.totalAmount;
-        const receivable = sale.totalAmount - sale.paidAmount;
-        newReceivable += receivable;
-        orderCount++;
-
-        sale.payments.forEach(payment => {
-          const method = payment.method?.toLowerCase() || '';
-          if (method.includes('现金') || method === 'cash') {
-            cashAmount += payment.amount;
-          } else if (method.includes('微信') || method === 'wechat') {
-            wechatAmount += payment.amount;
-          } else if (method.includes('支付宝') || method === 'alipay') {
-            alipayAmount += payment.amount;
-          } else if (method.includes('转账') || method === 'transfer') {
-            transferAmount += payment.amount;
-          }
-        });
-      });
 
       newOrdersInPeriod.forEach(order => {
         totalSales += order.totalAmount;

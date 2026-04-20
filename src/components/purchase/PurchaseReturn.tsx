@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { formatCurrency, formatProductName, generateBatchNo } from '@/lib/utils';
-import { db } from '@/lib/db';
+import { formatCurrency, formatProductName } from '@/lib/utils';
+import { PurchaseService } from '@/services/PurchaseService';
 import type { Product } from '@/lib/types';
 import { toast } from '@/components/Toast';
 
@@ -56,42 +56,24 @@ export function PurchaseReturn({
   const createReturn = async (qty: number, unitPrice: number) => {
     setCreating(true);
     try {
-      await db.purchaseReturn.create({
-        data: {
-          purchaseId: purchase!.id,
-          totalAmount: qty * unitPrice,
-          items: {
-            create: {
-              productId: purchase!.productId,
-              returnQuantity: qty,
-              unitPrice: unitPrice,
-              amount: qty * unitPrice,
-              marketPrice: purchase!.product.isPriceVolatile ? unitPrice : null,
-            },
-          },
-        },
-      });
-
-      await db.product.update({
-        where: { id: purchase!.productId },
-        data: { stock: { decrement: qty } },
-      });
+      await PurchaseService.createPurchaseReturnWithItems(
+        purchase!.id,
+        qty,
+        unitPrice,
+        purchase!.product.isPriceVolatile
+      );
 
       if (returnType === 'exchange') {
-        const batchNo = generateBatchNo();
-        await db.purchase.create({
-          data: {
+        await PurchaseService.createPurchaseOrder({
+          items: [{
             productId: purchase!.productId,
             quantity: qty,
             unitPrice: unitPrice,
-            totalAmount: qty * unitPrice,
-            supplierId: purchase!.supplierId,
-            supplierName: purchase!.supplierName,
-            batchNo,
-            purchaseDate: new Date(),
-            status: 'draft',
-            remark: `换货：替换原进货单 ${purchase!.id.slice(0, 8)}...`,
-          },
+          }],
+          supplierId: purchase!.supplierId,
+          supplierName: purchase!.supplierName,
+          commonRemark: `换货：替换原进货单 ${purchase!.id.slice(0, 8)}...`,
+          purchaseDate: new Date(),
         });
         toast(`退货成功，换货进货单已生成（草稿状态）`, 'success');
       } else {

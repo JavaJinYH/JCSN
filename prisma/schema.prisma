@@ -1,3 +1,4 @@
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -19,6 +20,7 @@ model Category {
 
 model Product {
   id               String                    @id @default(cuid())
+  code             String?                   @unique
   name             String
   categoryId       String
   category         Category                  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -30,20 +32,20 @@ model Product {
   unitRatio        Float                     @default(1)
   lastPurchasePrice Float?
   referencePrice   Float?
-  isPriceVolatile Boolean @default(false)
-  stock           Float                     @default(0)
+  isPriceVolatile  Boolean                   @default(false)
+  stock            Float                     @default(0)
   minStock         Float                     @default(0)
   imagePath        String?
   imageUrl         String?
   purchases        Purchase[]
-  saleItems        SaleItem[]
   orderItems       OrderItem[]
-  favoriteProducts CustomerFavoriteProduct[]
   productSpecs     ProductSpec[]
   returnItems      SaleReturnItem[]
   purchaseReturns  PurchaseReturnItem[]
   createdAt        DateTime                  @default(now())
   updatedAt        DateTime                  @updatedAt
+
+  @@index([name, brand, specification])
 }
 
 model Brand {
@@ -181,81 +183,6 @@ model CustomerCategory {
   updatedAt   DateTime   @updatedAt
 }
 
-model Project {
-  id         String    @id @default(cuid())
-  name       String
-  customerId String
-  customer   Contact   @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  address    String?
-  status     String    @default("进行中")
-  startDate  DateTime?
-  endDate    DateTime?
-  remark     String?
-  sales      Sale[]
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-}
-
-model Sale {
-  id                    String                 @id @default(cuid())
-  invoiceNo             String?
-  writtenInvoiceNo      String?
-  customerId            String?
-  customer              Contact?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  projectId             String?
-  project               Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  payerCustomerId       String?
-  payerCustomer         Contact?               @relation("PayerCustomer", fields: [payerCustomerId], references: [id], onDelete: SetNull)
-  introducerCustomerId  String?
-  introducerCustomer   Contact?               @relation("IntroducerCustomer", fields: [introducerCustomerId], references: [id], onDelete: SetNull)
-  pickerCustomerId      String?
-  pickerCustomer        Contact?               @relation("PickerCustomer", fields: [pickerCustomerId], references: [id], onDelete: SetNull)
-  pickerName            String?
-  pickerPhone           String?
-  pickerType            String?
-  totalAmount           Float
-  discount              Float                  @default(0)
-  paidAmount            Float
-  writeOffAmount        Float                  @default(0)
-  saleDate              DateTime               @default(now())
-  remark                String?
-  status                String                 @default("completed")
-  items                 SaleItem[]
-  payments              Payment[]
-  deliveryRecords       DeliveryRecord[]
-  settlementAdjustments SettlementAdjustment[]
-  photos                SalePhoto[]
-  createdAt             DateTime               @default(now())
-}
-
-model Payment {
-  id             String   @id @default(cuid())
-  saleId         String
-  sale           Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  amount         Float
-  method         String
-  payerName      String?
-  thirdPartyName String?
-  paidAt         DateTime @default(now())
-  remark         String?
-  createdAt      DateTime @default(now())
-}
-
-model SaleItem {
-  id                   String   @id @default(cuid())
-  saleId               String
-  sale                 Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  productId            String
-  product              Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  quantity             Int
-  unitPrice            Float
-  costPriceSnapshot    Float
-  sellingPriceSnapshot Float
-  subtotal             Float
-  purchaseUnitPrice    Float?
-  createdAt            DateTime @default(now())
-}
-
 model SystemSetting {
   id                 String   @id @default("default")
   shopName           String   @default("折柳建材店")
@@ -300,11 +227,8 @@ model DeliveryFee {
 
 model DeliveryRecord {
   id              String    @id @default(cuid())
-  saleId          String?
-  sale            Sale?     @relation(fields: [saleId], references: [id], onDelete: SetNull)
   saleOrderId     String?
   saleOrder       SaleOrder? @relation(fields: [saleOrderId], references: [id], onDelete: SetNull)
-  projectId       String?
   zoneName        String
   recipientName   String
   recipientPhone  String?
@@ -322,27 +246,6 @@ model DeliveryRecord {
   remark          String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-}
-
-
-
-model SettlementAdjustment {
-  id           String    @id @default(cuid())
-  saleId       String
-  sale         Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  customerId   String
-  customer     Contact   @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  adjustType   String
-  adjustMethod String
-  adjustValue  Float
-  adjustAmount Float
-  reason       String
-  approvedBy   String?
-  approvedAt   DateTime?
-  status       String    @default("pending")
-  remark       String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
 }
 
 model PaymentPlan {
@@ -372,16 +275,6 @@ model AuditLog {
   timestamp  DateTime @default(now())
 }
 
-model SalePhoto {
-  id          String   @id @default(cuid())
-  saleId      String
-  sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  photoPath   String
-  photoType   String   @default("handwritten")
-  photoRemark String?
-  createdAt   DateTime @default(now())
-}
-
 model SaleOrderPhoto {
   id          String   @id @default(cuid())
   saleOrderId String
@@ -390,6 +283,7 @@ model SaleOrderPhoto {
   photoType   String   @default("handwritten")
   photoRemark String?
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model PurchasePhoto {
@@ -400,21 +294,7 @@ model PurchasePhoto {
   photoType   String   @default("delivery")
   photoRemark String?
   createdAt   DateTime @default(now())
-}
-
-model CustomerPhone {
-  id         String   @id @default(cuid())
-  customerId String
-  customer   Contact  @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  phone      String
-  phoneType  String   @default("mobile")
-  isPrimary  Boolean  @default(false)
-  remark     String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@unique([customerId, phone])
-  @@index([customerId])
+  updatedAt   DateTime @updatedAt
 }
 
 model CreditRecord {
@@ -450,66 +330,6 @@ model CollectionRecord {
   createdAt        DateTime           @default(now())
 }
 
-model SaleSlip {
-  id                     String        @id @default(cuid())
-  customerId              String?
-  customer                Contact?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  projectId               String?
-  buyerCustomerId         String?
-  buyerCustomer           Contact?      @relation("SaleSlipBuyer", fields: [buyerCustomerId], references: [id], onDelete: SetNull)
-  payerCustomerId         String?
-  payerCustomer           Contact?      @relation("SaleSlipPayer", fields: [payerCustomerId], references: [id], onDelete: SetNull)
-  introducerCustomerId    String?
-  introducerCustomer      Contact?      @relation("SaleSlipIntroducer", fields: [introducerCustomerId], references: [id], onDelete: SetNull)
-  pickerCustomerId        String?
-  pickerCustomer          Contact?      @relation("SaleSlipPicker", fields: [pickerCustomerId], references: [id], onDelete: SetNull)
-  pickerName              String?
-  pickerPhone             String?
-  pickerType              String?
-  writtenInvoiceNo        String?
-  paymentEntityId         String?
-  needDelivery            Boolean       @default(false)
-  deliveryAddress         String?
-  deliveryFee             Float         @default(0)
-  totalAmount             Float         @default(0)
-  discount                Float         @default(0)
-  discountRate            Float         @default(100)
-  paidAmount              Float         @default(0)
-  saleDate                DateTime      @default(now())
-  remark                  String?
-  status                  String        @default("draft")
-  items                   SaleSlipItem[]
-  payments                String?
-  createdAt               DateTime      @default(now())
-  updatedAt               DateTime      @updatedAt
-}
-
-model SaleSlipItem {
-  id        String   @id @default(cuid())
-  slipId    String
-  slip      SaleSlip @relation(fields: [slipId], references: [id], onDelete: Cascade)
-  productId String
-  quantity  Int
-  unitPrice Float
-  subtotal  Float
-  createdAt DateTime @default(now())
-}
-
-model CustomerFavoriteProduct {
-  id         String   @id @default(cuid())
-  customerId String
-  productId  String
-  quantity   Int      @default(1)
-  unitPrice  Float?
-  remark     String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  Product    Product  @relation(fields: [productId], references: [id])
-  Customer   Contact  @relation(fields: [customerId], references: [id], onDelete: Cascade)
-
-  @@unique([customerId, productId])
-}
-
 model InventoryCheck {
   id          String               @id @default(cuid())
   checkDate   DateTime             @default(now())
@@ -538,58 +358,46 @@ model InventoryCheckItem {
 }
 
 model Contact {
-  id           String   @id @default(cuid())
-  code        String   @unique
-  name         String
-  primaryPhone String?
-  phones       String?
-  address      String?
-  remark       String?
-  contactType  String   @default("customer")
-  valueScore   Float?
-  autoTag      String?
-  manualTag    String?
-  creditLimit  Float    @default(0)
-  creditUsed   Float    @default(0)
-  creditLevel  String   @default("normal")
+  id                   String   @id @default(cuid())
+  code                 String   @unique
+  name                 String
+  primaryPhone         String?
+  address              String?
+  remark               String?
+  contactType          String   @default("customer")
+  valueScore           Float?
+  autoTag              String?
+  manualTag            String?
+  creditLimit          Float    @default(0)
+  creditUsed           Float    @default(0)
+  creditLevel          String   @default("normal")
   lastCreditReviewDate DateTime?
-  riskLevel    String   @default("low")
-  blacklist    Boolean  @default(false)
-  blacklistReason String?
-  customerCategoryId String?
-  customerCategory   CustomerCategory? @relation(fields: [customerCategoryId], references: [id], onDelete: SetNull)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  riskLevel            String   @default("low")
+  blacklist            Boolean  @default(false)
+  blacklistReason      String?
+  customerCategoryId   String?
+  customerCategory     CustomerCategory? @relation(fields: [customerCategoryId], references: [id], onDelete: SetNull)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  phonesObj        ContactPhone[]
-  entityRoles      ContactEntityRole[]
-  projectRoles     ContactProjectRole[]
-  ordersAsBuyer    SaleOrder[]  @relation("BuyerContact")
-  ordersAsPayer    SaleOrder[]  @relation("PayerContact")
-  ordersAsIntroducer SaleOrder[] @relation("IntroducerContact")
-  ordersAsPicker   SaleOrder[]  @relation("PickerContact")
-  personalEntity   Entity?
-  rebatesAsPlumber Rebate[]
-  supplierContacts Supplier[]
-  badDebtWriteOffs BadDebtWriteOff[]
-
-  sales                Sale[]
-  payerSales           Sale[]  @relation("PayerCustomer")
-  introducerSales      Sale[]  @relation("IntroducerCustomer")
-  pickerSales          Sale[]  @relation("PickerCustomer")
-  projects             Project[]
-  settlementAdjustments SettlementAdjustment[]
+  phonesObj            ContactPhone[]
+  entityRoles          ContactEntityRole[]
+  projectRoles         ContactProjectRole[]
+  ordersAsBuyer        SaleOrder[]  @relation("BuyerContact")
+  ordersAsIntroducer   SaleOrder[]  @relation("IntroducerContact")
+  ordersAsPicker       SaleOrder[]  @relation("PickerContact")
+  personalEntity       Entity?
+  rebatesAsPlumber     Rebate[]
+  supplierContacts     Supplier[]
+  badDebtWriteOffs     BadDebtWriteOff[]
   paymentPlans         PaymentPlan[]
-  collectionRecords     CollectionRecord[]
-  favoriteProducts     CustomerFavoriteProduct[]
-  phoneRecords         CustomerPhone[]
+  collectionRecords    CollectionRecord[]
   creditRecords        CreditRecord[]
   customerPrices       CustomerPrice[]
-  saleSlips            SaleSlip[]
-  saleSlipsAsBuyer     SaleSlip[] @relation("SaleSlipBuyer")
-  saleSlipsAsPayer     SaleSlip[] @relation("SaleSlipPayer")
-  saleSlipsAsIntroducer SaleSlip[] @relation("SaleSlipIntroducer")
-  saleSlipsAsPicker    SaleSlip[] @relation("SaleSlipPicker")
+  slipAsCustomer       SaleSlip[]
+  slipAsBuyer          SaleSlip[]  @relation("SaleSlipBuyer")
+  slipAsIntroducer     SaleSlip[]  @relation("SaleSlipIntroducer")
+  slipAsPicker         SaleSlip[]  @relation("SaleSlipPicker")
 }
 
 model ContactPhone {
@@ -605,19 +413,19 @@ model ContactPhone {
 }
 
 model Supplier {
-  id           String   @id @default(cuid())
-  code        String   @unique
-  name         String
-  contactId   String?
-  supplierContact     Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  phone       String?
-  address     String?
-  remark      String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String   @id @default(cuid())
+  code             String   @unique
+  name             String
+  contactId        String?
+  supplierContact  Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  phone            String?
+  address          String?
+  remark           String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  purchases   Purchase[]
-  purchaseOrders PurchaseOrder[]
+  purchases        Purchase[]
+  purchaseOrders   PurchaseOrder[]
 }
 
 model Entity {
@@ -637,6 +445,7 @@ model Entity {
   roles   ContactEntityRole[]
   projects BizProject[]
   orders  SaleOrder[]
+  legacyBills LegacyBill[]
 }
 
 model BizProject {
@@ -655,6 +464,7 @@ model BizProject {
 
   roles   ContactProjectRole[]
   orders  SaleOrder[]
+  legacyBills LegacyBill[]
 }
 
 model ContactEntityRole {
@@ -697,16 +507,11 @@ model SaleOrder {
   buyerId          String
   buyer            Contact  @relation("BuyerContact", fields: [buyerId], references: [id])
 
-  payerId          String?
-  payer            Contact? @relation("PayerContact", fields: [payerId], references: [id])
-
   introducerId     String?
   introducer       Contact? @relation("IntroducerContact", fields: [introducerId], references: [id])
 
   pickerId         String?
   picker           Contact? @relation("PickerContact", fields: [pickerId], references: [id])
-  pickerName       String?
-  pickerPhone      String?
 
   needDelivery     Boolean  @default(false)
   deliveryAddress  String?
@@ -728,14 +533,14 @@ model SaleOrder {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  items        OrderItem[]
-  payments     OrderPayment[]
-  rebates      Rebate[]
-  receivables  Receivable[]
-  photos       SaleOrderPhoto[]
-  returns      SaleReturn[]
+  items            OrderItem[]
+  payments         OrderPayment[]
+  rebates          Rebate[]
+  receivables      Receivable[]
+  photos           SaleOrderPhoto[]
+  returns          SaleReturn[]
   badDebtWriteOffs BadDebtWriteOff[]
-  deliveryRecords DeliveryRecord[]
+  deliveryRecords  DeliveryRecord[]
 }
 
 model SaleReturn {
@@ -765,6 +570,49 @@ model SaleReturnItem {
   createdAt    DateTime @default(now())
 }
 
+model SaleSlip {
+  id                     String   @id @default(cuid())
+  customerId             String?
+  customer               Contact? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  projectId              String?
+  buyerId               String?
+  buyer                 Contact? @relation("SaleSlipBuyer", fields: [buyerId], references: [id], onDelete: SetNull)
+  introducerId          String?
+  introducer            Contact? @relation("SaleSlipIntroducer", fields: [introducerId], references: [id], onDelete: SetNull)
+  pickerId              String?
+  picker                Contact? @relation("SaleSlipPicker", fields: [pickerId], references: [id], onDelete: SetNull)
+  pickerName            String?
+  pickerPhone           String?
+  pickerType            String?
+  writtenInvoiceNo      String?
+  paymentEntityId       String?
+  needDelivery          Boolean  @default(false)
+  deliveryAddress       String?
+  deliveryFee           Float    @default(0)
+  totalAmount          Float    @default(0)
+  discount             Float    @default(0)
+  discountRate          Float    @default(100)
+  paidAmount           Float    @default(0)
+  saleDate             DateTime @default(now())
+  remark               String?
+  status               String   @default("draft")
+  items                SaleSlipItem[]
+  payments             String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model SaleSlipItem {
+  id        String   @id @default(cuid())
+  slipId    String
+  slip      SaleSlip @relation(fields: [slipId], references: [id], onDelete: Cascade)
+  productId String
+  quantity  Int
+  unitPrice Float
+  subtotal  Float
+  createdAt DateTime @default(now())
+}
+
 model BadDebtWriteOff {
   id              String   @id @default(cuid())
   contactId       String
@@ -774,13 +622,12 @@ model BadDebtWriteOff {
   originalAmount  Float
   writtenOffAmount Float
   finalAmount     Float
-  // 坏账类型：negotiated - 协商减免；bad_debt - 真正坏账
   writeOffType    String   @default("bad_debt")
   reason          String?
   operatorNote    String?
   approvedBy      String?
   approvedAt      DateTime?
-  status          String   @default("pending") // pending, approved, rejected
+  status          String   @default("pending")
   createdAt       DateTime @default(now())
   createdBy       String?
   updatedAt       DateTime @updatedAt
@@ -822,7 +669,6 @@ model Receivable {
   agreedPaymentDate DateTime?
   isOverdue         Boolean              @default(false)
   overdueDays       Int                  @default(0)
-  // 状态：pending - 待收款；partial - 部分还款；settled - 已结清；negotiated - 协商结清；bad_debt - 坏账核销
   status            String               @default("pending")
   settlementDate     DateTime?
   remark            String?
@@ -849,8 +695,28 @@ model ReceivableAuditLog {
   reason            String?
   remark            String?
   createdAt         DateTime @default(now())
-  
+
   @@index([receivableId])
   @@index([createdAt])
   @@index([actionType])
 }
+
+model LegacyBill {
+  id                String   @id @default(cuid())
+  entityId          String
+  entity            Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  projectId         String?
+  project           BizProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  billDate          DateTime @default(now())
+  originalAmount    Float
+  paidAmount        Float    @default(0)
+  remainingAmount   Float
+  status            String   @default("pending")
+  remark            String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([entityId])
+  @@index([status])
+}
+

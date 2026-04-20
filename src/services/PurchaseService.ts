@@ -237,6 +237,38 @@ export const PurchaseService = {
     return returnRecord;
   },
 
+  async createPurchaseReturnWithItems(purchaseId: string, quantity: number, unitPrice: number, isPriceVolatile: boolean, exchangePurchaseId?: string) {
+    const purchase = await db.purchase.findUnique({
+      where: { id: purchaseId },
+      include: { product: true },
+    });
+
+    if (!purchase) throw new Error('进货记录不存在');
+
+    const returnRecord = await db.purchaseReturn.create({
+      data: {
+        purchaseId,
+        totalAmount: quantity * unitPrice,
+        items: {
+          create: {
+            productId: purchase.productId,
+            returnQuantity: quantity,
+            unitPrice: unitPrice,
+            amount: quantity * unitPrice,
+            marketPrice: isPriceVolatile ? unitPrice : null,
+          },
+        },
+      },
+    });
+
+    await db.product.update({
+      where: { id: purchase.productId },
+      data: { stock: { decrement: quantity } },
+    });
+
+    return returnRecord;
+  },
+
   async createExchangePurchase(originalPurchaseId: string, newQuantity: number, newUnitPrice: number) {
     const original = await db.purchase.findUnique({
       where: { id: originalPurchaseId },
@@ -306,6 +338,14 @@ export const PurchaseService = {
   async getSuppliers() {
     return db.supplier.findMany({
       orderBy: { name: 'asc' },
+    });
+  },
+
+  async getPurchaseHistoryByProduct(productId: string) {
+    return db.purchase.findMany({
+      where: { productId },
+      orderBy: { purchaseDate: 'asc' },
+      include: { supplier: true },
     });
   },
 

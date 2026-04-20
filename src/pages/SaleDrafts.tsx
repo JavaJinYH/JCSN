@@ -11,7 +11,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { db } from '@/lib/db';
 import { formatCurrency } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import type { SaleSlip } from '@/lib/types';
@@ -78,8 +77,8 @@ export function SaleDrafts() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">暂存单列表</h2>
-          <p className="text-slate-500 mt-1">共 {drafts.length} 个暂存单</p>
+          <h2 className="text-2xl font-bold text-slate-800">暂存记录</h2>
+          <p className="text-slate-500 mt-1">共{drafts.length}个暂存单</p>
         </div>
         <Link to="/sales/new">
           <Button className="bg-orange-500 hover:bg-orange-600">+ 新增销售</Button>
@@ -124,7 +123,7 @@ export function SaleDrafts() {
                         minute: '2-digit',
                       })}
                     </TableCell>
-                    <TableCell>{slip.buyerCustomer?.name || '散客'}</TableCell>
+                    <TableCell>{slip.buyer?.name || '散客'}</TableCell>
                     <TableCell>
                       <Badge variant="secondary">{slip.items.length} 种</Badge>
                     </TableCell>

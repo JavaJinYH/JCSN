@@ -18,6 +18,7 @@ export const SettlementService = {
         items: true,
         returns: true,
         badDebtWriteOffs: true,
+        photos: true,
       },
       orderBy: { saleDate: 'desc' },
     });
@@ -33,6 +34,7 @@ export const SettlementService = {
         items: true,
         returns: true,
         badDebtWriteOffs: true,
+        photos: true,
       },
       orderBy: { saleDate: 'desc' },
     });

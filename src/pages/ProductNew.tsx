@@ -33,6 +33,7 @@ export function ProductNew() {
   const [newCategoryDesc, setNewCategoryDesc] = useState('');
 
   const [formData, setFormData] = useState({
+    code: '',
     name: '',
     categoryId: '',
     brand: '',
@@ -55,6 +56,21 @@ export function ProductNew() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!formData.code) {
+      generateCode();
+    }
+  }, []);
+
+  const generateCode = async () => {
+    try {
+      const code = await ProductService.generateProductCode();
+      setFormData(prev => ({ ...prev, code }));
+    } catch (error) {
+      console.error('Failed to generate product code:', error);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -114,6 +130,7 @@ export function ProductNew() {
     setLoading(true);
     try {
       await ProductService.createProduct({
+        code: formData.code || undefined,
         name: formData.name,
         categoryId: formData.categoryId,
         brand: formData.brand || undefined,
@@ -180,6 +197,18 @@ export function ProductNew() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="text-sm font-medium mb-2 block">
+                商品编码 <span className="text-xs text-slate-400">(自动生成)</span>
+              </label>
+              <Input
+                value={formData.code}
+                readOnly
+                placeholder="自动生成"
+                className="bg-slate-50"
+              />
+            </div>
+
             <div>
               <label className="text-sm font-medium mb-2 block">
                 商品名称 <span className="text-red-500">*</span>

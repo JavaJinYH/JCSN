@@ -17,20 +17,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { db } from '@/lib/db';
+import { ContactService } from '@/services/ContactService';
 import { toast } from '@/components/Toast';
 import { recordFrequency } from '@/lib/frequency';
 import type { Contact } from '@/lib/types';
 
 interface SaleContactSelectProps {
   contacts: Contact[];
+  entities: { id: string; name: string }[];
   selectedBuyer: string;
-  selectedPayer: string;
   selectedIntroducer: string;
   pickerName: string;
   pickerPhone: string;
   onSelectedBuyerChange: (value: string) => void;
-  onSelectedPayerChange: (value: string) => void;
   onSelectedIntroducerChange: (value: string) => void;
   onPickerNameChange: (value: string) => void;
   onPickerPhoneChange: (value: string) => void;
@@ -39,13 +38,12 @@ interface SaleContactSelectProps {
 
 export function SaleContactSelect({
   contacts,
+  entities,
   selectedBuyer,
-  selectedPayer,
   selectedIntroducer,
   pickerName,
   pickerPhone,
   onSelectedBuyerChange,
-  onSelectedPayerChange,
   onSelectedIntroducerChange,
   onPickerNameChange,
   onPickerPhoneChange,
@@ -65,6 +63,11 @@ export function SaleContactSelect({
     label: `${c.name} (${c.primaryPhone || '无电话'})`,
   }));
 
+  const entityOptions = entities.map(e => ({
+    value: e.id,
+    label: e.name,
+  }));
+
   const handleAddBuyer = async () => {
     if (!newBuyer.name.trim()) {
       toast('请输入联系人姓名', 'warning');
@@ -76,26 +79,22 @@ export function SaleContactSelect({
     }
 
     try {
-      const existing = await db.contact.findFirst({
-        where: { primaryPhone: newBuyer.primaryPhone.trim() },
-      });
+      const existing = await ContactService.findContactByPhone(newBuyer.primaryPhone.trim());
       if (existing) {
         toast('该手机号已被使用', 'warning');
         return;
       }
 
-      const contactCount = await db.contact.count();
+      const contactCount = await ContactService.countContacts();
       const newCode = `C${String(contactCount + 1).padStart(3, '0')}`;
 
-      const contact = await db.contact.create({
-        data: {
-          code: newCode,
-          name: newBuyer.name.trim(),
-          primaryPhone: newBuyer.primaryPhone.trim(),
-          address: newBuyer.address.trim() || null,
-          remark: newBuyer.remark.trim() || null,
-          contactType: newBuyer.contactType,
-        },
+      const contact = await ContactService.createContact({
+        name: newBuyer.name.trim(),
+        primaryPhone: newBuyer.primaryPhone.trim(),
+        address: newBuyer.address.trim() || undefined,
+        remark: newBuyer.remark.trim() || undefined,
+        contactType: newBuyer.contactType,
+        code: newCode,
       });
 
       onContactsChange([...contacts, contact]);
@@ -141,22 +140,12 @@ export function SaleContactSelect({
             <h4 className="text-sm font-medium text-slate-600 mb-3">销售单角色（可选）</h4>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-slate-500 mb-1 block">付款人</label>
-                <Combobox
-                  value={selectedPayer === '__none__' ? '' : selectedPayer}
-                  onValueChange={(v) => onSelectedPayerChange(v || '__none__')}
-                  options={contactOptions}
-                  placeholder="选择付款人"
-                  emptyText="没有找到匹配的联系人"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-500 mb-1 block">介绍人(水电工)</label>
+                <label className="text-xs text-slate-500 mb-1 block">介绍人</label>
                 <Combobox
                   value={selectedIntroducer === '__none__' ? '' : selectedIntroducer}
                   onValueChange={(v) => onSelectedIntroducerChange(v || '__none__')}
                   options={contactOptions}
-                  placeholder="选择介绍人"
+                  placeholder="选择介绍人（可不选）"
                   emptyText="没有找到匹配的联系人"
                 />
               </div>

@@ -90,41 +90,52 @@ async function createWindow() {
 
 function registerDbHandlers() {
   const models = [
-    'category', 'product', 'customer', 'customerCategory', 'project',
-    'sale', 'saleItem', 'payment', 'systemSetting', 'purchase',
+    'category', 'product', 'customerCategory', 'systemSetting', 'purchase',
     'rebate', 'deliveryFee', 'deliveryRecord',
-    'accountReceivable', 'settlementAdjustment', 'paymentPlan', 'auditLog',
-    'salePhoto', 'purchasePhoto', 'collectionRecord',
+    'paymentPlan', 'auditLog',
+    'purchasePhoto', 'collectionRecord',
     'inventoryCheck', 'inventoryCheckItem',
-    'saleSlip', 'saleSlipItem', 'customerFavoriteProduct',
-    'customerPhone',
     'contact', 'contactPhone', 'entity', 'bizProject',
     'contactEntityRole', 'contactProjectRole',
     'saleOrder', 'orderItem', 'orderPayment', 'receivable',
-    'saleOrderPhoto',
+    'saleOrderPhoto', 'saleSlip', 'saleSlipItem',
     'brand', 'productSpec', 'customerPrice',
     'saleReturn', 'saleReturnItem', 'badDebtWriteOff',
     'supplier',
     'purchaseReturn', 'purchaseReturnItem',
     'purchaseOrder',
+    'receivableAuditLog',
+    'legacyBill',
   ];
+
+  const toPascalCase = (str) => str.charAt(0).toUpperCase() + str.slice(1);
+
   const operations = ['findMany', 'findFirst', 'findUnique', 'create', 'update', 'delete', 'upsert', 'count', 'updateMany'];
 
-  models.forEach(model => {
+  const registerModel = (modelName) => {
+    const pascalModel = toPascalCase(modelName);
     operations.forEach(operation => {
-      ipcMain.handle(`db-${model}-${operation}`, async (event, args) => {
+      ipcMain.handle(`db-${modelName}-${operation}`, async (event, args) => {
         try {
-          const result = await prisma[model][operation](args);
+          const result = await prisma[pascalModel][operation](args);
           return { success: true, data: result };
         } catch (error) {
-          log.error(`[IPC] DB Error [${model}.${operation}]:`, error.message);
+          log.error(`[IPC] DB Error [${modelName}.${operation}]:`, error.message);
           return { success: false, error: error.message };
         }
       });
     });
+  };
+
+  models.forEach(model => {
+    registerModel(model);
+    const pascalModel = toPascalCase(model);
+    if (model !== pascalModel) {
+      registerModel(pascalModel);
+    }
   });
 
-  log.info(`Registered ${models.length * operations.length} DB IPC handlers`);
+  log.info(`Registered DB IPC handlers for ${models.length} models`);
 }
 
 // 照片存储 IPC 处理器
@@ -334,6 +345,17 @@ function registerAppHandlers() {
     if (mainWindow) {
       mainWindow.reload();
     }
+  });
+
+  ipcMain.handle('app-close', async () => {
+    log.info('App close requested via IPC');
+    if (prisma) {
+      await prisma.$disconnect();
+    }
+    if (mainWindow) {
+      mainWindow.close();
+    }
+    app.quit();
   });
 
   log.info('Registered app IPC handlers');

@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   app: {
     restart: () => ipcRenderer.invoke('app-restart'),
     reload: () => ipcRenderer.invoke('app-reload'),
+    close: () => ipcRenderer.invoke('app-close'),
   },
 
   db: (model, operation, args) => ipcRenderer.invoke(`db-${model}-${operation}`, args),

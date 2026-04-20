@@ -2,6 +2,8 @@ import { db } from '@/lib/db';
 import { generateInvoiceNo } from '@/lib/utils';
 import { ContactService } from './ContactService';
 import { EntityService } from './EntityService';
+import { ProductService } from './ProductService';
+import { ReceivableService } from './ReceivableService';
 
 export interface CreatePaymentDTO {
   method: string;
@@ -18,7 +20,6 @@ export interface CreatePhotoDTO {
 
 export interface CreateSaleOrderDTO {
   buyerId: string;
-  payerId?: string | null;
   introducerId?: string | null;
   pickerId?: string | null;
   pickerName?: string | null;
@@ -38,33 +39,7 @@ export interface CreateSaleOrderDTO {
   photos?: CreatePhotoDTO[];
 }
 
-export interface CreateSaleDraftDTO {
-  buyerId: string;
-  payerId?: string | null;
-  introducerId?: string | null;
-  pickerId?: string | null;
-  pickerName?: string | null;
-  pickerPhone?: string | null;
-  projectId?: string | null;
-  paymentEntityId: string;
-  totalAmount: number;
-  discount: number;
-  paidAmount: number;
-  writtenInvoiceNo?: string | null;
-  remark?: string | null;
-  needDelivery?: boolean;
-  deliveryAddress?: string | null;
-  deliveryFee?: number;
-  items: CreateOrderItemDTO[];
-  payments?: CreatePaymentDTO[];
-  photos?: CreatePhotoDTO[];
-}
 
-export interface SaleDraftResult {
-  draft: any;
-  items: any[];
-  payments?: any[];
-}
 
 export interface CreateOrderItemDTO {
   productId: string;
@@ -136,7 +111,6 @@ export const SaleService = {
       data: {
         invoiceNo: generateInvoiceNo(),
         buyerId,
-        payerId: data.payerId === '__none__' ? null : data.payerId || null,
         introducerId: data.introducerId === '__none__' ? null : data.introducerId || null,
         pickerId: data.pickerId === '__none__' ? null : data.pickerId || null,
         pickerName: data.pickerName || null,
@@ -213,16 +187,16 @@ export const SaleService = {
         },
       });
 
-      if (data.payerId && data.payerId !== '__none__') {
+      if (data.buyerId) {
         await db.customerPrice.upsert({
           where: {
             customerId_productId: {
-              customerId: data.payerId,
+              customerId: data.buyerId,
               productId: item.productId,
             },
           },
           create: {
-            customerId: data.payerId,
+            customerId: data.buyerId,
             productId: item.productId,
             lastPrice: item.unitPrice,
             transactionCount: 1,
@@ -292,7 +266,6 @@ export const SaleService = {
       where,
       include: {
         buyer: true,
-        payer: true,
         introducer: true,
         picker: true,
         paymentEntity: true,
@@ -307,13 +280,6 @@ export const SaleService = {
     return orders;
   },
 
-  async getLegacySales() {
-    return db.sale.findMany({
-      include: { customer: true, _count: { select: { items: true } } },
-      orderBy: { saleDate: 'desc' },
-    });
-  },
-
   async getContacts() {
     return db.contact.findMany({ orderBy: { name: 'asc' } });
   },
@@ -323,7 +289,6 @@ export const SaleService = {
       where: { id },
       include: {
         buyer: true,
-        payer: true,
         introducer: true,
         picker: true,
         paymentEntity: true,
@@ -347,46 +312,61 @@ export const SaleService = {
     });
   },
 
-  /**
-   * 创建销售草稿（暂存）
-   * @param data - 草稿数据
-   * @returns 创建的草稿结果
-   */
-  async createSaleDraft(data: CreateSaleDraftDTO): Promise<SaleDraftResult> {
+  async createSaleReturn(saleOrderId: string, items: { productId: string; quantity: number; unitPrice: number }[]) {
+    const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+
+    const returnRecord = await db.saleReturn.create({
+      data: {
+        saleOrderId,
+        totalAmount,
+        items: {
+          create: items.map(item => ({
+            productId: item.productId,
+            returnQuantity: item.quantity,
+            unitPrice: item.unitPrice,
+            amount: item.quantity * item.unitPrice,
+          })),
+        },
+      },
+    });
+
+    for (const item of items) {
+      await ProductService.updateStock(item.productId, item.quantity, 'increment');
+    }
+
+    try {
+      await ReceivableService.incrementRemainingByOrderId(saleOrderId, totalAmount);
+    } catch (e) {
+      console.warn('[SaleService] 更新欠款失败:', e);
+    }
+
+    return returnRecord;
+  },
+
+  async createSaleDraft(data: CreateSaleOrderDTO) {
     let buyerId = data.buyerId;
-    if (data.buyerId === '__none__') {
-      const walkInCustomer = await db.contact.findFirst({
-        where: { name: '散客' },
-      });
-      if (!walkInCustomer) {
-        throw new Error('散客不存在，请先创建散客联系人');
-      }
+    if (!buyerId || buyerId === '__none__') {
+      const walkInCustomer = await ContactService.ensureWalkInCustomer();
       buyerId = walkInCustomer.id;
     }
 
     let entityId = data.paymentEntityId;
-    if (data.paymentEntityId === '__cash__') {
-      entityId = '__cash__';
-    } else if (data.paymentEntityId) {
-      const entity = await db.entity.findUnique({
-        where: { id: data.paymentEntityId },
-      });
-      entityId = entity?.id || data.paymentEntityId;
+    if (!entityId || entityId === '__none__' || entityId === '__cash__') {
+      const cashEntity = await EntityService.ensureCashEntity();
+      entityId = cashEntity.id;
     }
 
     const draft = await db.saleSlip.create({
       data: {
-        buyerCustomerId: buyerId,
-        payerCustomerId: data.payerId === '__none__' ? null : data.payerId || null,
-        introducerCustomerId: data.introducerId === '__none__' ? null : data.introducerId || null,
-        pickerCustomerId: data.pickerId === '__none__' ? null : data.pickerId || null,
+        buyerId: buyerId,
+        introducerId: data.introducerId === '__none__' ? null : data.introducerId || null,
+        pickerId: data.pickerId === '__none__' ? null : data.pickerId || null,
         pickerName: data.pickerName || null,
         pickerPhone: data.pickerPhone || null,
         projectId: data.projectId === '__none__' ? null : data.projectId || null,
         paymentEntityId: entityId,
         totalAmount: data.totalAmount,
         discount: data.discount,
-        discountRate: 100,
         paidAmount: data.paidAmount,
         writtenInvoiceNo: data.writtenInvoiceNo || null,
         remark: data.remark || null,
@@ -412,12 +392,7 @@ export const SaleService = {
     return { draft, items: data.items, payments: data.payments };
   },
 
-  /**
-   * 更新销售草稿
-   * @param slipId - 草稿ID
-   * @param data - 更新数据
-   */
-  async updateSaleDraft(slipId: string, data: Partial<CreateSaleDraftDTO>): Promise<SaleDraftResult> {
+  async updateSaleDraft(slipId: string, data: Partial<CreateSaleOrderDTO>) {
     let buyerId = data.buyerId;
     if (!buyerId || buyerId === '__none__') {
       const walkInCustomer = await ContactService.ensureWalkInCustomer();
@@ -428,22 +403,14 @@ export const SaleService = {
     if (!entityId || entityId === '__none__' || entityId === '__cash__') {
       const cashEntity = await EntityService.ensureCashEntity();
       entityId = cashEntity.id;
-    } else {
-      const entity = await db.entity.findUnique({
-        where: { id: entityId },
-      });
-      if (!entity) {
-        throw new Error('选择的挂靠主体不存在，请重新选择');
-      }
     }
 
     const draft = await db.saleSlip.update({
       where: { id: slipId },
       data: {
-        buyerCustomerId: buyerId,
-        payerCustomerId: data.payerId === '__none__' ? null : data.payerId || null,
-        introducerCustomerId: data.introducerId === '__none__' ? null : data.introducerId || null,
-        pickerCustomerId: data.pickerId === '__none__' ? null : data.pickerId || null,
+        buyerId: buyerId,
+        introducerId: data.introducerId === '__none__' ? null : data.introducerId || null,
+        pickerId: data.pickerId === '__none__' ? null : data.pickerId || null,
         pickerName: data.pickerName || null,
         pickerPhone: data.pickerPhone || null,
         projectId: data.projectId === '__none__' ? null : data.projectId || null,
@@ -475,42 +442,30 @@ export const SaleService = {
     return { draft, items: data.items || [], payments: data.payments };
   },
 
-  /**
-   * 获取所有草稿
-   */
   async getSaleDrafts() {
     return db.saleSlip.findMany({
       where: { status: 'draft' },
       include: {
         items: true,
-        buyerCustomer: true,
-        payerCustomer: true,
+        buyer: true,
       },
       orderBy: { updatedAt: 'desc' },
     });
   },
 
-  /**
-   * 获取单个草稿
-   */
   async getSaleDraftById(id: string) {
     return db.saleSlip.findUnique({
       where: { id },
       include: {
         items: true,
-        buyerCustomer: true,
-        payerCustomer: true,
-        introducerCustomer: true,
-        pickerCustomer: true,
+        buyer: true,
+        introducer: true,
+        picker: true,
       },
     });
   },
 
-  /**
-   * 提交草稿为正式订单
-   * @param slipId - 草稿ID
-   */
-  async submitDraft(slipId: string): Promise<SaleOrderResult> {
+  async submitDraft(slipId: string) {
     const slip = await db.saleSlip.findUnique({
       where: { id: slipId },
       include: { items: true },
@@ -533,10 +488,9 @@ export const SaleService = {
     const sale = await db.saleOrder.create({
       data: {
         invoiceNo: generateInvoiceNo(),
-        buyerId: slip.buyerCustomerId || '',
-        payerId: slip.payerCustomerId,
-        introducerId: slip.introducerCustomerId,
-        pickerId: slip.pickerCustomerId,
+        buyerId: slip.buyerId || '',
+        introducerId: slip.introducerId,
+        pickerId: slip.pickerId,
         pickerName: slip.pickerName,
         pickerPhone: slip.pickerPhone,
         projectId: slip.projectId,
@@ -592,9 +546,6 @@ export const SaleService = {
     return { sale, items: slip.items };
   },
 
-  /**
-   * 删除草稿
-   */
   async deleteSaleDraft(slipId: string) {
     await db.saleSlip.delete({
       where: { id: slipId },

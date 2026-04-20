@@ -40,15 +40,15 @@ export async function savePhoto(
   const relativePath = `${PHOTO_UPLOAD_DIR}/${fileName}`;
 
   if (type === 'sale') {
-    return await db.salePhoto.create({
+    return await db.SaleOrderPhoto.create({
       data: {
-        saleId: relatedId,
+        saleOrderId: relatedId,
         photoPath: relativePath,
         photoType: 'handwritten',
       },
     });
   } else {
-    return await db.purchasePhoto.create({
+    return await db.PurchasePhoto.create({
       data: {
         purchaseId: relatedId,
         photoPath: relativePath,
@@ -65,10 +65,10 @@ export async function deletePhoto(photoId: string, type: 'sale' | 'purchase'): P
   let photoPath: string;
 
   if (type === 'sale') {
-    const photo = await db.salePhoto.findUnique({ where: { id: photoId } });
+    const photo = await db.SaleOrderPhoto.findUnique({ where: { id: photoId } });
     photoPath = photo?.photoPath || '';
   } else {
-    const photo = await db.purchasePhoto.findUnique({ where: { id: photoId } });
+    const photo = await db.PurchasePhoto.findUnique({ where: { id: photoId } });
     photoPath = photo?.photoPath || '';
   }
 
@@ -80,20 +80,20 @@ export async function deletePhoto(photoId: string, type: 'sale' | 'purchase'): P
   }
 
   if (type === 'sale') {
-    await db.salePhoto.delete({ where: { id: photoId } });
+    await db.SaleOrderPhoto.delete({ where: { id: photoId } });
   } else {
-    await db.purchasePhoto.delete({ where: { id: photoId } });
+    await db.PurchasePhoto.delete({ where: { id: photoId } });
   }
 }
 
 export async function getPhotos(type: 'sale' | 'purchase', relatedId: string) {
   if (type === 'sale') {
-    return await db.salePhoto.findMany({
-      where: { saleId: relatedId },
+    return await db.SaleOrderPhoto.findMany({
+      where: { saleOrderId: relatedId },
       orderBy: { createdAt: 'asc' },
     });
   } else {
-    return await db.purchasePhoto.findMany({
+    return await db.PurchasePhoto.findMany({
       where: { purchaseId: relatedId },
       orderBy: { createdAt: 'asc' },
     });
@@ -106,12 +106,12 @@ export async function updatePhotoRemark(
   type: 'sale' | 'purchase'
 ) {
   if (type === 'sale') {
-    return await db.salePhoto.update({
+    return await db.SaleOrderPhoto.update({
       where: { id: photoId },
       data: { photoRemark: remark },
     });
   } else {
-    return await db.purchasePhoto.update({
+    return await db.PurchasePhoto.update({
       where: { id: photoId },
       data: { photoRemark: remark },
     });

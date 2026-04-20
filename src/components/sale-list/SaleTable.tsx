@@ -11,8 +11,6 @@ import {
 import { DataTablePagination } from '@/components/DataTable';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 
-type SaleSource = 'legacy' | 'new';
-
 interface SaleListItem {
   id: string;
   invoiceNo: string | null;
@@ -21,11 +19,21 @@ interface SaleListItem {
   totalAmount: number;
   discount: number;
   paidAmount: number;
+  status: string;
+  remark: string | null;
+  buyerId: string;
+  introducerId: string | null;
+  pickerId: string | null;
+  pickerName: string | null;
+  pickerPhone: string | null;
+  projectId: string | null;
+  paymentEntityId: string | null;
   buyerName?: string;
-  entityName?: string;
+  buyerPhone?: string;
+  introducerName?: string;
   projectName?: string;
+  entityName?: string;
   _count?: { items: number };
-  source: SaleSource;
 }
 
 interface SaleTableProps {
@@ -73,12 +81,9 @@ export function SaleTable({
             </TableRow>
           ) : (
             sales.map((sale) => (
-              <TableRow key={`${sale.source}-${sale.id}`}>
+              <TableRow key={sale.id}>
                 <TableCell className="font-mono text-sm">
                   {sale.invoiceNo || '-'}
-                  {sale.source === 'new' && (
-                    <Badge className="ml-1 bg-blue-100 text-blue-700 text-xs">新</Badge>
-                  )}
                 </TableCell>
                 <TableCell>{formatDateTime(sale.saleDate)}</TableCell>
                 <TableCell>

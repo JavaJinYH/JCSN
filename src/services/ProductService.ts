@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 
 export interface CreateProductDTO {
+  code?: string;
   name: string;
   categoryId?: string;
   brand?: string;
@@ -22,6 +23,7 @@ export const ProductService = {
   async createProduct(data: CreateProductDTO) {
     return db.product.create({
       data: {
+        code: data.code || null,
         name: data.name,
         categoryId: data.categoryId || undefined,
         brand: data.brand || null,
@@ -29,8 +31,8 @@ export const ProductService = {
         model: data.model || null,
         unit: data.unit || '个',
         purchaseUnit: data.purchaseUnit || null,
-        unitRatio: typeof data.unitRatio === 'string' 
-          ? parseFloat(data.unitRatio) || 1 
+        unitRatio: typeof data.unitRatio === 'string'
+          ? parseFloat(data.unitRatio) || 1
           : data.unitRatio || 1,
         referencePrice: data.referencePrice || null,
         lastPurchasePrice: data.lastPurchasePrice || null,
@@ -201,5 +203,42 @@ export const ProductService = {
         categoryId: true 
       },
     });
+  },
+
+  async findSimilarProducts(name: string, brand?: string | null, specification?: string | null) {
+    const where: any = { name };
+    if (brand) where.brand = brand;
+    if (specification) where.specification = specification;
+
+    return db.product.findMany({
+      where,
+      include: { category: true },
+    });
+  },
+
+  async checkDuplicateCode(code: string) {
+    const existing = await db.product.findUnique({ where: { code } });
+    return !!existing;
+  },
+
+  async generateProductCode() {
+    const today = new Date();
+    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+    const prefix = `P${dateStr}`;
+
+    const lastProduct = await db.product.findFirst({
+      where: { code: { startsWith: prefix } },
+      orderBy: { code: 'desc' },
+    });
+
+    let sequence = 1;
+    if (lastProduct?.code) {
+      const lastSeq = parseInt(lastProduct.code.replace(prefix, ''), 10);
+      if (!isNaN(lastSeq)) {
+        sequence = lastSeq + 1;
+      }
+    }
+
+    return `${prefix}${String(sequence).padStart(4, '0')}`;
   },
 };

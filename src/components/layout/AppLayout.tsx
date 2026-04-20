@@ -3,25 +3,25 @@ import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { useState, useEffect, useCallback } from 'react';
 import { ScreenLockOverlay } from '@/components/ScreenLock';
-import { db } from '@/lib/db';
+import { SettingsService } from '@/services/SettingsService';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
 
 export function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
-  const [idleTimeoutMinutes, setIdleTimeoutMinutes] = useState(5);
+  const [idleTimeoutMinutes, setIdleTimeoutMinutes] = useState(0);
   const [lockPassword, setLockPassword] = useState('123456');
 
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const settings = await db.systemSetting.findUnique({ where: { id: 'default' } });
+        const settings = await SettingsService.getSettings();
         if (settings) {
-          if ((settings as any).idleTimeoutMinutes) {
-            setIdleTimeoutMinutes((settings as any).idleTimeoutMinutes);
+          if (settings.idleTimeoutMinutes !== undefined) {
+            setIdleTimeoutMinutes(settings.idleTimeoutMinutes);
           }
-          if ((settings as any).lockPassword) {
-            setLockPassword((settings as any).lockPassword);
+          if (settings.lockPassword) {
+            setLockPassword(settings.lockPassword);
           }
         }
       } catch (e) {
@@ -42,8 +42,14 @@ export function AppLayout() {
   }, []);
 
   const handleLogout = useCallback(() => {
-    setIsLocked(false);
-    window.location.href = '/';
+    if (window.confirm('确定要关闭系统吗？')) {
+      const isElectron = window.electronAPI !== undefined;
+      if (isElectron) {
+        (window as any).electronAPI?.app?.close?.();
+      } else {
+        window.close();
+      }
+    }
   }, []);
 
   useIdleTimer({

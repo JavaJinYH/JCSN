@@ -5,7 +5,6 @@ import { Inventory } from './pages/Inventory';
 import { Sales } from './pages/Sales';
 import { SaleNew } from './pages/SaleNew';
 import { SaleDrafts } from './pages/SaleDrafts';
-import { SaleDraftEdit } from './pages/SaleDraftEdit';
 import { Products } from './pages/Products';
 import { ProductNew } from './pages/ProductNew';
 import { ProductEdit } from './pages/ProductEdit';
@@ -40,8 +39,7 @@ function App() {
           <Route path="purchases" element={<Purchases />} />
           <Route path="sales" element={<Sales />} />
           <Route path="sales/new" element={<ErrorBoundary><SaleNew /></ErrorBoundary>} />
-          <Route path="sales/drafts" element={<SaleDrafts />} />
-          <Route path="sales/draft/:id" element={<ErrorBoundary><SaleDraftEdit /></ErrorBoundary>} />
+          <Route path="sales/drafts" element={<ErrorBoundary><SaleDrafts /></ErrorBoundary>} />
           <Route path="products" element={<Products />} />
           <Route path="products/new" element={<ErrorBoundary><ProductNew /></ErrorBoundary>} />
           <Route path="products/:id/edit" element={<ErrorBoundary><ProductEdit /></ErrorBoundary>} />

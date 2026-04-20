@@ -61,6 +61,7 @@ export function ProductTable({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead>编码</TableHead>
             <TableHead>商品名称</TableHead>
             <TableHead>分类</TableHead>
             <TableHead>规格参数/产品型号</TableHead>
@@ -73,13 +74,16 @@ export function ProductTable({
         <TableBody>
           {pagination.total === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="text-center py-8 text-slate-500">
+              <TableCell colSpan={8} className="text-center py-8 text-slate-500">
                 暂无商品数据
               </TableCell>
             </TableRow>
           ) : (
             products.map((product) => (
               <TableRow key={product.id}>
+                <TableCell className="font-mono text-xs text-slate-500">
+                  {product.code || '-'}
+                </TableCell>
                 <TableCell>
                   <div className="font-medium">{product.name}</div>
                   {product.brand && (

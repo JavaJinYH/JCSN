@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -15,8 +14,6 @@ import { toast } from '@/components/Toast';
 import { SaleStats, SaleTable, SaleDetail } from '@/components/sale-list';
 import { SaleService } from '@/services/SaleService';
 
-type SaleSource = 'legacy' | 'new';
-
 interface SaleListItem {
   id: string;
   invoiceNo: string | null;
@@ -27,24 +24,18 @@ interface SaleListItem {
   paidAmount: number;
   status: string;
   remark: string | null;
-  source: SaleSource;
   buyerId: string;
-  payerId: string | null;
   introducerId: string | null;
   pickerId: string | null;
   pickerName: string | null;
   pickerPhone: string | null;
   projectId: string | null;
   paymentEntityId: string | null;
-  customerId: string | null;
   buyerName?: string;
   buyerPhone?: string;
-  payerName?: string;
   introducerName?: string;
   projectName?: string;
   entityName?: string;
-  customerName?: string;
-  customerType?: string;
   _count?: { items: number };
 }
 
@@ -59,7 +50,7 @@ export function Sales() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
-  const [selectedSale, setSelectedSale] = useState<{ id: string; source: SaleSource } | null>(null);
+  const [selectedSale, setSelectedSale] = useState<{ id: string } | null>(null);
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
   const [photoViewerIndex, setPhotoViewerIndex] = useState(0);
   const [photoList, setPhotoList] = useState<any[]>([]);
@@ -132,46 +123,37 @@ export function Sales() {
 
   const loadData = async () => {
     try {
-      const [legacySales, newSales, contactsData] = await Promise.all([
-        SaleService.getLegacySales(),
+      const [newSales, contactsData] = await Promise.all([
         SaleService.getSaleOrders(),
         SaleService.getContacts(),
       ]);
 
-      const legacySaleItems: SaleListItem[] = legacySales.map((s) => ({
-        id: s.id, invoiceNo: s.invoiceNo, writtenInvoiceNo: s.writtenInvoiceNo,
-        saleDate: s.saleDate, totalAmount: s.totalAmount, discount: s.discount,
-        paidAmount: s.paidAmount, status: s.status, remark: s.remark,
-        source: 'legacy' as SaleSource, buyerId: s.customerId || '', payerId: s.payerCustomerId,
-        introducerId: s.introducerCustomerId, pickerId: s.pickerCustomerId,
-        pickerName: s.pickerName || null, pickerPhone: s.pickerPhone || null,
-        projectId: s.projectId, paymentEntityId: null, customerId: s.customerId,
-        buyerName: s.customer?.name, buyerPhone: s.customer?.primaryPhone,
-        payerName: undefined, introducerName: undefined, projectName: s.project?.name,
-        entityName: undefined, customerName: s.customer?.name,
-        customerType: s.customer?.contactType, _count: s._count,
-      }));
-
-      const newSaleItems: SaleListItem[] = newSales.map((s) => ({
-        id: s.id, invoiceNo: s.invoiceNo, writtenInvoiceNo: s.writtenInvoiceNo,
-        saleDate: s.saleDate, totalAmount: s.totalAmount, discount: s.discount,
-        paidAmount: s.paidAmount, status: s.status, remark: s.remark,
-        source: 'new' as SaleSource, buyerId: s.buyerId, payerId: s.payerId,
-        introducerId: s.introducerId, pickerId: s.pickerId,
-        pickerName: s.pickerName || null, pickerPhone: s.pickerPhone || null,
-        projectId: s.projectId, paymentEntityId: s.paymentEntityId, customerId: null,
-        buyerName: s.buyer?.name, buyerPhone: s.buyer?.primaryPhone,
-        payerName: s.payer?.name, introducerName: s.introducer?.name,
-        projectName: s.project?.name, entityName: s.paymentEntity?.name,
-        customerName: s.buyer?.name, customerType: undefined,
+      const saleItems: SaleListItem[] = newSales.map((s) => ({
+        id: s.id,
+        invoiceNo: s.invoiceNo,
+        writtenInvoiceNo: s.writtenInvoiceNo,
+        saleDate: s.saleDate,
+        totalAmount: s.totalAmount,
+        discount: s.discount,
+        paidAmount: s.paidAmount,
+        status: s.status,
+        remark: s.remark,
+        buyerId: s.buyerId,
+        introducerId: s.introducerId,
+        pickerId: s.pickerId,
+        pickerName: s.pickerName || null,
+        pickerPhone: s.pickerPhone || null,
+        projectId: s.projectId,
+        paymentEntityId: s.paymentEntityId,
+        buyerName: s.buyer?.name,
+        buyerPhone: s.buyer?.primaryPhone,
+        introducerName: s.introducer?.name,
+        projectName: s.project?.name,
+        entityName: s.paymentEntity?.name,
         _count: { items: s.items?.length || 0 },
       }));
 
-      const allSales = [...legacySaleItems, ...newSaleItems].sort(
-        (a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime()
-      );
-
-      setSales(allSales);
+      setSales(saleItems);
       setContacts(contactsData);
     } catch (error) {
       console.error('[Sales] 加载销售数据失败:', error);
@@ -189,8 +171,7 @@ export function Sales() {
         sale.entityName?.toLowerCase().includes(searchTerm.toLowerCase())
       : true;
 
-    const matchesCustomer = selectedCustomer === 'all' || sale.customerId === selectedCustomer || sale.buyerId === selectedCustomer;
-    const matchesCustomerType = customerTypeFilter === 'all' || sale.customerType === customerTypeFilter;
+    const matchesCustomer = selectedCustomer === 'all' || sale.buyerId === selectedCustomer;
     const saleDate = new Date(sale.saleDate);
     const matchesDateStart = !dateRange.start || saleDate >= new Date(dateRange.start);
     const matchesDateEnd = !dateRange.end || saleDate <= new Date(dateRange.end + 'T23:59:59');
@@ -200,7 +181,7 @@ export function Sales() {
     else if (statusFilter === 'partial') matchesStatus = sale.paidAmount > 0 && sale.paidAmount < sale.totalAmount;
     else if (statusFilter === 'unpaid') matchesStatus = sale.paidAmount === 0;
 
-    return matchesSearch && matchesCustomer && matchesDateStart && matchesDateEnd && matchesCustomerType && matchesStatus;
+    return matchesSearch && matchesCustomer && matchesDateStart && matchesDateEnd && matchesStatus;
   });
 
   const tableProps = useDataTable<SaleListItem>({ data: filteredSales, defaultPageSize: 20 });
@@ -209,7 +190,7 @@ export function Sales() {
   const totalProfit = filteredSales.reduce((sum, s) => sum + (s.paidAmount - (s.totalAmount - s.discount)), 0);
 
   const handleViewSale = (sale: SaleListItem) => {
-    setSelectedSale({ id: sale.id, source: sale.source });
+    setSelectedSale({ id: sale.id });
     setViewDialogOpen(true);
   };
 
@@ -235,7 +216,7 @@ export function Sales() {
 
       <SaleStats
         totalCount={filteredSales.length}
-        newCount={sales.filter(s => s.source === 'new').length}
+        newCount={filteredSales.length}
         paidAmount={totalAmount}
         profit={totalProfit}
       />
@@ -267,16 +248,10 @@ export function Sales() {
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold">
-              销售详情
-              {selectedSale?.source === 'new' && (
-                <Badge className="ml-2 bg-blue-100 text-blue-700">新架构</Badge>
-              )}
-            </DialogTitle>
+            <DialogTitle className="text-xl font-bold">销售详情</DialogTitle>
           </DialogHeader>
           <SaleDetail
             saleId={selectedSale?.id || null}
-            source={selectedSale?.source || null}
             open={viewDialogOpen}
             onOpenChange={setViewDialogOpen}
             onSuccess={loadData}

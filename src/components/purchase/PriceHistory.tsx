@@ -17,7 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { formatCurrency, formatProductName } from '@/lib/utils';
-import { db } from '@/lib/db';
+import { PurchaseService } from '@/services/PurchaseService';
 import type { Product } from '@/lib/types';
 import { toast } from '@/components/Toast';
 
@@ -51,11 +51,7 @@ export function PriceHistory({
     if (!product) return;
     setLoading(true);
     try {
-      const historyData = await db.purchase.findMany({
-        where: { productId: product.id },
-        orderBy: { purchaseDate: 'asc' },
-        include: { supplier: true },
-      });
+      const historyData = await PurchaseService.getPurchaseHistoryByProduct(product.id);
       const data = historyData.map(p => ({
         date: new Date(p.purchaseDate).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }),
         price: p.unitPrice,

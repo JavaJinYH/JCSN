@@ -1,82 +1,97 @@
 import { db } from '@/lib/db';
+import type { LegacyBill } from '@/lib/types';
 
 export const LegacyBillService = {
-  async getAccountReceivables(where?: any, include?: any) {
-    return db.accountReceivable.findMany({
-      where,
-      include: include || {
+  async getLegacyBills(entityId?: string): Promise<LegacyBill[]> {
+    return db.LegacyBill.findMany({
+      where: entityId ? { entityId } : undefined,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        entity: true,
         project: true,
       },
-      orderBy: { createdAt: 'desc' },
     });
   },
 
-  async getAccountReceivablesByContact(contactId: string) {
-    return db.accountReceivable.findMany({
-      where: {
-        contactId,
-        saleId: null,
+  async getLegacyBillsByEntity(entityId: string): Promise<LegacyBill[]> {
+    return db.LegacyBill.findMany({
+      where: { entityId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        project: true,
       },
-      orderBy: { createdAt: 'desc' },
     });
   },
 
-  async createAccountReceivable(data: {
-    contactId?: string;
+  async createLegacyBill(data: {
+    entityId: string;
     projectId?: string;
+    billDate?: Date;
     originalAmount: number;
     paidAmount?: number;
-    remainingAmount?: number;
-    amount?: number;
-    dueDate?: Date;
-    description?: string;
-    status?: string;
     remark?: string;
-  }) {
-    return db.accountReceivable.create({
-      data: {
-        contactId: data.contactId,
-        projectId: data.projectId,
-        originalAmount: data.originalAmount || data.amount || 0,
-        paidAmount: data.paidAmount || 0,
-        remainingAmount: data.remainingAmount || data.amount || 0,
-        status: data.status || (data.remainingAmount && data.remainingAmount > 0 ? 'pending' : 'settled'),
-        remark: data.remark,
-      },
-    });
-  },
+  }): Promise<LegacyBill> {
+    const paid = data.paidAmount || 0;
+    const remaining = data.originalAmount - paid;
 
-  async updateAccountReceivable(id: string, data: {
-    amount?: number;
-    originalAmount?: number;
-    paidAmount?: number;
-    remainingAmount?: number;
-    dueDate?: Date;
-    description?: string;
-    status?: string;
-    projectId?: string;
-    contactId?: string;
-    remark?: string;
-  }) {
-    return db.accountReceivable.update({
-      where: { id },
+    return db.LegacyBill.create({
       data: {
+        entityId: data.entityId,
+        projectId: data.projectId || null,
+        billDate: data.billDate || new Date(),
         originalAmount: data.originalAmount,
-        paidAmount: data.paidAmount,
-        remainingAmount: data.remainingAmount,
-        dueDate: data.dueDate,
-        description: data.description,
-        status: data.status,
-        projectId: data.projectId,
-        contactId: data.contactId,
+        paidAmount: paid,
+        remainingAmount: remaining,
+        status: remaining > 0 ? 'pending' : 'settled',
         remark: data.remark,
+      },
+      include: {
+        entity: true,
+        project: true,
       },
     });
   },
 
-  async deleteAccountReceivable(id: string) {
-    return db.accountReceivable.delete({
+  async updateLegacyBill(
+    id: string,
+    data: {
+      projectId?: string;
+      billDate?: Date;
+      originalAmount?: number;
+      paidAmount?: number;
+      status?: string;
+      remark?: string;
+    }
+  ): Promise<LegacyBill> {
+    const existing = await db.LegacyBill.findUnique({ where: { id } });
+    if (!existing) {
+      throw new Error('历史账单不存在');
+    }
+
+    const originalAmount = data.originalAmount ?? existing.originalAmount;
+    const paidAmount = data.paidAmount ?? existing.paidAmount;
+    const remainingAmount = originalAmount - paidAmount;
+    const status = data.status ?? (remainingAmount > 0 ? 'pending' : 'settled');
+
+    return db.LegacyBill.update({
       where: { id },
+      data: {
+        projectId: data.projectId,
+        billDate: data.billDate,
+        originalAmount,
+        paidAmount,
+        remainingAmount,
+        status,
+        remark: data.remark,
+      },
+      include: {
+        entity: true,
+        project: true,
+      },
     });
+  },
+
+  async deleteLegacyBill(id: string): Promise<void> {
+    await db.LegacyBill.delete({ where: { id } });
   },
 };

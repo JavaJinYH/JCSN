@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -26,25 +28,28 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { LegacyBillService } from '@/services/LegacyBillService';
-import { ContactService } from '@/services/ContactService';
 import { ProjectService } from '@/services/ProjectService';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { EntityService } from '@/services/EntityService';
+import { formatCurrency } from '@/lib/utils';
 import { toast } from '@/components/Toast';
-import type { Contact, AccountReceivable, BizProject } from '@/lib/types';
+import type { LegacyBill as LegacyBillType, Entity, BizProject } from '@/lib/types';
 
 export function LegacyBills() {
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const navigate = useNavigate();
+  const [entities, setEntities] = useState<Entity[]>([]);
   const [projects, setProjects] = useState<BizProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [editingBill, setEditingBill] = useState<AccountReceivable | null>(null);
+  const [editingBill, setEditingBill] = useState<LegacyBillType | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeMode, setActiveMode] = useState<'simple' | 'order'>('simple');
+  const [expandedEntityId, setExpandedEntityId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
-    contactId: '',
-    projectName: '',
-    billDate: new Date().toISOString().split('T')[0],
-    totalAmount: '',
+    entityId: '',
+    projectId: '__none__',
+    billDate: '',
+    originalAmount: '',
     paidAmount: '0',
     remark: '',
   });
@@ -56,11 +61,11 @@ export function LegacyBills() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [contactsData, projectsData] = await Promise.all([
-        ContactService.getContacts(),
+      const [entitiesData, projectsData] = await Promise.all([
+        EntityService.getEntities(),
         ProjectService.getProjects(),
       ]);
-      setContacts(contactsData);
+      setEntities(entitiesData);
       setProjects(projectsData);
     } catch (error) {
       console.error('[LegacyBills] 加载失败:', error);
@@ -70,41 +75,39 @@ export function LegacyBills() {
     }
   };
 
-  const filteredContacts = searchTerm
-    ? contacts.filter(
-        (c) =>
-          c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          c.primaryPhone?.includes(searchTerm)
-      )
-    : contacts;
-
-  const getContactBills = async (contactId: string) => {
-    const bills = await LegacyBillService.getAccountReceivablesByContact(contactId);
-    return bills;
-  };
+  const filteredEntities = searchTerm
+    ? entities.filter(
+      (e) =>
+        e.name.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    : entities;
 
   const handleAddBill = async () => {
-    if (!formData.contactId) {
-      toast('请选择客户', 'warning');
+    if (!formData.entityId) {
+      toast('请选择挂靠主体', 'warning');
       return;
     }
-    if (!formData.totalAmount || parseFloat(formData.totalAmount) <= 0) {
+    if (!formData.billDate) {
+      toast('请选择账单日期', 'warning');
+      return;
+    }
+    if (!formData.originalAmount || parseFloat(formData.originalAmount) <= 0) {
       toast('请输入正确的账单金额', 'warning');
       return;
     }
 
     try {
-      const totalAmount = parseFloat(formData.totalAmount);
+      const originalAmount = parseFloat(formData.originalAmount);
       const paidAmount = parseFloat(formData.paidAmount) || 0;
-      const remainingAmount = totalAmount - paidAmount;
+      const projectId = formData.projectId === '__none__' ? undefined : formData.projectId;
 
-      await LegacyBillService.createAccountReceivable({
-        contactId: formData.contactId,
-        originalAmount: totalAmount,
-        paidAmount: paidAmount,
-        remainingAmount: remainingAmount,
-        status: remainingAmount > 0 ? 'pending' : 'settled',
-        remark: formData.remark || `历史账单迁：${formData.projectName}`,
+      await LegacyBillService.createLegacyBill({
+        entityId: formData.entityId,
+        projectId,
+        billDate: new Date(formData.billDate),
+        originalAmount,
+        paidAmount,
+        remark: formData.remark || undefined,
       });
 
       toast('历史账单添加成功', 'success');
@@ -120,16 +123,16 @@ export function LegacyBills() {
     if (!editingBill) return;
 
     try {
-      const totalAmount = parseFloat(formData.totalAmount);
+      const originalAmount = parseFloat(formData.originalAmount);
       const paidAmount = parseFloat(formData.paidAmount) || 0;
-      const remainingAmount = totalAmount - paidAmount;
+      const projectId = formData.projectId === '__none__' ? undefined : formData.projectId;
 
-      await LegacyBillService.updateAccountReceivable(editingBill.id, {
-        originalAmount: totalAmount,
-        paidAmount: paidAmount,
-        remainingAmount: remainingAmount,
-        status: remainingAmount > 0 ? 'pending' : 'settled',
-        remark: formData.remark || `历史账单：${formData.projectName}`,
+      await LegacyBillService.updateLegacyBill(editingBill.id, {
+        projectId,
+        billDate: new Date(formData.billDate),
+        originalAmount,
+        paidAmount,
+        remark: formData.remark || undefined,
       });
 
       toast('账单更新成功', 'success');
@@ -141,9 +144,9 @@ export function LegacyBills() {
     }
   };
 
-  const handleDeleteBill = async (bill: AccountReceivable) => {
+  const handleDeleteBill = async (bill: LegacyBillType) => {
     try {
-      await LegacyBillService.deleteAccountReceivable(bill.id);
+      await LegacyBillService.deleteLegacyBill(bill.id);
       toast('账单删除成功', 'success');
       loadData();
     } catch (error) {
@@ -154,10 +157,10 @@ export function LegacyBills() {
 
   const resetForm = () => {
     setFormData({
-      contactId: '',
-      projectName: '',
-      billDate: new Date().toISOString().split('T')[0],
-      totalAmount: '',
+      entityId: '',
+      projectId: '__none__',
+      billDate: '',
+      originalAmount: '',
       paidAmount: '0',
       remark: '',
     });
@@ -165,12 +168,12 @@ export function LegacyBills() {
     setShowAddDialog(false);
   };
 
-  const openEditDialog = (bill: AccountReceivable) => {
+  const openEditDialog = (bill: LegacyBillType) => {
     setFormData({
-      contactId: bill.contactId,
-      projectName: bill.remark?.replace('历史账单迁：', '').replace('历史账单：', '') || '',
-      billDate: bill.createdAt.toISOString().split('T')[0],
-      totalAmount: bill.originalAmount.toString(),
+      entityId: bill.entityId,
+      projectId: bill.projectId || '__none__',
+      billDate: new Date(bill.billDate).toISOString().split('T')[0],
+      originalAmount: bill.originalAmount.toString(),
       paidAmount: bill.paidAmount.toString(),
       remark: bill.remark || '',
     });
@@ -178,11 +181,27 @@ export function LegacyBills() {
     setShowAddDialog(true);
   };
 
-  const formatCurrency = (amount: number) => {
+  const goToNewSale = () => {
+    navigate('/sales/new?isHistorical=true');
+  };
+
+  const formatCurrencyFn = (amount: number) => {
     return new Intl.NumberFormat('zh-CN', {
       style: 'currency',
       currency: 'CNY',
     }).format(amount);
+  };
+
+  const toggleEntity = (entityId: string) => {
+    if (expandedEntityId === entityId) {
+      setExpandedEntityId(null);
+    } else {
+      setExpandedEntityId(entityId);
+    }
+  };
+
+  const getProjectsByEntity = (entityId: string) => {
+    return projects.filter(p => p.entityId === entityId);
   };
 
   if (loading) {
@@ -198,96 +217,175 @@ export function LegacyBills() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">历史账单迁移</h2>
-          <p className="text-slate-500 mt-1">录入老客户的历史欠款账单</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={loadData}>刷新</Button>
-          <Button className="bg-orange-500 hover:bg-orange-600" onClick={() => setShowAddDialog(true)}>
-            + 添加历史账单
-          </Button>
+          <p className="text-slate-500 mt-1">老账目录入历史账单和简易销售单双模式，灵活录入</p>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap gap-4 items-center">
-            <Input
-              placeholder="搜索客户姓名或手机号..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-56"
-            />
-            <p className="text-sm text-slate-500 ml-auto">
-              提示：历史账单不关联具体销售单，仅记录客户累计欠款
-            </p>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {filteredContacts.length === 0 ? (
-            <div className="text-center py-8 text-slate-500">
-              暂无客户数据
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {filteredContacts.map((contact) => {
-                return (
-                  <div key={contact.id} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="font-medium text-lg">{contact.name}</div>
-                        <Badge variant="secondary">{contact.primaryPhone || '无电话'}</Badge>
-                        <Badge variant="outline">{contact.code}</Badge>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setFormData({ ...formData, contactId: contact.id });
-                          setShowAddDialog(true);
-                        }}
-                      >
-                        + 添加账单
-                      </Button>
-                    </div>
+      <Tabs defaultValue="simple" onValueChange={(v) => setActiveMode(v as 'simple' | 'order')}>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="simple">📝 极简历史账单</TabsTrigger>
+          <TabsTrigger value="order">🧾 简易销售单</TabsTrigger>
+        </TabsList>
 
-                    <LegacyBillList
-                      contactId={contact.id}
-                      onEdit={openEditDialog}
-                      onDelete={handleDeleteBill}
-                      formatCurrency={formatCurrency}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        <TabsContent value="simple" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap gap-4 items-center">
+                <Input
+                  placeholder="搜索挂靠主体..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-64"
+                />
+                <Button className="bg-orange-500 hover:bg-orange-600" onClick={() => setShowAddDialog(true)}>
+                  + 添加历史账单
+                </Button>
+                <p className="text-sm text-slate-500 ml-auto">
+                  提示：极简模式只记核心信息，适合记不清详情的老账
+                </p>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {filteredEntities.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">
+                  暂无挂靠主体数据
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {filteredEntities.map((entity) => {
+                    const entityProjects = getProjectsByEntity(entity.id);
+                    const isExpanded = expandedEntityId === entity.id;
+
+                    return (
+                      <div key={entity.id} className="border rounded-lg overflow-hidden">
+                        <div
+                          className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 cursor-pointer"
+                          onClick={() => toggleEntity(entity.id)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="text-lg">
+                              {isExpanded ? '▼' : '▶'}
+                            </div>
+                            <div className="font-medium text-lg">{entity.name}</div>
+                            <Badge variant="outline">{entity.entityType}</Badge>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFormData({
+                                  ...formData,
+                                  entityId: entity.id,
+                                });
+                                setShowAddDialog(true);
+                              }}
+                            >
+                              + 添加账单
+                            </Button>
+                          </div>
+                        </div>
+
+                        {isExpanded && (
+                          <div className="p-4 border-t">
+                            {entityProjects.length === 0 ? (
+                              <div className="text-slate-500 text-sm mb-4">
+                                暂无项目，直接查看历史账单
+                              </div>
+                            ) : (
+                              <div className="mb-6">
+                                <div className="text-sm font-medium text-slate-600 mb-2">
+                                  该挂靠主体的项目：
+                                </div>
+                                {entityProjects.map((project) => (
+                                  <div key={project.id} className="mb-6">
+                                    <div className="flex items-center justify-between bg-blue-50 p-3 rounded mb-2">
+                                      <div className="font-medium">{project.name}</div>
+                                      <Badge variant="outline">{project.status}</Badge>
+                                    </div>
+                                    <LegacyBillList
+                                      entityId={entity.id}
+                                      projectId={project.id}
+                                      onEdit={openEditDialog}
+                                      onDelete={handleDeleteBill}
+                                      formatCurrency={formatCurrencyFn}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            <div>
+                              <div className="text-sm font-medium text-slate-600 mb-2">
+                                未分类的历史账单：
+                              </div>
+                              <LegacyBillList
+                                entityId={entity.id}
+                                projectId={null}
+                                onEdit={openEditDialog}
+                                onDelete={handleDeleteBill}
+                                formatCurrency={formatCurrencyFn}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="order" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>简易销售单模式</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-center py-8">
+                <p className="text-slate-600 mb-4">
+                  记得商品详情的老账，用正常的「新增销售单」来录入
+                </p>
+                <p className="text-sm text-slate-400 mb-6">
+                  可以正常计算利润，所有功能都能用
+                </p>
+                <Button size="lg" onClick={goToNewSale}>
+                  去新增销售单 →
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={showAddDialog} onOpenChange={(open) => {
         if (!open) resetForm();
         setShowAddDialog(open);
       }}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingBill ? '编辑历史账单' : '添加历史账单'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
               <label className="text-sm font-medium mb-1 block">
-                客户 <span className="text-red-500">*</span>
+                挂靠主体 <span className="text-red-500">*</span>
               </label>
               <Select
-                value={formData.contactId}
-                onValueChange={(value) => setFormData({ ...formData, contactId: value })}
+                value={formData.entityId}
+                onValueChange={(v) => setFormData({ ...formData, entityId: v })}
+                disabled={!!editingBill}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="选择客户" />
+                  <SelectValue placeholder="选择挂靠主体" />
                 </SelectTrigger>
                 <SelectContent>
-                  {contacts.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name} - {c.primaryPhone || '无电话'}
+                  {entities.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.name} ({e.entityType})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -296,19 +394,34 @@ export function LegacyBills() {
 
             <div>
               <label className="text-sm font-medium mb-1 block">
-                项目名称
+                项目（可选）
               </label>
-              <Input
-                value={formData.projectName}
-                onChange={(e) => setFormData({ ...formData, projectName: e.target.value })}
-                placeholder="如：某小区水管改造（可选）"
-              />
+              <Select
+                value={formData.projectId}
+                onValueChange={(v) => setFormData({ ...formData, projectId: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择项目" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">无项目</SelectItem>
+                  {formData.entityId
+                    ? projects
+                        .filter(p => p.entityId === formData.entityId)
+                        .map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))
+                    : []}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1 block">
-                  账单日期
+                  账单日期 <span className="text-red-500">*</span>
                 </label>
                 <Input
                   type="date"
@@ -323,8 +436,8 @@ export function LegacyBills() {
                 <Input
                   type="number"
                   step="0.01"
-                  value={formData.totalAmount}
-                  onChange={(e) => setFormData({ ...formData, totalAmount: e.target.value })}
+                  value={formData.originalAmount}
+                  onChange={(e) => setFormData({ ...formData, originalAmount: e.target.value })}
                   placeholder="0.00"
                 />
               </div>
@@ -342,9 +455,7 @@ export function LegacyBills() {
                 placeholder="0.00"
               />
               <p className="text-xs text-slate-500 mt-1">
-                剩余未付：{formatCurrency(
-                  (parseFloat(formData.totalAmount) || 0) - (parseFloat(formData.paidAmount) || 0)
-                )}
+                剩余未付：{formatCurrencyFn((parseFloat(formData.originalAmount) || 0) - (parseFloat(formData.paidAmount) || 0))}
               </p>
             </div>
 
@@ -374,28 +485,35 @@ export function LegacyBills() {
 }
 
 function LegacyBillList({
-  contactId,
+  entityId,
+  projectId,
   onEdit,
   onDelete,
   formatCurrency,
 }: {
-  contactId: string;
-  onEdit: (bill: AccountReceivable) => void;
-  onDelete: (bill: AccountReceivable) => void;
+  entityId: string;
+  projectId: string | null;
+  onEdit: (bill: LegacyBillType) => void;
+  onDelete: (bill: LegacyBillType) => void;
   formatCurrency: (amount: number) => string;
 }) {
-  const [bills, setBills] = useState<AccountReceivable[]>([]);
+  const [bills, setBills] = useState<LegacyBillType[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadBills();
-  }, [contactId]);
+  }, [entityId]);
 
   const loadBills = async () => {
     try {
       setLoading(true);
-      const data = await LegacyBillService.getAccountReceivablesByContact(contactId);
-      setBills(data);
+      const data = await LegacyBillService.getLegacyBillsByEntity(entityId);
+
+      if (projectId === null) {
+        setBills(data.filter(b => !b.projectId));
+      } else {
+        setBills(data.filter(b => b.projectId === projectId));
+      }
     } catch (error) {
       console.error('[LegacyBillList] 加载失败:', error);
     } finally {
@@ -419,11 +537,11 @@ function LegacyBillList({
         <TableHeader>
           <TableRow>
             <TableHead>日期</TableHead>
-            <TableHead>项目</TableHead>
             <TableHead className="text-right">总金额</TableHead>
             <TableHead className="text-right">已付</TableHead>
             <TableHead className="text-right">未付</TableHead>
             <TableHead>状态</TableHead>
+            <TableHead>备注</TableHead>
             <TableHead>操作</TableHead>
           </TableRow>
         </TableHeader>
@@ -431,10 +549,7 @@ function LegacyBillList({
           {bills.map((bill) => (
             <TableRow key={bill.id}>
               <TableCell className="text-sm">
-                {new Date(bill.createdAt).toLocaleDateString()}
-              </TableCell>
-              <TableCell className="text-sm text-slate-500">
-                {bill.remark?.replace('历史账单迁：', '').replace('历史账单：', '') || '-'}
+                {new Date(bill.billDate).toLocaleDateString()}
               </TableCell>
               <TableCell className="text-right font-mono">
                 {formatCurrency(bill.originalAmount)}
@@ -452,6 +567,9 @@ function LegacyBillList({
                 >
                   {bill.status === 'settled' ? '已结清' : '未结清'}
                 </Badge>
+              </TableCell>
+              <TableCell className="text-sm text-slate-500">
+                {bill.remark || '-'}
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">
@@ -473,7 +591,7 @@ function LegacyBillList({
         </TableBody>
       </Table>
       <div className="mt-2 text-right text-sm">
-        <span className="text-slate-500">该客户历史账单累计未付：</span>
+        <span className="text-slate-500">本类账单累计未付：</span>
         <span className="font-bold text-orange-600 ml-2">{formatCurrency(totalRemaining)}</span>
       </div>
     </div>

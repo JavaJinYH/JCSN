@@ -19,12 +19,11 @@ import {
 } from '@/components/ui/dialog';
 import { PhotoThumbnail } from '@/components/PhotoThumbnail';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
-import { db } from '@/lib/db';
+import { SaleService } from '@/services/SaleService';
 import { toast } from '@/components/Toast';
 
 interface SaleDetailProps {
   saleId: string | null;
-  source: 'legacy' | 'new' | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
@@ -39,22 +38,15 @@ interface SaleData {
   discount: number;
   paidAmount: number;
   remark: string | null;
-  source: 'legacy' | 'new';
   items: any[];
   payments: any[];
   photos?: any[];
   receivables?: any[];
-  accountReceivables?: any[];
-  rebates?: any[];
   project?: { name: string };
   buyer?: { name: string; primaryPhone: string };
-  customer?: { name: string; primaryPhone: string; contactType: string };
   payer?: { name: string; primaryPhone: string };
-  payerCustomer?: { name: string; primaryPhone: string };
   introducer?: { name: string; primaryPhone: string };
-  introducerCustomer?: { name: string; phone: string };
   picker?: { name: string; primaryPhone: string };
-  pickerCustomer?: { name: string; phone: string };
   pickerName?: string | null;
   pickerPhone?: string | null;
   paymentEntity?: { name: string; entityType: string; contact?: { name: string } };
@@ -62,7 +54,6 @@ interface SaleData {
 
 export function SaleDetail({
   saleId,
-  source,
   open,
   onOpenChange,
   onSuccess,
@@ -77,62 +68,18 @@ export function SaleDetail({
   const [returnQuantity, setReturnQuantity] = useState('');
 
   useEffect(() => {
-    if (open && saleId && source) {
+    if (open && saleId) {
       loadSale();
     } else if (!open) {
       setSale(null);
     }
-  }, [open, saleId, source]);
+  }, [open, saleId]);
 
   const loadSale = async () => {
-    if (!saleId || !source) return;
+    if (!saleId) return;
     setLoading(true);
     try {
-      let saleData: any = null;
-
-      if (source === 'legacy') {
-        saleData = await db.sale.findUnique({
-          where: { id: saleId },
-          include: {
-            customer: true,
-            project: true,
-            payerCustomer: true,
-            introducerCustomer: true,
-            pickerCustomer: true,
-            items: { include: { product: true } },
-            payments: true,
-            photos: true,
-            rebates: { include: { plumber: true } },
-            accountReceivables: true,
-          },
-        });
-        saleData.source = 'legacy';
-      } else {
-        saleData = await db.saleOrder.findUnique({
-          where: { id: saleId },
-          include: {
-            buyer: true,
-            payer: true,
-            introducer: true,
-            picker: true,
-            project: true,
-            paymentEntity: true,
-            items: true,
-            payments: true,
-            receivables: true,
-          },
-        });
-        if (saleData?.items) {
-          const productIds = [...new Set(saleData.items.map((item: any) => item.productId))];
-          const products = await db.product.findMany({ where: { id: { in: productIds } } });
-          const productMap = new Map(products.map(p => [p.id, p]));
-          saleData.items = saleData.items.map((item: any) => ({
-            ...item,
-            product: productMap.get(item.productId),
-          }));
-        }
-        saleData.source = 'new';
-      }
+      const saleData = await SaleService.getSaleOrderById(saleId);
 
       if (saleData) {
         setSale(saleData);
@@ -167,32 +114,9 @@ export function SaleDetail({
     }
 
     try {
-      const returnAmount = qty * item.unitPrice;
-
-      await db.saleReturn.create({
-        data: {
-          saleOrderId: sale.id,
-          totalAmount: returnAmount,
-          items: {
-            create: {
-              productId: item.productId,
-              returnQuantity: qty,
-              unitPrice: item.unitPrice,
-              amount: returnAmount,
-            },
-          },
-        },
-      });
-
-      await db.product.update({
-        where: { id: item.productId },
-        data: { stock: { increment: qty } },
-      });
-
-      await db.receivable.update({
-        where: { orderId: sale.id },
-        data: { remainingAmount: { increment: returnAmount } },
-      });
+      await SaleService.createSaleReturn(sale.id, [
+        { productId: item.productId, quantity: qty, unitPrice: item.unitPrice }
+      ]);
 
       setReturnDialogOpen(false);
       onOpenChange(false);
@@ -234,59 +158,38 @@ export function SaleDetail({
           </div>
 
           <div className="border rounded-lg p-4">
-            <h3 className="font-bold text-slate-700 mb-3">
-              {sale.source === 'new' ? '四角色信息（联系人）' : '四角色信息（客户）'}
-            </h3>
+            <h3 className="font-bold text-slate-700 mb-3">四角色信息（联系人）</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-blue-50 p-3 rounded-lg">
                 <div className="text-sm text-slate-500 mb-1">购货人（业主）</div>
                 <div className="font-medium">
-                  {sale.source === 'new' ? sale.buyer?.name || '散客' : sale.customer?.name || '散客'}
+                  {sale.buyer?.name || '散客'}
                 </div>
                 <div className="text-xs text-slate-500">
-                  {sale.source === 'new' ? sale.buyer?.primaryPhone : sale.customer?.primaryPhone || '-'}
+                  {sale.buyer?.primaryPhone || '-'}
                 </div>
-                {sale.source === 'legacy' && (
-                  <div className="text-xs text-slate-500">
-                    {sale.customer?.contactType || '普通客户'}
-                  </div>
-                )}
               </div>
 
               <div className="bg-green-50 p-3 rounded-lg">
-                <div className="text-sm text-slate-500 mb-1">付款人</div>
-                {sale.source === 'new' ? (
-                  sale.payer ? (
-                    <>
-                      <div className="font-medium">{sale.payer.name}</div>
-                      <div className="text-xs text-slate-500">{sale.payer.primaryPhone}</div>
-                    </>
-                  ) : <div className="text-slate-400">无</div>
-                ) : sale.payerCustomer ? (
+                <div className="text-sm text-slate-500 mb-1">挂靠主体（付款人）</div>
+                {sale.paymentEntity ? (
                   <>
-                    <div className="font-medium">{sale.payerCustomer.name}</div>
-                    <div className="text-xs text-slate-500">{sale.payerCustomer.primaryPhone}</div>
+                    <div className="font-medium">{sale.paymentEntity.name}</div>
+                    {sale.paymentEntity.entityType && (
+                      <div className="text-xs text-slate-500">{sale.paymentEntity.entityType}</div>
+                    )}
                   </>
                 ) : (
-                  <div className="text-slate-400">同购货人</div>
+                  <div className="text-slate-400">无</div>
                 )}
               </div>
 
               <div className="bg-purple-50 p-3 rounded-lg">
                 <div className="text-sm text-slate-500 mb-1">介绍人（水电工）</div>
-                {sale.source === 'new' ? (
-                  sale.introducer ? (
-                    <>
-                      <div className="font-medium">{sale.introducer.name}</div>
-                      <div className="text-xs text-slate-500">{sale.introducer.primaryPhone}</div>
-                      <div className="text-xs text-purple-600">返点客户</div>
-                    </>
-                  ) : <div className="text-slate-400">无</div>
-                ) : sale.introducerCustomer ? (
+                {sale.introducer ? (
                   <>
-                    <div className="font-medium">{sale.introducerCustomer.name}</div>
-                    <div className="text-xs text-slate-500">{sale.introducerCustomer.phone}</div>
-                    <div className="text-xs text-purple-600">返点客户</div>
+                    <div className="font-medium">{sale.introducer.name}</div>
+                    <div className="text-xs text-slate-500">{sale.introducer.primaryPhone}</div>
                   </>
                 ) : (
                   <div className="text-slate-400">无</div>
@@ -295,36 +198,19 @@ export function SaleDetail({
 
               <div className="bg-orange-50 p-3 rounded-lg">
                 <div className="text-sm text-slate-500 mb-1">提货人</div>
-                {sale.source === 'new' ? (
-                  sale.picker ? (
-                    <>
-                      <div className="font-medium">{sale.picker.name}</div>
-                      <div className="text-xs text-slate-500">{sale.picker.primaryPhone}</div>
-                    </>
-                  ) : sale.pickerName ? (
-                    <>
-                      <div className="font-medium">{sale.pickerName}</div>
-                      <div className="text-xs text-slate-500">{sale.pickerPhone || '-'}</div>
-                    </>
-                  ) : <div className="text-slate-400">无</div>
-                ) : sale.pickerCustomer ? (
+                {sale.picker ? (
                   <>
-                    <div className="font-medium">{sale.pickerCustomer.name}</div>
-                    <div className="text-xs text-slate-500">{sale.pickerCustomer.phone}</div>
-                  </>
-                ) : sale.pickerName ? (
-                  <>
-                    <div className="font-medium">{sale.pickerName}</div>
-                    <div className="text-xs text-slate-500">{sale.pickerPhone || '-'}</div>
+                    <div className="font-medium">{sale.picker.name}</div>
+                    <div className="text-xs text-slate-500">{sale.picker.primaryPhone}</div>
                   </>
                 ) : (
-                  <div className="text-slate-400">同购货人</div>
+                  <div className="text-slate-400">无</div>
                 )}
               </div>
             </div>
           </div>
 
-          {sale.source === 'new' && sale.paymentEntity && (
+          {sale.paymentEntity && (
             <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
               <h3 className="font-bold text-indigo-700 mb-2">挂靠主体信息</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -362,11 +248,11 @@ export function SaleDetail({
             </div>
           </div>
 
-          {(sale.source === 'legacy' ? sale.accountReceivables : sale.receivables)?.length > 0 && (
+          {sale.receivables && sale.receivables.length > 0 && (
             <div className="bg-red-50 p-4 rounded-lg border border-red-200">
               <h3 className="font-bold text-red-700 mb-2">欠款状态</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {(sale.source === 'legacy' ? sale.accountReceivables : sale.receivables).map((ar: any) => (
+                {sale.receivables.map((ar: any) => (
                   <div key={ar.id}>
                     <div className="text-sm text-red-600">欠款金额</div>
                     <div className="text-lg font-bold text-red-700">{formatCurrency(ar.remainingAmount)}</div>
@@ -390,7 +276,7 @@ export function SaleDetail({
                   <TableHead className="text-right">单价</TableHead>
                   <TableHead className="text-right">数量</TableHead>
                   <TableHead className="text-right">小计</TableHead>
-                  {sale.source === 'new' && <TableHead>操作</TableHead>}
+                  <TableHead>操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -402,13 +288,11 @@ export function SaleDetail({
                     <TableCell className="text-right font-mono">{formatCurrency(item.unitPrice)}</TableCell>
                     <TableCell className="text-right">{item.quantity}</TableCell>
                     <TableCell className="text-right font-mono">{formatCurrency(item.subtotal)}</TableCell>
-                    {sale.source === 'new' && (
-                      <TableCell>
-                        <Button variant="outline" size="sm" onClick={() => handleOpenReturnDialog(index)}>
-                          退货
-                        </Button>
-                      </TableCell>
-                    )}
+                    <TableCell>
+                      <Button variant="outline" size="sm" onClick={() => handleOpenReturnDialog(index)}>
+                        退货
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -447,62 +331,10 @@ export function SaleDetail({
             </div>
           )}
 
-          {sale.source === 'legacy' && sale.photos?.length > 0 && (
-            <div>
-              <h3 className="font-bold text-slate-700 mb-2">单据照片 ({sale.photos.length})</h3>
-              <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
-                {sale.photos.map((photo: any, index: number) => (
-                  <PhotoThumbnail
-                    key={photo.id}
-                    photo={photo}
-                    onClick={() => { setPhotoViewerIndex(index); setPhotoViewerOpen(true); }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
           {sale.remark && (
             <div>
               <h3 className="font-bold text-slate-700 mb-2">备注</h3>
               <div className="bg-slate-50 p-3 rounded-lg text-slate-600">{sale.remark}</div>
-            </div>
-          )}
-
-          {sale.source === 'legacy' && sale.rebates?.length > 0 && (
-            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-              <h3 className="font-bold text-purple-700 mb-2">返点记录</h3>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>水电工</TableHead>
-                    <TableHead className="text-right">返点金额</TableHead>
-                    <TableHead className="text-right">返点方式</TableHead>
-                    <TableHead className="text-right">返点时间</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sale.rebates.map((rebate: any, index: number) => (
-                    <TableRow key={index}>
-                      <TableCell>
-                        <div className="font-medium">{rebate.plumber?.name || '未知'}</div>
-                        <div className="text-xs text-slate-500">{rebate.plumber?.primaryPhone || '-'}</div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-purple-600">
-                        {formatCurrency(rebate.rebateAmount)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant="outline">
-                          {rebate.rebateType === 'cash' ? '现金' : rebate.rebateType === 'transfer' ? '转账' : '抵扣'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right text-slate-500">
-                        {rebate.recordedAt ? formatDateTime(rebate.recordedAt) : '-'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
             </div>
           )}
         </>
