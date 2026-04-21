@@ -31,7 +31,7 @@ import {
 } from 'recharts';
 import { StatementService } from '@/services/StatementService';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import { getAgingLevel, calculateAgingDays } from '@/lib/customerUtils';
+import { getAgingLevel, calculateAgingDays } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import * as XLSX from 'xlsx';
 import dayjs from 'dayjs';

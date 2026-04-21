@@ -38,7 +38,7 @@ export class ContactAnalyticsService {
     const contact = await db.contact.findUnique({
       where: { id: contactId },
       include: {
-        entities: {
+        personalEntity: {
           include: {
             orders: {
               include: {
@@ -46,17 +46,18 @@ export class ContactAnalyticsService {
                 payments: true
               }
             },
-            entityPrices: true
+            entityPrices: true,
+            badDebtWriteOffs: true
           }
         }
       }
     });
 
-    if (!contact || !contact.entities.length) {
+    if (!contact || !contact.personalEntity) {
       return null;
     }
 
-    const entity = contact.entities[0];
+    const entity = contact.personalEntity;
     const orders = entity.orders;
 
     const totalSales = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
@@ -70,7 +71,7 @@ export class ContactAnalyticsService {
     const totalProfit = totalRevenue - totalCost;
 
     // 计算平均回款天数
-    const paidOrders = orders.filter(o => o.payStatus === 'paid' && o.payments?.[0]?.paidAt);
+    const paidOrders = orders.filter(o => o.payments?.length > 0 && o.payments[0].paidAt);
     let totalPaymentDays = 0;
     for (const order of paidOrders) {
       const paidAt = new Date(order.payments[0].paidAt);
@@ -79,14 +80,9 @@ export class ContactAnalyticsService {
     }
     const avgPaymentDays = paidOrders.length > 0 ? totalPaymentDays / paidOrders.length : 0;
 
-    // 坏账率
-    const badDebts = await db.badDebtWriteOff.count({
-      where: {
-        writeOffType: 'bad_debt',
-        receivable: { entityId: entity.id }
-      }
-    });
-    const badDebtRate = orderCount > 0 ? badDebts / orderCount : 0;
+    // 计算坏账率
+    const totalBadDebt = entity.badDebtWriteOffs.reduce((sum, bd) => sum + (bd.writtenOffAmount || 0), 0);
+    const badDebtRate = totalSales > 0 ? totalBadDebt / totalSales : 0;
 
     // 获取信用信息
     let creditScore, creditLevel, riskLevel;
@@ -131,9 +127,7 @@ export class ContactAnalyticsService {
       where: { introducerId: contactId },
       include: {
         items: true,
-        payments: true,
-        badDebtWriteOffs: true,
-        entity: true
+        payments: true
       }
     });
 
@@ -161,7 +155,7 @@ export class ContactAnalyticsService {
     const avgProfitMargin = totalRevenue > 0 ? (totalRevenue - totalCost) / totalRevenue : 0;
 
     // 计算平均回款天数
-    const paidOrders = introducedOrders.filter(o => o.payStatus === 'paid' && o.payments?.[0]?.paidAt);
+    const paidOrders = introducedOrders.filter(o => o.payments?.length > 0 && o.payments[0].paidAt);
     let totalPaymentDays = 0;
     for (const order of paidOrders) {
       const paidAt = new Date(order.payments[0].paidAt);
@@ -170,18 +164,15 @@ export class ContactAnalyticsService {
     }
     const avgPaymentDays = paidOrders.length > 0 ? totalPaymentDays / paidOrders.length : 0;
 
-    // 坏账率
-    const badDebtCount = introducedOrders.filter(o =>
-      (o.badDebtWriteOffs || []).some(b => b.writeOffType === 'bad_debt')
-    ).length;
-    const badDebtRate = introducedOrderCount > 0 ? badDebtCount / introducedOrderCount : 0;
+    // 坏账率：暂时设为 0，因为 SaleOrder 和 BadDebtWriteOff 没有直接关系
+    const badDebtRate = 0;
 
-    // 复购率：有多少个客户（挂靠主体）是重复下单的
-    const entityIds = new Set(introducedOrders.map(o => o.entityId));
-    const repeatEntities = Array.from(entityIds).filter(entityId => {
-      return introducedOrders.filter(o => o.entityId === entityId).length > 1;
+    // 复购率：有多少个客户（联系人）是重复下单的
+    const buyerIds = new Set(introducedOrders.map(o => o.buyerId).filter(id => id));
+    const repeatBuyers = Array.from(buyerIds).filter(buyerId => {
+      return introducedOrders.filter(o => o.buyerId === buyerId).length > 1;
     }).length;
-    const repeatRate = entityIds.size > 0 ? repeatEntities / entityIds.size : 0;
+    const repeatRate = buyerIds.size > 0 ? repeatBuyers / buyerIds.size : 0;
 
     // 计算推荐价值评分
     const valueScore = this.calculateIntroducerValueScore(

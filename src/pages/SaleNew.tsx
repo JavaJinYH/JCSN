@@ -50,6 +50,7 @@ export function SaleNew() {
   const [projects, setProjects] = useState<BizProject[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [historicalPrices, setHistoricalPrices] = useState<Map<string, number>>(new Map());
+  const [buyerHistoricalPrices, setBuyerHistoricalPrices] = useState<Map<string, number>>(new Map());
 
   const [selectedBuyer, setSelectedBuyer] = useState<string>('__none__');
   const [selectedEntity, setSelectedEntity] = useState<string>('');
@@ -202,7 +203,18 @@ export function SaleNew() {
     }
   };
 
+  const loadBuyerHistoricalPrices = async (buyerId: string) => {
+    try {
+      const priceMapObj = await ContactService.getBuyerPrices(buyerId);
+      const priceMap = new Map<string, number>(Object.entries(priceMapObj));
+      setBuyerHistoricalPrices(priceMap);
+    } catch (error) {
+      console.error('[SaleNew] 加载买家历史价格失败:', error);
+    }
+  };
+
   const [previousSelectedEntity, setPreviousSelectedEntity] = useState<string>('');
+  const [previousSelectedBuyer, setPreviousSelectedBuyer] = useState<string>('__none__');
 
   useEffect(() => {
     if (selectedEntity) {
@@ -218,10 +230,40 @@ export function SaleNew() {
     }
   }, [selectedEntity]);
 
+  // 监听联系人变化，加载联系人历史价格
+  useEffect(() => {
+    if (selectedBuyer && selectedBuyer !== '__none__') {
+      loadBuyerHistoricalPrices(selectedBuyer);
+      // 如果之前已经有商品，并且选择了新的联系人（不是第一次选/不是清空），提示是否更新购物车价格
+      if (cart.length > 0 && previousSelectedBuyer !== selectedBuyer && previousSelectedBuyer !== '__none__') {
+        setShowPriceUpdateDialog(true);
+      }
+      setPreviousSelectedBuyer(selectedBuyer);
+    } else {
+      setBuyerHistoricalPrices(new Map());
+      setPreviousSelectedBuyer('__none__');
+    }
+  }, [selectedBuyer]);
+
+  const getHistoricalPriceForProduct = (productId: string): number | undefined => {
+    // 优先：挂靠主体历史价格
+    const entityPrice = historicalPrices.get(productId);
+    if (entityPrice !== undefined) {
+      return entityPrice;
+    }
+    // 其次：联系人历史价格
+    const buyerPrice = buyerHistoricalPrices.get(productId);
+    if (buyerPrice !== undefined) {
+      return buyerPrice;
+    }
+    // 没有历史价格
+    return undefined;
+  };
+
   const handleUpdateCartPrices = () => {
-    // 更新购物车里所有商品的价格，用历史价格
+    // 更新购物车里所有商品的价格，优先用挂靠主体历史价格，其次用联系人
     const updatedCart = cart.map(item => {
-      const historicalPrice = historicalPrices.get(item.product.id);
+      const historicalPrice = getHistoricalPriceForProduct(item.product.id);
       if (historicalPrice !== undefined) {
         return { ...item, unitPrice: historicalPrice };
       }
@@ -246,7 +288,7 @@ export function SaleNew() {
         );
       }
     } else {
-      const historicalPrice = historicalPrices.get(product.id);
+      const historicalPrice = getHistoricalPriceForProduct(product.id);
       setCart([
         ...cart,
         {
@@ -555,7 +597,6 @@ export function SaleNew() {
 
           <SaleContactSelect
             contacts={contacts}
-            entities={entities.map(e => ({ id: e.id, name: e.name }))}
             selectedBuyer={selectedBuyer}
             selectedIntroducer={selectedIntroducer}
             pickerName={pickerName}

@@ -80,7 +80,9 @@ export const DashboardService = {
       where: { appointmentDate: { gte: start, lte: end } },
       include: {
         contact: true,
-        product: true,
+        project: true,
+        installerContact: true,
+        items: { include: { product: true, order: true } },
       },
     });
   },
@@ -127,7 +129,9 @@ export const DashboardService = {
       },
       include: {
         contact: true,
-        product: true,
+        project: true,
+        installerContact: true,
+        items: { include: { product: true, order: true } },
       },
       orderBy: { appointmentDate: 'asc' },
     });

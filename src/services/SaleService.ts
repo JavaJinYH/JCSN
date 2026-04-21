@@ -209,6 +209,28 @@ export const SaleService = {
           },
         });
       }
+
+      // 更新联系人的历史价格
+      if (buyerId) {
+        await db.customerPrice.upsert({
+          where: {
+            customerId_productId: {
+              customerId: buyerId,
+              productId: item.productId,
+            },
+          },
+          create: {
+            customerId: buyerId,
+            productId: item.productId,
+            lastPrice: item.unitPrice,
+            transactionCount: 1,
+          },
+          update: {
+            lastPrice: item.unitPrice,
+            transactionCount: { increment: 1 },
+          },
+        });
+      }
     }
 
     let savedPhotos: any[] = [];

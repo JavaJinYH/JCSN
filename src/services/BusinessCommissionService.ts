@@ -5,6 +5,7 @@ export const BusinessCommissionService = {
   async getCommissions() {
     return db.businessCommission.findMany({
       include: {
+        project: true,
         saleOrder: true,
         contact: true,
         supplier: true,
@@ -18,6 +19,7 @@ export const BusinessCommissionService = {
     return db.businessCommission.findMany({
       where: { recordedAt: { gte: start, lte: end } },
       include: {
+        project: true,
         saleOrder: true,
         contact: true,
         supplier: true,
@@ -27,12 +29,24 @@ export const BusinessCommissionService = {
     });
   },
 
-  async getSaleOrders() {
+  async getProjects() {
+    return db.bizProject.findMany({
+      include: { entity: true },
+      orderBy: { name: 'asc' },
+    });
+  },
+
+  async getSaleOrdersByProject(projectId: string) {
     return db.saleOrder.findMany({
-      include: {
-        buyer: true,
-        items: { include: { product: true } },
-      },
+      where: { projectId },
+      include: { buyer: true },
+      orderBy: { saleDate: 'desc' },
+    });
+  },
+
+  async getAllSaleOrders() {
+    return db.saleOrder.findMany({
+      include: { buyer: true },
       orderBy: { saleDate: 'desc' },
     });
   },
@@ -59,6 +73,7 @@ export const BusinessCommissionService = {
   async createCommission(data: {
     type: 'OUTGOING' | 'INCOMING';
     category: 'INTRODUCER' | 'SUPPLIER';
+    projectId?: string;
     saleOrderId?: string;
     contactId?: string;
     supplierId?: string;
@@ -71,6 +86,7 @@ export const BusinessCommissionService = {
       data: {
         type: data.type,
         category: data.category,
+        projectId: data.projectId,
         saleOrderId: data.saleOrderId,
         contactId: data.contactId,
         supplierId: data.supplierId,

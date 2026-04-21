@@ -1,5 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// 设置 Electron 环境标志
+contextBridge.exposeInMainWorld('__ELECTRON__', true);
+
 contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getAppPath: () => ipcRenderer.invoke('get-app-path'),
@@ -8,6 +11,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     restart: () => ipcRenderer.invoke('app-restart'),
     reload: () => ipcRenderer.invoke('app-reload'),
     close: () => ipcRenderer.invoke('app-close'),
+  },
+
+  window: {
+    setAlwaysOnTop: (flag) => ipcRenderer.invoke('window-setAlwaysOnTop', flag),
+    isAlwaysOnTop: () => ipcRenderer.invoke('window-isAlwaysOnTop'),
   },
 
   db: (model, operation, args) => ipcRenderer.invoke(`db-${model}-${operation}`, args),

@@ -10,7 +10,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { DataTablePagination, useDataTable } from '@/components/DataTable';
+import { Combobox } from '@/components/Combobox';
 import { BusinessCommissionService } from '@/services/BusinessCommissionService';
 import { formatCurrency } from '@/lib/utils';
 import { toast } from '@/components/Toast';
@@ -26,6 +34,7 @@ interface Commission {
   amount: number;
   recordedAt: string;
   remark?: string;
+  project?: { name: string; id: string };
   contact?: { name: string };
   supplier?: { name: string };
   product?: { name: string };
@@ -34,12 +43,14 @@ interface Commission {
 
 export function BusinessCommissions() {
   const [commissions, setCommissions] = useState<Commission[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [sales, setSales] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showSaleOrderSelectDialog, setShowSaleOrderSelectDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -47,10 +58,11 @@ export function BusinessCommissions() {
   const [formData, setFormData] = useState({
     type: 'OUTGOING' as CommissionType,
     category: 'INTRODUCER' as CommissionCategory,
-    saleOrderId: '',
-    contactId: '',
-    supplierId: '',
-    productId: '',
+    projectId: '__none__' as string,
+    saleOrderId: '__none__' as string,
+    contactId: '__none__' as string,
+    supplierId: '__none__' as string,
+    productId: '__none__' as string,
     amount: '',
     remark: '',
   });
@@ -61,7 +73,7 @@ export function BusinessCommissions() {
 
   useEffect(() => {
     if (showAddDialog) {
-      loadSales();
+      loadProjects();
       loadContacts();
       loadSuppliers();
       loadProducts();
@@ -80,9 +92,23 @@ export function BusinessCommissions() {
     }
   };
 
-  const loadSales = async () => {
+  const loadProjects = async () => {
     try {
-      const data = await BusinessCommissionService.getSaleOrders();
+      const data = await BusinessCommissionService.getProjects();
+      setProjects(data);
+    } catch (error) {
+      console.error('Failed to load projects:', error);
+    }
+  };
+
+  const loadSalesByProject = async (projectId: string) => {
+    try {
+      let data;
+      if (projectId && projectId !== '__none__') {
+        data = await BusinessCommissionService.getSaleOrdersByProject(projectId);
+      } else {
+        data = await BusinessCommissionService.getAllSaleOrders();
+      }
       setSales(data);
     } catch (error) {
       console.error('Failed to load sales:', error);
@@ -116,6 +142,16 @@ export function BusinessCommissions() {
     }
   };
 
+  const handleOpenSaleOrderSelect = async () => {
+    await loadSalesByProject(formData.projectId);
+    setShowSaleOrderSelectDialog(true);
+  };
+
+  const handleSelectSaleOrder = (saleOrderId: string) => {
+    setFormData({ ...formData, saleOrderId });
+    setShowSaleOrderSelectDialog(false);
+  };
+
   const handleAddCommission = async () => {
     if (!formData.amount || parseFloat(formData.amount) <= 0) {
       toast('请输入金额', 'warning');
@@ -127,10 +163,12 @@ export function BusinessCommissions() {
       const supplierId = formData.supplierId === '__none__' ? undefined : formData.supplierId;
       const productId = formData.productId === '__none__' ? undefined : formData.productId;
       const saleOrderId = formData.saleOrderId === '__none__' ? undefined : formData.saleOrderId;
+      const projectId = formData.projectId === '__none__' ? undefined : formData.projectId;
 
       await BusinessCommissionService.createCommission({
         type: formData.type,
         category: formData.category,
+        projectId,
         saleOrderId,
         contactId,
         supplierId,
@@ -143,10 +181,11 @@ export function BusinessCommissions() {
       setFormData({
         type: 'OUTGOING',
         category: 'INTRODUCER',
-        saleOrderId: '',
-        contactId: '',
-        supplierId: '',
-        productId: '',
+        projectId: '__none__',
+        saleOrderId: '__none__',
+        contactId: '__none__',
+        supplierId: '__none__',
+        productId: '__none__',
         amount: '',
         remark: '',
       });
@@ -173,6 +212,7 @@ export function BusinessCommissions() {
   const filteredCommissions = commissions.filter((c) => {
     const matchesSearch =
       !searchTerm ||
+      c.project?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.contact?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.supplier?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.product?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -199,6 +239,26 @@ export function BusinessCommissions() {
     INTRODUCER: '介绍人',
     SUPPLIER: '供应商',
   };
+
+  const projectOptions = projects.map((p) => ({
+    value: p.id,
+    label: `${p.name} (${p.entity?.name || '未关联主体'})`,
+  }));
+
+  const contactOptions = contacts.map((c) => ({
+    value: c.id,
+    label: `${c.name} (${c.code || '-'})`,
+  }));
+
+  const supplierOptions = suppliers.map((s) => ({
+    value: s.id,
+    label: s.name,
+  }));
+
+  const productOptions = products.map((p) => ({
+    value: p.id,
+    label: p.name,
+  }));
 
   return (
     <div className="space-y-6">
@@ -241,12 +301,12 @@ export function BusinessCommissions() {
         </Card>
       </div>
 
-      {showAddDialog && (
-        <Card className="border-blue-200 bg-blue-50">
-          <CardHeader>
-            <CardTitle>添加返点记录</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>添加返点记录</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
             <Tabs defaultValue="introducer" onValueChange={(value) => {
               const type = value === 'introducer' ? 'OUTGOING' : 'INCOMING';
               const category = value === 'introducer' ? 'INTRODUCER' : 'SUPPLIER';
@@ -254,9 +314,11 @@ export function BusinessCommissions() {
                 ...formData,
                 type,
                 category,
-                contactId: '',
-                supplierId: '',
-                productId: '',
+                projectId: '__none__',
+                saleOrderId: '__none__',
+                contactId: '__none__',
+                supplierId: '__none__',
+                productId: '__none__',
               });
             }}>
               <TabsList>
@@ -267,84 +329,78 @@ export function BusinessCommissions() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">关联项目（可选）</label>
+                <Combobox
+                  value={formData.projectId}
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, projectId: value, saleOrderId: '__none__' });
+                  }}
+                  options={projectOptions}
+                  placeholder="搜索并选择项目"
+                  emptyText="未找到项目"
+                  allowCustom={false}
+                />
+              </div>
+
+              <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">关联销售单（可选）</label>
-                <Select
-                  value={formData.saleOrderId}
-                  onValueChange={(value) => setFormData({ ...formData, saleOrderId: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="选择销售单" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">无</SelectItem>
-                    {sales.map((sale) => (
-                      <SelectItem key={sale.id} value={sale.id}>
-                        {sale.invoiceNo || sale.id.slice(0, 8)} - {sale.buyer?.name || sale.buyerId || '散客'}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Input
+                    value={(() => {
+                      if (formData.saleOrderId === '__none__') return '';
+                      const sale = sales.find((s) => s.id === formData.saleOrderId);
+                      if (sale) return sale.invoiceNo || sale.id.slice(0, 8);
+                      return '已选择';
+                    })()}
+                    placeholder="未选择"
+                    readOnly
+                    onClick={handleOpenSaleOrderSelect}
+                    className="cursor-pointer"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => setFormData({ ...formData, saleOrderId: '__none__' })}
+                  >
+                    清除
+                  </Button>
+                </div>
               </div>
 
               {formData.category === 'INTRODUCER' ? (
                 <div>
                   <label className="text-sm font-medium text-slate-700 mb-1 block">介绍人（可选）</label>
-                  <Select
+                  <Combobox
                     value={formData.contactId}
                     onValueChange={(value) => setFormData({ ...formData, contactId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="选择介绍人" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">无</SelectItem>
-                      {contacts.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name} ({c.code})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={contactOptions}
+                    placeholder="搜索并选择介绍人"
+                    emptyText="未找到介绍人"
+                    allowCustom={false}
+                  />
                 </div>
               ) : (
                 <>
                   <div>
                     <label className="text-sm font-medium text-slate-700 mb-1 block">供应商</label>
-                    <Select
+                    <Combobox
                       value={formData.supplierId}
                       onValueChange={(value) => setFormData({ ...formData, supplierId: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="选择供应商" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">无</SelectItem>
-                        {suppliers.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={supplierOptions}
+                      placeholder="搜索并选择供应商"
+                      emptyText="未找到供应商"
+                      allowCustom={false}
+                    />
                   </div>
                   <div>
                     <label className="text-sm font-medium text-slate-700 mb-1 block">关联商品（可选）</label>
-                    <Select
+                    <Combobox
                       value={formData.productId}
                       onValueChange={(value) => setFormData({ ...formData, productId: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="选择商品" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">无</SelectItem>
-                        {products.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={productOptions}
+                      placeholder="搜索并选择商品"
+                      emptyText="未找到商品"
+                      allowCustom={false}
+                    />
                   </div>
                 </>
               )}
@@ -368,23 +424,60 @@ export function BusinessCommissions() {
                 />
               </div>
             </div>
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setShowAddDialog(false)}>
-                取消
-              </Button>
-              <Button onClick={handleAddCommission} className="bg-blue-500 hover:bg-blue-600">
-                保存
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+              取消
+            </Button>
+            <Button onClick={handleAddCommission} className="bg-blue-500 hover:bg-blue-600">
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showSaleOrderSelectDialog} onOpenChange={setShowSaleOrderSelectDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>选择销售单</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            {sales.length === 0 ? (
+              <div className="text-center text-slate-500 py-8">
+                {formData.projectId === '__none__' ? '暂无销售单' : '该项目暂无销售单'}
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {sales.map((sale) => (
+                  <div
+                    key={sale.id}
+                    className={`p-3 rounded-lg border cursor-pointer hover:bg-slate-50 ${formData.saleOrderId === sale.id ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}`}
+                    onClick={() => handleSelectSaleOrder(sale.id)}
+                  >
+                    <div className="font-medium text-slate-800">
+                      {sale.invoiceNo || sale.id.slice(0, 8)}
+                    </div>
+                    <div className="text-sm text-slate-500">
+                      {sale.buyer?.name || '散客'} - {new Date(sale.saleDate).toLocaleDateString('zh-CN')} - {formatCurrency(sale.totalAmount)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSaleOrderSelectDialog(false)}>
+              取消
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3 flex-wrap">
             <Input
-              placeholder="搜索介绍人、供应商、商品..."
+              placeholder="搜索项目、介绍人、供应商、商品..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-48 h-8"
@@ -449,6 +542,7 @@ export function BusinessCommissions() {
                     </div>
                     <div className="text-sm text-slate-500 mt-1">
                       {new Date(commission.recordedAt).toLocaleDateString('zh-CN')}
+                      {commission.project && ` - 项目: ${commission.project.name}`}
                       {commission.contact && ` - 介绍人: ${commission.contact.name}`}
                       {commission.supplier && ` - 供应商: ${commission.supplier.name}`}
                       {commission.product && ` - 商品: ${commission.product.name}`}

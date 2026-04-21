@@ -111,7 +111,7 @@ export const ReportService = {
     return db.badDebtWriteOff.findMany({
       where: { createdAt: { gte: start, lte: end } },
       include: {
-        contact: true,
+        entity: true,
         saleOrder: { include: { buyer: true, paymentEntity: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -123,26 +123,26 @@ export const ReportService = {
     
     let totalWriteOffs = 0;
     let totalWriteOffAmount = 0;
-    let contactWriteOffs = new Map();
+    let entityWriteOffs = new Map();
     
     for (const writeOff of writeOffs) {
       totalWriteOffs++;
       totalWriteOffAmount += writeOff.writtenOffAmount;
       
-      const contactId = writeOff.contactId;
-      if (!contactWriteOffs.has(contactId)) {
-        contactWriteOffs.set(contactId, {
-          contact: writeOff.contact,
+      const entityId = writeOff.entityId;
+      if (!entityWriteOffs.has(entityId)) {
+        entityWriteOffs.set(entityId, {
+          entity: writeOff.entity,
           count: 0,
           amount: 0,
         });
       }
-      const data = contactWriteOffs.get(contactId);
+      const data = entityWriteOffs.get(entityId);
       data.count++;
       data.amount += writeOff.writtenOffAmount;
     }
     
-    const topContacts = Array.from(contactWriteOffs.entries())
+    const topEntities = Array.from(entityWriteOffs.entries())
       .map(([_, data]) => data)
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 10);
@@ -161,7 +161,7 @@ export const ReportService = {
     return {
       totalWriteOffs,
       totalWriteOffAmount,
-      topContacts,
+      topEntities,
       dailyWriteOffs: Array.from(dailyWriteOffs.entries()).map(([date, data]) => ({
         date,
         ...data

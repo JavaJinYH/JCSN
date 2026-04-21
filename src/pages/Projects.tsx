@@ -27,9 +27,9 @@ import {
 } from '@/components/ui/dialog';
 import { DataTableFilters, DataTablePagination, useDataTable } from '@/components/DataTable';
 import { ProjectService } from '@/services/ProjectService';
+import { SaleDetail } from '@/components/sale-list/SaleDetail';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { toast } from '@/components/Toast';
-import { useNavigate } from 'react-router-dom';
 import type { Entity, BizProject, SaleOrder } from '@/lib/types';
 
 type BizProjectWithRelations = BizProject & {
@@ -50,7 +50,6 @@ const filters = [
 ];
 
 export function Projects() {
-  const navigate = useNavigate();
   const [projects, setProjects] = useState<BizProjectWithRelations[]>([]);
   const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +60,8 @@ export function Projects() {
   const [projectStats, setProjectStats] = useState<Record<string, { total: number; paid: number; count: number }>>({});
   const [viewLoading, setViewLoading] = useState(false);
   const [filterValues, setFilterValues] = useState<Record<string, any>>({});
+  const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
+  const [showSaleDetail, setShowSaleDetail] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -179,7 +180,14 @@ export function Projects() {
 
   const handleViewOrder = (orderId: string) => {
     setShowDetailDialog(false);
-    navigate(`/sales?orderId=${orderId}`);
+    setSelectedSaleId(orderId);
+    setShowSaleDetail(true);
+  };
+
+  const handleSaleDetailSuccess = () => {
+    setShowSaleDetail(false);
+    // 重新加载项目数据以更新统计
+    loadData();
   };
 
   const handleAddProject = async () => {
@@ -639,6 +647,21 @@ export function Projects() {
           </div>
         </div>
       )}
+
+      {/* 销售订单详情对话框 */}
+      <Dialog open={showSaleDetail} onOpenChange={setShowSaleDetail}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>销售订单详情</DialogTitle>
+          </DialogHeader>
+          <SaleDetail
+            saleId={selectedSaleId}
+            open={showSaleDetail}
+            onOpenChange={setShowSaleDetail}
+            onSuccess={handleSaleDetailSuccess}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

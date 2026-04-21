@@ -43,7 +43,7 @@ model Product {
   returnItems        SaleReturnItem[]
   purchaseReturns    PurchaseReturnItem[]
   businessCommissions BusinessCommission[]
-  serviceAppointments ServiceAppointment[]
+  serviceAppointmentItems ServiceAppointmentItem[]
   createdAt          DateTime                  @default(now())
   updatedAt          DateTime                  @updatedAt
 
@@ -87,6 +87,18 @@ model EntityPrice {
   updatedAt     DateTime @updatedAt
 
   @@unique([entityId, productId])
+}
+
+model ContactPrice {
+  id            String   @id @default(cuid())
+  contactId     String
+  contact       Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  productId     String
+  lastPrice     Float
+  transactionCount Int   @default(1)
+  updatedAt     DateTime @updatedAt
+
+  @@unique([contactId, productId])
 }
 
 model PurchaseOrder {
@@ -175,7 +187,7 @@ model PurchaseReturnItem {
   createdAt        DateTime @default(now())
 }
 
-model CustomerCategory {
+model ContactCategory {
   id          String     @id @default(cuid())
   name        String
   description String?
@@ -206,6 +218,8 @@ model BusinessCommission {
   category      String    @default("INTRODUCER")
   
   // 关联
+  projectId     String?
+  project       BizProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   saleOrderId   String?
   saleOrder     SaleOrder? @relation(fields: [saleOrderId], references: [id], onDelete: Cascade)
   contactId     String?
@@ -239,16 +253,43 @@ model ServiceAppointment {
   id             String   @id @default(cuid())
   contactId      String?
   contact        Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  productId      String?
-  product        Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  projectId      String?
+  project        BizProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   appointmentDate DateTime
   serviceType    String   // 水暖安装、维修等
-  installer      String?  // 安装人员：爸、妈、水电工等
+  
+  // 安装人员
+  installerType  String?  // 无、店主、水电工、第三方
+  installerContactId String? // 如果是水电工，关联到联系人
+  installerContact Contact? @relation("InstallerContact", fields: [installerContactId], references: [id], onDelete: SetNull)
+  
   status         String   // 待上门、已上门、待返工、已完成
   notes          String?
   installationFee Float  // 安装费（如果有）
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  
+  // 关联的订单商品
+  items          ServiceAppointmentItem[]
+}
+
+model ServiceAppointmentItem {
+  id             String   @id @default(cuid())
+  appointmentId  String
+  appointment    ServiceAppointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  
+  // 关联的订单和商品
+  orderId        String?
+  order          SaleOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderItemId    String?
+  orderItem      OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  productId      String
+  product        Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  quantity       Int // 安装数量
+  remark         String?
+  
+  createdAt      DateTime @default(now())
 }
 
 model DeliveryFee {
@@ -290,8 +331,8 @@ model DeliveryRecord {
 
 model PaymentPlan {
   id           String    @id @default(cuid())
-  customerId   String
-  customer     Contact   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  contactId   String
+  contact     Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
   projectId    String?
   planAmount   Float
   actualAmount Float     @default(0)
@@ -339,8 +380,8 @@ model PurchasePhoto {
 
 model CreditRecord {
   id            String    @id @default(cuid())
-  customerId    String
-  customer      Contact   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  contactId     String
+  contact       Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
   recordType    String
   creditLimit   Float
   creditUsed    Float
@@ -415,8 +456,8 @@ model Contact {
   riskLevel            String   @default("low")
   blacklist            Boolean  @default(false)
   blacklistReason      String?
-  customerCategoryId   String?
-  customerCategory     CustomerCategory? @relation(fields: [customerCategoryId], references: [id], onDelete: SetNull)
+  contactCategoryId   String?
+  contactCategory     ContactCategory? @relation(fields: [contactCategoryId], references: [id], onDelete: SetNull)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
@@ -428,16 +469,17 @@ model Contact {
   ordersAsPicker       SaleOrder[]  @relation("PickerContact")
   personalEntity       Entity?
   supplierContacts     Supplier[]
-  badDebtWriteOffs     BadDebtWriteOff[]
   paymentPlans         PaymentPlan[]
   collectionRecords    CollectionRecord[]
   creditRecords        CreditRecord[]
+  contactPrices        ContactPrice[]
   slipAsCustomer       SaleSlip[]
   slipAsBuyer          SaleSlip[]  @relation("SaleSlipBuyer")
   slipAsIntroducer     SaleSlip[]  @relation("SaleSlipIntroducer")
   slipAsPicker         SaleSlip[]  @relation("SaleSlipPicker")
   businessCommissions  BusinessCommission[] @relation("CommissionContact")
   serviceAppointments  ServiceAppointment[]
+  installerAppointments ServiceAppointment[] @relation("InstallerContact")
 }
 
 model ContactPhone {
@@ -492,6 +534,7 @@ model Entity {
   orders  SaleOrder[]
   legacyBills LegacyBill[]
   entityPrices EntityPrice[]
+  badDebtWriteOffs BadDebtWriteOff[]
 }
 
 model BizProject {
@@ -511,6 +554,8 @@ model BizProject {
   roles   ContactProjectRole[]
   orders  SaleOrder[]
   legacyBills LegacyBill[]
+  serviceAppointments ServiceAppointment[]
+  businessCommissions BusinessCommission[]
 }
 
 model ContactEntityRole {
@@ -587,6 +632,7 @@ model SaleOrder {
   returns          SaleReturn[]
   badDebtWriteOffs BadDebtWriteOff[]
   deliveryRecords  DeliveryRecord[]
+  serviceAppointmentItems ServiceAppointmentItem[]
 }
 
 model SaleReturn {
@@ -661,8 +707,8 @@ model SaleSlipItem {
 
 model BadDebtWriteOff {
   id              String   @id @default(cuid())
-  contactId       String
-  contact         Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  entityId        String
+  entity          Entity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
   saleOrderId     String?
   saleOrder       SaleOrder? @relation(fields: [saleOrderId], references: [id], onDelete: SetNull)
   originalAmount  Float
@@ -691,6 +737,7 @@ model OrderItem {
   sellingPriceSnapshot Float
   subtotal             Float
   createdAt            DateTime @default(now())
+  serviceAppointmentItems ServiceAppointmentItem[]
 }
 
 model OrderPayment {

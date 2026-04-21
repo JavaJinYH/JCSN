@@ -9,6 +9,11 @@ declare global {
       app: {
         restart: () => Promise<void>;
         reload: () => Promise<void>;
+        close: () => Promise<void>;
+      };
+      window: {
+        setAlwaysOnTop: (flag: boolean) => Promise<{ success: boolean; isAlwaysOnTop?: boolean; error?: string }>;
+        isAlwaysOnTop: () => Promise<{ success: boolean; isAlwaysOnTop?: boolean; error?: string }>;
       };
       db: {
         findMany: (model: string, args?: any) => Promise<any>;

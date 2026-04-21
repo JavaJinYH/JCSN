@@ -58,9 +58,9 @@ export interface ProductSpec {
   brand?: Brand;
 }
 
-export interface CustomerPrice {
+export interface ContactPrice {
   id: string;
-  customerId: string;
+  contactId: string;
   productId: string;
   lastPrice: number;
   transactionCount: number;
@@ -128,8 +128,8 @@ export interface Purchase {
 
 export interface CreditRecord {
   id: string;
-  customerId: string;
-  customer?: Contact;
+  contactId: string;
+  contact?: Contact;
   recordType: string;
   creditLimit: number;
   creditUsed: number;
@@ -140,7 +140,7 @@ export interface CreditRecord {
   createdAt: Date;
 }
 
-export interface CustomerCategory {
+export interface ContactCategory {
   id: string;
   name: string;
   description: string | null;
@@ -331,8 +331,8 @@ export interface SettlementAdjustment {
 
 export interface PaymentPlan {
   id: string;
-  customerId: string;
-  customer?: Contact;
+  contactId: string;
+  contact?: Contact;
   projectId: string | null;
   planAmount: number;
   actualAmount: number;
@@ -499,8 +499,8 @@ export interface Contact {
   riskLevel: string;
   blacklist: boolean;
   blacklistReason: string | null;
-  customerCategoryId: string | null;
-  customerCategory?: CustomerCategory | null;
+  contactCategoryId: string | null;
+  contactCategory?: ContactCategory | null;
   createdAt: Date;
   updatedAt: Date;
   phonesObj?: ContactPhone[];
@@ -540,6 +540,7 @@ export interface Entity {
   projects?: BizProject[];
   orders?: SaleOrder[];
   legacyBills?: LegacyBill[];
+  badDebtWriteOffs?: BadDebtWriteOff[];
 }
 
 export interface BizProject {
@@ -691,8 +692,8 @@ export interface SaleReturnItem {
 
 export interface BadDebtWriteOff {
   id: string;
-  contactId: string;
-  contact?: Contact;
+  entityId: string;
+  entity?: Entity;
   saleOrderId: string | null;
   saleOrder?: SaleOrder | null;
   originalAmount: number;
@@ -701,7 +702,7 @@ export interface BadDebtWriteOff {
   reason: string | null;
   operatorNote: string | null;
   createdAt: Date;
-  createdBy: string | null;
+  updatedAt: Date;
 }
 
 export interface LegacyBill {

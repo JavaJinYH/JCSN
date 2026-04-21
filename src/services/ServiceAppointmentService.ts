@@ -6,7 +6,14 @@ export const ServiceAppointmentService = {
     return db.serviceAppointment.findMany({
       include: {
         contact: true,
-        product: true,
+        project: true,
+        installerContact: true,
+        items: {
+          include: {
+            product: true,
+            order: true,
+          },
+        },
       },
       orderBy: { appointmentDate: 'desc' },
     });
@@ -22,7 +29,14 @@ export const ServiceAppointmentService = {
       },
       include: {
         contact: true,
-        product: true,
+        project: true,
+        installerContact: true,
+        items: {
+          include: {
+            product: true,
+            order: true,
+          },
+        },
       },
       orderBy: { appointmentDate: 'desc' },
     });
@@ -30,24 +44,45 @@ export const ServiceAppointmentService = {
 
   async createAppointment(data: {
     contactId?: string;
-    productId?: string;
+    projectId?: string;
     appointmentDate: Date;
     serviceType: string;
-    installer?: string;
+    installerType?: string;
+    installerContactId?: string;
     status?: string;
     notes?: string;
     installationFee?: number;
+    items?: Array<{
+      orderId?: string;
+      orderItemId?: string;
+      productId: string;
+      quantity: number;
+      remark?: string;
+    }>;
   }) {
     const result = await db.serviceAppointment.create({
       data: {
         contactId: data.contactId,
-        productId: data.productId,
+        projectId: data.projectId,
         appointmentDate: data.appointmentDate,
         serviceType: data.serviceType,
-        installer: data.installer,
+        installerType: data.installerType,
+        installerContactId: data.installerContactId,
         status: data.status || '待上门',
         notes: data.notes,
         installationFee: data.installationFee || 0,
+        items: data.items ? {
+          create: data.items.map(item => ({
+            orderId: item.orderId,
+            orderItemId: item.orderItemId,
+            productId: item.productId,
+            quantity: item.quantity,
+            remark: item.remark,
+          })),
+        } : undefined,
+      },
+      include: {
+        items: true,
       },
     });
 
@@ -55,7 +90,7 @@ export const ServiceAppointmentService = {
       actionType: 'CREATE',
       entityType: 'ServiceAppointment',
       entityId: result.id,
-      newValue: `${data.serviceType}${data.installer ? ` - ${data.installer}` : ''}`,
+      newValue: `${data.serviceType}${data.installerType ? ` - ${data.installerType}` : ''}`,
     });
 
     return result;
@@ -65,19 +100,57 @@ export const ServiceAppointmentService = {
     id: string,
     data: {
       contactId?: string;
-      productId?: string;
+      projectId?: string;
       appointmentDate?: Date;
       serviceType?: string;
-      installer?: string;
+      installerType?: string;
+      installerContactId?: string;
       status?: string;
       notes?: string;
       installationFee?: number;
+      items?: Array<{
+        orderId?: string;
+        orderItemId?: string;
+        productId: string;
+        quantity: number;
+        remark?: string;
+      }>;
     }
   ) {
     const old = await db.serviceAppointment.findUnique({ where: { id } });
+    
+    // 如果有items，先删除旧的再创建新的
+    const updateData: any = {
+      contactId: data.contactId,
+      projectId: data.projectId,
+      appointmentDate: data.appointmentDate,
+      serviceType: data.serviceType,
+      installerType: data.installerType,
+      installerContactId: data.installerContactId,
+      status: data.status,
+      notes: data.notes,
+      installationFee: data.installationFee,
+    };
+
+    if (data.items) {
+      updateData.items = {
+        deleteMany: {},
+        create: data.items.map(item => ({
+          orderId: item.orderId,
+          orderItemId: item.orderItemId,
+          productId: item.productId,
+          quantity: item.quantity,
+          remark: item.remark,
+        })),
+      };
+    }
+
     const result = await db.serviceAppointment.update({
       where: { id },
-      data,
+      data: updateData,
+      include: {
+        items: true,
+      },
     });
 
     await AuditLogService.createAuditLog({
@@ -103,5 +176,22 @@ export const ServiceAppointmentService = {
     });
 
     return { success: true };
+  },
+
+  // 获取项目的订单和商品
+  async getProjectOrdersWithItems(projectId: string) {
+    return db.saleOrder.findMany({
+      where: {
+        projectId: projectId,
+      },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+      },
+      orderBy: { saleDate: 'desc' },
+    });
   },
 };

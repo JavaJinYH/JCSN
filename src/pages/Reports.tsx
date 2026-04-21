@@ -379,7 +379,7 @@ export function Reports() {
       case 'baddebt':
         dataToExport = badDebtWriteOffs.map(w => ({
           日期: dayjs(w.createdAt).format('YYYY-MM-DD'),
-          客户: w.contact?.name || '-',
+          主体: w.entity?.name || '-',
           核销金额: w.writtenOffAmount,
           原因: w.reason || '-'
         }));
@@ -792,27 +792,27 @@ export function Reports() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>坏账客户 TOP10</CardTitle>
+              <CardTitle>坏账主体 TOP10</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>排名</TableHead>
-                    <TableHead>客户名称</TableHead>
+                    <TableHead>主体名称</TableHead>
                     <TableHead className="text-right">坏账单数</TableHead>
                     <TableHead className="text-right">坏账金额</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {badDebtStats?.topContacts?.map((item: any, index: number) => (
+                  {badDebtStats?.topEntities?.map((item: any, index: number) => (
                     <TableRow key={index}>
                       <TableCell>
                         <Badge variant={index < 3 ? 'default' : 'secondary'}>
                           {index + 1}
                         </Badge>
                       </TableCell>
-                      <TableCell className="font-medium">{item.contact?.name}</TableCell>
+                      <TableCell className="font-medium">{item.entity?.name}</TableCell>
                       <TableCell className="text-right">{item.count}</TableCell>
                       <TableCell className="text-right font-mono text-orange-600">
                         {formatCurrency(item.amount)}

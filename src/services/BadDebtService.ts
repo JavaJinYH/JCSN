@@ -4,7 +4,7 @@ import { ReceivableService } from './ReceivableService';
 export const BadDebtService = {
   async getAll(includeRelated = true) {
     const include = includeRelated ? {
-      contact: true,
+      entity: true,
       saleOrder: {
         include: { buyer: true, paymentEntity: true }
       },
@@ -18,7 +18,7 @@ export const BadDebtService = {
 
   async getByType(writeOffType: string, includeRelated = true) {
     const include = includeRelated ? {
-      contact: true,
+      entity: true,
       saleOrder: {
         include: { buyer: true, paymentEntity: true }
       },
@@ -33,7 +33,7 @@ export const BadDebtService = {
 
   async getPending(includeRelated = true) {
     const include = includeRelated ? {
-      contact: true,
+      entity: true,
       saleOrder: {
         include: { buyer: true, paymentEntity: true }
       },
@@ -48,7 +48,7 @@ export const BadDebtService = {
 
   async createNegotiatedSettlement(data: {
     saleOrderId: string;
-    contactId: string;
+    entityId: string;
     writtenOffAmount: number;
     reason: string;
     operatorNote?: string;
@@ -75,7 +75,7 @@ export const BadDebtService = {
 
     const writeOff = await db.badDebtWriteOff.create({
       data: {
-        contactId: data.contactId,
+        entityId: data.entityId,
         saleOrderId: data.saleOrderId,
         originalAmount,
         writtenOffAmount: data.writtenOffAmount,
@@ -88,7 +88,7 @@ export const BadDebtService = {
         approvedBy: data.createdBy,
         approvedAt: new Date(),
       },
-      include: { contact: true, saleOrder: true },
+      include: { entity: true, saleOrder: true },
     });
 
     const newPaidAmount = order.paidAmount;
@@ -132,7 +132,7 @@ export const BadDebtService = {
 
   async createBadDebtWriteOff(data: {
     saleOrderId: string;
-    contactId: string;
+    entityId: string;
     writtenOffAmount: number;
     reason: string;
     operatorNote?: string;
@@ -159,7 +159,7 @@ export const BadDebtService = {
 
     const writeOff = await db.badDebtWriteOff.create({
       data: {
-        contactId: data.contactId,
+        entityId: data.entityId,
         saleOrderId: data.saleOrderId,
         originalAmount,
         writtenOffAmount: data.writtenOffAmount,
@@ -170,7 +170,7 @@ export const BadDebtService = {
         createdBy: data.createdBy,
         status: 'pending',
       },
-      include: { contact: true, saleOrder: true },
+      include: { entity: true, saleOrder: true },
     });
 
     return writeOff;
@@ -197,7 +197,7 @@ export const BadDebtService = {
         approvedBy,
         approvedAt: new Date(),
       },
-      include: { contact: true, saleOrder: true },
+      include: { entity: true, saleOrder: true },
     });
 
     if (writeOff.saleOrderId) {
@@ -261,7 +261,7 @@ export const BadDebtService = {
           `${writeOff.operatorNote} | 拒绝理由: ${rejectReason}` : 
           `拒绝理由: ${rejectReason}`,
       },
-      include: { contact: true, saleOrder: true },
+      include: { entity: true, saleOrder: true },
     });
   },
 
@@ -303,7 +303,7 @@ export const BadDebtService = {
     return db.badDebtWriteOff.findUnique({
       where: { id },
       include: {
-        contact: true,
+        entity: true,
         saleOrder: {
           include: { buyer: true, paymentEntity: true }
         },

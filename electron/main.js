@@ -361,6 +361,41 @@ function registerAppHandlers() {
     app.quit();
   });
 
+  // 窗口置顶功能
+  ipcMain.handle('window-setAlwaysOnTop', async (event, flag) => {
+    log.info('Window setAlwaysOnTop requested:', flag);
+    if (mainWindow) {
+      try {
+        if (flag) {
+          // 置顶：使用 'screen-saver' 级别，这是 Windows 上最稳定的级别
+          mainWindow.setAlwaysOnTop(true, 'screen-saver');
+          mainWindow.moveTop();
+          mainWindow.focus();
+          log.info('Window set to always on top successfully with screen-saver level');
+        } else {
+          // 取消置顶
+          mainWindow.setAlwaysOnTop(false);
+          log.info('Window removed from always on top');
+        }
+        
+        const currentState = mainWindow.isAlwaysOnTop();
+        log.info('Current always on top state:', currentState);
+        return { success: true, isAlwaysOnTop: currentState };
+      } catch (error) {
+        log.error('Error setting always on top:', error);
+        return { success: false, error: error.message };
+      }
+    }
+    return { success: false, error: 'Main window not found' };
+  });
+
+  ipcMain.handle('window-isAlwaysOnTop', async () => {
+    if (mainWindow) {
+      return { success: true, isAlwaysOnTop: mainWindow.isAlwaysOnTop() };
+    }
+    return { success: false, error: 'Main window not found' };
+  });
+
   log.info('Registered app IPC handlers');
 }
 

@@ -93,9 +93,12 @@ interface ReminderOrder {
 interface ReminderAppointment {
   id: string;
   contact: { name: string } | null;
+  project?: { name: string } | null;
+  installerType?: string | null;
+  installerContact?: { name: string } | null;
+  items?: Array<any>;
   appointmentDate: Date;
   serviceType: string;
-  installer: string | null;
   status: string;
 }
 
@@ -395,26 +398,44 @@ export function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {reminderAppointments.map((appt) => (
-                    <div key={appt.id} className="flex items-center justify-between p-2 bg-white rounded border border-blue-100">
-                      <div>
-                        <div className="font-medium text-slate-800 text-sm">
-                          {appt.serviceType}
+                  {reminderAppointments.map((appt) => {
+                    const getInstallerDisplay = () => {
+                      if (appt.installerType === '水电工' && appt.installerContact) {
+                        return ` - 水电工: ${appt.installerContact.name}`;
+                      } else if (appt.installerType && appt.installerType !== '无') {
+                        return ` - ${appt.installerType}`;
+                      }
+                      return '';
+                    };
+
+                    const getProjectDisplay = () => {
+                      if (appt.project) {
+                        return ` - ${appt.project.name}`;
+                      }
+                      return '';
+                    };
+
+                    return (
+                      <div key={appt.id} className="flex items-center justify-between p-2 bg-white rounded border border-blue-100">
+                        <div>
+                          <div className="font-medium text-slate-800 text-sm">
+                            {appt.serviceType}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {appt.contact?.name || '无联系人'}{getProjectDisplay()}{getInstallerDisplay()}
+                          </div>
                         </div>
-                        <div className="text-xs text-slate-500">
-                          {appt.contact?.name || '无联系人'} {appt.installer && `- ${appt.installer}`}
+                        <div className="text-right">
+                          <Badge variant="outline" className="text-blue-600 border-blue-300">
+                            {appt.status}
+                          </Badge>
+                          <div className="text-xs text-slate-500 mt-1">
+                            {new Date(appt.appointmentDate).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <Badge variant="outline" className="text-blue-600 border-blue-300">
-                          {appt.status}
-                        </Badge>
-                        <div className="text-xs text-slate-500 mt-1">
-                          {new Date(appt.appointmentDate).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>

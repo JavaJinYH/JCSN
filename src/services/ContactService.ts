@@ -153,22 +153,54 @@ export const ContactService = {
     };
   },
 
-  async getCustomerPrices(customerId: string) {
-    return db.customerPrice.findMany({
-      where: { customerId },
+  async getContactPrices(contactId: string) {
+    return db.contactPrice.findMany({
+      where: { contactId },
     });
   },
 
-  async getCustomerOrders(customerId: string) {
-    return db.saleOrder.findMany({
-      where: { buyerId: customerId },
-      include: {
-        items: {
-          include: { product: true },
-        },
-      },
-      orderBy: { saleDate: 'desc' },
+  // 获取买家的历史商品价格（优先从 ContactPrice，其次从历史订单）
+  async getBuyerPrices(buyerId: string) {
+    const priceMap: Record<string, number> = {};
+    const contactPrices = await db.contactPrice.findMany({
+      where: { contactId: buyerId },
     });
+    for (const cp of contactPrices) {
+      priceMap[cp.productId] = cp.lastPrice;
+    }
+
+    // 如果 CustomerPrice 里没有，从最近订单找
+    const orders = await db.saleOrder.findMany({
+      where: { buyerId },
+      include: { items: true },
+      orderBy: { saleDate: 'desc' },
+      take: 20,
+    });
+    for (const order of orders) {
+      for (const item of order.items) {
+        if (!priceMap[item.productId]) {
+          priceMap[item.productId] = item.price;
+        }
+      }
+    }
+    return priceMap;
+  },
+
+  // 保存/更新买家的商品历史价格
+  async saveBuyerPrice(buyerId: string, productId: string, price: number) {
+    const existing = await db.contactPrice.findUnique({
+      where: { contactId_productId: { contactId: buyerId, productId } }
+    });
+    if (existing) {
+      return db.contactPrice.update({
+        where: { contactId_productId: { contactId: buyerId, productId } },
+        data: { lastPrice: price, transactionCount: existing.transactionCount + 1 }
+      });
+    } else {
+      return db.contactPrice.create({
+        data: { contactId: buyerId, productId, lastPrice: price }
+      });
+    }
   },
 
   async getContactOrders(contactId: string) {

@@ -24,7 +24,6 @@ import type { Contact } from '@/lib/types';
 
 interface SaleContactSelectProps {
   contacts: Contact[];
-  entities: { id: string; name: string }[];
   selectedBuyer: string;
   selectedIntroducer: string;
   pickerName: string;
@@ -38,7 +37,6 @@ interface SaleContactSelectProps {
 
 export function SaleContactSelect({
   contacts,
-  entities,
   selectedBuyer,
   selectedIntroducer,
   pickerName,
@@ -61,11 +59,6 @@ export function SaleContactSelect({
   const contactOptions = contacts.map(c => ({
     value: c.id,
     label: `${c.name} (${c.primaryPhone || '无电话'})`,
-  }));
-
-  const entityOptions = entities.map(e => ({
-    value: e.id,
-    label: e.name,
   }));
 
   const handleAddBuyer = async () => {
@@ -112,7 +105,7 @@ export function SaleContactSelect({
     <>
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">联系人信息</CardTitle>
+          <CardTitle className="text-base">联系人信息（购货人）</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-4">

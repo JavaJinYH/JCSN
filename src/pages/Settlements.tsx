@@ -392,15 +392,15 @@ export function Settlements() {
     }
 
     try {
-      const contactId = selectedOrder.paymentEntityId || selectedOrder.buyerId || '';
-      if (!contactId) {
-        toast('无法确定联系人', 'error');
+      const entityId = selectedOrder.paymentEntityId || '';
+      if (!entityId) {
+        toast('无法确定付款主体', 'error');
         return;
       }
 
       await BadDebtService.createNegotiatedSettlement({
         saleOrderId: selectedOrder.id,
-        contactId,
+        entityId,
         writtenOffAmount: amount,
         reason: writeOffFormData.reason,
         operatorNote: writeOffFormData.operatorNote,
@@ -430,15 +430,15 @@ export function Settlements() {
     }
 
     try {
-      const contactId = selectedOrder.paymentEntityId || selectedOrder.buyerId || '';
-      if (!contactId) {
-        toast('无法确定联系人', 'error');
+      const entityId = selectedOrder.paymentEntityId || '';
+      if (!entityId) {
+        toast('无法确定付款主体', 'error');
         return;
       }
 
       await BadDebtService.createBadDebtWriteOff({
         saleOrderId: selectedOrder.id,
-        contactId,
+        entityId,
         writtenOffAmount: amount,
         reason: writeOffFormData.reason,
         operatorNote: writeOffFormData.operatorNote,
@@ -809,13 +809,14 @@ export function Settlements() {
       </Dialog>
 
       <Dialog open={showEntityDetailDialog} onOpenChange={setShowEntityDetailDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>主体详情 - {selectedEntity?.name}</DialogTitle>
           </DialogHeader>
           {selectedEntity && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="flex-1 overflow-y-auto pr-2">
+              <div className="space-y-6 pb-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-blue-50 p-4 rounded-lg">
                   <div className="text-sm text-slate-500">应付总额</div>
                   <div className="text-xl font-bold text-blue-600">{formatCurrency(selectedEntity.totalReceivable)}</div>
@@ -1139,14 +1140,16 @@ export function Settlements() {
                   </div>
                 )}
               </div>
-
-              <div className="flex justify-end gap-3">
-                <Button variant="outline" onClick={() => setShowEntityDetailDialog(false)}>
-                  关闭
-                </Button>
               </div>
             </div>
           )}
+          <div className="flex-shrink-0 pt-4 border-t">
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowEntityDetailDialog(false)}>
+                关闭
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1256,13 +1259,14 @@ export function Settlements() {
       </Dialog>
 
       <Dialog open={showOrderDetailDialog} onOpenChange={setShowOrderDetailDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>订单明细 - {selectedOrder?.invoiceNo || selectedOrder?.id?.substring(0, 8)}</DialogTitle>
           </DialogHeader>
           {selectedOrder && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="flex-1 overflow-y-auto pr-2">
+              <div className="space-y-6 pb-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-slate-50 p-3 rounded-lg">
                   <div className="text-xs text-slate-500">订单日期</div>
                   <div className="font-medium">{formatDate(new Date(selectedOrder.saleDate))}</div>
@@ -1385,14 +1389,16 @@ export function Settlements() {
                   💡 点击照片可查看大图和详情
                 </div>
               )}
-
-              <div className="flex justify-end gap-3">
-                <Button variant="outline" onClick={() => setShowOrderDetailDialog(false)}>
-                  关闭
-                </Button>
               </div>
             </div>
           )}
+          <div className="flex-shrink-0 pt-4 border-t">
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowOrderDetailDialog(false)}>
+                关闭
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

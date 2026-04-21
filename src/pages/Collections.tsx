@@ -19,8 +19,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { CollectionService } from '@/services/CollectionService';
-import { formatCurrency, formatDateTime } from '@/lib/utils';
-import { getAgingLevel } from '@/lib/customerUtils';
+import { formatCurrency, formatDateTime, getAgingLevel } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import type { CollectionRecord, Contact, AccountReceivable } from '@/lib/types';
 

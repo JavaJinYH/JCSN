@@ -144,3 +144,34 @@ export function formatProductName(product: { name: string; brand?: string | null
   if (product.model && !product.specification) parts.push(product.model);
   return parts.join(' - ');
 }
+
+export function calculateAgingDays(date: Date | string, createdAt?: Date | string): number {
+  const now = new Date();
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const start = createdAt ? (typeof createdAt === 'string' ? new Date(createdAt) : createdAt) : d;
+  return Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+interface AgingLevel {
+  level: 'normal' | 'attention' | 'warning' | 'danger' | 'bad_debt';
+  label: string;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+}
+
+export function getAgingLevel(days: number): AgingLevel {
+  if (days <= 30) {
+    return { level: 'normal', label: '正常', color: '#22c55e', bgColor: '#f0fdf4', borderColor: '#86efac' };
+  }
+  if (days <= 60) {
+    return { level: 'attention', label: '关注', color: '#eab308', bgColor: '#fefce8', borderColor: '#fde047' };
+  }
+  if (days <= 90) {
+    return { level: 'warning', label: '预警', color: '#f97316', bgColor: '#fff7ed', borderColor: '#fdba74' };
+  }
+  if (days <= 180) {
+    return { level: 'danger', label: '紧急', color: '#ef4444', bgColor: '#fef2f2', borderColor: '#fca5a5' };
+  }
+  return { level: 'bad_debt', label: '坏账', color: '#7f1d1d', bgColor: '#fef2f2', borderColor: '#fca5a5' };
+}

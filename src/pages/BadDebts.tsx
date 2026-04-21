@@ -129,6 +129,16 @@ export function BadDebts() {
     }
   };
 
+  const getDisplayName = (writeOff: any) => {
+    if (writeOff.saleOrder?.buyer?.name) {
+      return writeOff.saleOrder.buyer.name;
+    }
+    if (writeOff.entity?.name) {
+      return writeOff.entity.name;
+    }
+    return '-';
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -214,7 +224,7 @@ export function BadDebts() {
               <TableRow>
                 <TableHead>类型</TableHead>
                 <TableHead>状态</TableHead>
-                <TableHead>客户</TableHead>
+                <TableHead>客户/主体</TableHead>
                 <TableHead>原始金额</TableHead>
                 <TableHead>减免金额</TableHead>
                 <TableHead>最终金额</TableHead>
@@ -235,7 +245,7 @@ export function BadDebts() {
                   <TableRow key={writeOff.id}>
                     <TableCell>{getWriteOffTypeBadge(writeOff.writeOffType)}</TableCell>
                     <TableCell>{getWriteOffStatusBadge(writeOff.status)}</TableCell>
-                    <TableCell>{writeOff.contact?.name || '-'}</TableCell>
+                    <TableCell>{getDisplayName(writeOff)}</TableCell>
                     <TableCell className="text-right font-mono">
                       {formatCurrency(writeOff.originalAmount)}
                     </TableCell>
@@ -321,8 +331,8 @@ export function BadDebts() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm text-slate-500">客户</div>
-                  <div className="font-medium">{selectedWriteOff.contact?.name || '-'}</div>
+                  <div className="text-sm text-slate-500">客户/主体</div>
+                  <div className="font-medium">{getDisplayName(selectedWriteOff)}</div>
                 </div>
                 <div>
                   <div className="text-sm text-slate-500">创建时间</div>
