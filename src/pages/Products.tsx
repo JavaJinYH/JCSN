@@ -207,7 +207,7 @@ export function Products() {
             </CardHeader>
             <CardContent>
               <ProductTable
-                products={filteredProducts}
+                products={tableProps.data}
                 pagination={{
                   page: tableProps.page,
                   pageSize: tableProps.pageSize,

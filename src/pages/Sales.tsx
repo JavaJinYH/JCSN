@@ -232,7 +232,7 @@ export function Sales() {
         </CardHeader>
         <CardContent>
           <SaleTable
-            sales={filteredSales}
+            sales={tableProps.data}
             pagination={{
               page: tableProps.page,
               pageSize: tableProps.pageSize,

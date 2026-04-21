@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { PhotoViewer } from '@/components/PhotoViewer';
+import { DataTableFilters, DataTablePagination, useDataTable } from '@/components/DataTable';
 import { SettlementService } from '@/services/SettlementService';
 import { BadDebtService } from '@/services/BadDebtService';
 import { EntityService } from '@/services/EntityService';
@@ -186,8 +187,7 @@ export function Settlements() {
   const filteredEntities = useMemo(() => {
     return entities.filter((entity) => {
       if (filterValues.status && filterValues.status !== 'all') {
-        if (filterValues.status === 'overdue') {
-          if (!entity.orders?.some(o => isOrderOverdue(o) && calculateOrderBalance(o) > 0)) return false;
+        if (filterValues.status === 'overdue') {          if (!entity.orders?.some(o => isOrderOverdue(o) && calculateOrderBalance(o) > 0)) return false;
         } else if (filterValues.status === 'settled') {
           if (entity.totalRemaining > 0) return false;
         } else {
@@ -208,6 +208,11 @@ export function Settlements() {
       return true;
     });
   }, [entities, filterValues]);
+
+  const tableProps = useDataTable({
+    data: filteredEntities,
+    defaultPageSize: 20,
+  });
 
   const totalReceivable = useMemo(() => {
     return entities.reduce((sum, e) => sum + e.totalReceivable, 0);
@@ -571,14 +576,14 @@ export function Settlements() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredEntities.length === 0 ? (
+                {tableProps.total === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8 text-slate-500">
                       暂无应收账款数据
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredEntities.map((entity) => {
+                  tableProps.data.map((entity) => {
                     const outstandingOrders = entity.orders?.filter(o => calculateOrderBalance(o) > 0) || [];
                     return (
                       <TableRow key={entity.id}>
@@ -615,6 +620,15 @@ export function Settlements() {
                 )}
               </TableBody>
             </Table>
+            <DataTablePagination
+              pagination={{
+                page: tableProps.page,
+                pageSize: tableProps.pageSize,
+                total: tableProps.total,
+              }}
+              onPageChange={tableProps.setPage}
+              onPageSizeChange={tableProps.setPageSize}
+            />
           </CardContent>
         </Card>
       )}

@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DataTablePagination, useDataTable } from '@/components/DataTable';
 import { BadDebtService } from '@/services/BadDebtService';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { toast } from '@/components/Toast';
@@ -139,6 +140,11 @@ export function BadDebts() {
     return '-';
   };
 
+  const tableProps = useDataTable({
+    data: writeOffs,
+    defaultPageSize: 20,
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -234,14 +240,14 @@ export function BadDebts() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {writeOffs.length === 0 ? (
+              {tableProps.total === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center py-8 text-slate-500">
                     暂无记录
                   </TableCell>
                 </TableRow>
               ) : (
-                writeOffs.map((writeOff) => (
+                tableProps.data.map((writeOff) => (
                   <TableRow key={writeOff.id}>
                     <TableCell>{getWriteOffTypeBadge(writeOff.writeOffType)}</TableCell>
                     <TableCell>{getWriteOffStatusBadge(writeOff.status)}</TableCell>
@@ -307,6 +313,15 @@ export function BadDebts() {
               )}
             </TableBody>
           </Table>
+          <DataTablePagination
+            pagination={{
+              page: tableProps.page,
+              pageSize: tableProps.pageSize,
+              total: tableProps.total,
+            }}
+            onPageChange={tableProps.setPage}
+            onPageSizeChange={tableProps.setPageSize}
+          />
         </CardContent>
       </Card>
 

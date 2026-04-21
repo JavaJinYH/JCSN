@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { DataTablePagination, useDataTable } from '@/components/DataTable';
 import { AuditLogService } from '@/services/AuditLogService';
 import { toast } from '@/components/Toast';
 import type { AuditLog } from '@/lib/types';
@@ -99,6 +100,11 @@ export function AuditLogs() {
   const getActionInfo = (actionType: string) => {
     return ACTION_TYPE_MAP[actionType.toUpperCase()] || { label: actionType, color: 'bg-gray-100 text-gray-800' };
   };
+
+  const tableProps = useDataTable({
+    data: filteredLogs,
+    defaultPageSize: 20,
+  });
 
   if (loading) {
     return (
@@ -198,14 +204,14 @@ export function AuditLogs() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredLogs.length === 0 ? (
+              {tableProps.total === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-8 text-slate-500">
                     暂无日志数据
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredLogs.map((log) => {
+                tableProps.data.map((log) => {
                   const actionInfo = getActionInfo(log.actionType);
                   return (
                     <TableRow key={log.id}>
@@ -244,6 +250,15 @@ export function AuditLogs() {
               )}
             </TableBody>
           </Table>
+          <DataTablePagination
+            pagination={{
+              page: tableProps.page,
+              pageSize: tableProps.pageSize,
+              total: tableProps.total,
+            }}
+            onPageChange={tableProps.setPage}
+            onPageSizeChange={tableProps.setPageSize}
+          />
         </CardContent>
       </Card>
     </div>

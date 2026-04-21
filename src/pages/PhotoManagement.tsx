@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { DataTablePagination, useDataTable } from '@/components/DataTable';
 import { PhotoViewer } from '@/components/PhotoViewer';
 import { PhotoThumbnail } from '@/components/PhotoThumbnail';
 import { PhotoService } from '@/services/PhotoService';
@@ -152,6 +153,11 @@ export function PhotoManagement() {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
+  const tableProps = useDataTable({
+    data: filteredPhotos,
+    defaultPageSize: 24,
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -241,7 +247,7 @@ export function PhotoManagement() {
         </div>
       </div>
 
-      {filteredPhotos.length === 0 ? (
+      {tableProps.total === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <div className="text-6xl mb-4">📷</div>
@@ -249,43 +255,59 @@ export function PhotoManagement() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          {filteredPhotos.map((photo, index) => (
-            <div key={photo.id} className="relative">
-              <PhotoThumbnail
-                photo={photo}
-                onClick={() => {
-                  setViewerIndex(index);
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {tableProps.data.map((photo, index) => (
+              <div key={photo.id} className="relative">
+                <PhotoThumbnail
+                  photo={photo}
+                  onClick={() => {
+                  setViewerIndex((tableProps.page - 1) * tableProps.pageSize + index);
                   setViewerOpen(true);
                 }}
-              />
-              <div
-                className={`absolute top-2 left-2 w-6 h-6 rounded-full flex items-center justify-center cursor-pointer transition-colors ${
-                  selectedPhotos.has(photo.id)
-                    ? 'bg-orange-500 text-white'
-                    : 'bg-white/80 text-slate-400 hover:bg-orange-100'
-                }`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleSelectPhoto(photo.id);
+                />
+                <div
+                  className={`absolute top-2 left-2 w-6 h-6 rounded-full flex items-center justify-center cursor-pointer transition-colors ${
+                    selectedPhotos.has(photo.id)
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-white/80 text-slate-400 hover:bg-orange-100'
+                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSelectPhoto(photo.id);
+                  }}
+                >
+                  {selectedPhotos.has(photo.id) ? '✓' : ''}
+                </div>
+                <div className="mt-1">
+                  <Badge variant={photo._type === 'sale' ? 'default' : 'secondary'} className="text-xs">
+                    {photo._type === 'sale' ? '销售单' : '进货单'}
+                  </Badge>
+                </div>
+                <p className="text-xs text-slate-400 mt-1 truncate">
+                  {dayjs(photo.createdAt).format('YYYY-MM-DD')}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <Card>
+            <CardContent className="py-4">
+              <DataTablePagination
+                pagination={{
+                  page: tableProps.page,
+                  pageSize: tableProps.pageSize,
+                  total: tableProps.total,
                 }}
-              >
-                {selectedPhotos.has(photo.id) ? '✓' : ''}
-              </div>
-              <div className="mt-1">
-                <Badge variant={photo._type === 'sale' ? 'default' : 'secondary'} className="text-xs">
-                  {photo._type === 'sale' ? '销售单' : '进货单'}
-                </Badge>
-              </div>
-              <p className="text-xs text-slate-400 mt-1 truncate">
-                {dayjs(photo.createdAt).format('YYYY-MM-DD')}
-              </p>
-            </div>
-          ))}
-        </div>
+                onPageChange={tableProps.setPage}
+                onPageSizeChange={tableProps.setPageSize}
+              />
+            </CardContent>
+          </Card>
+        </>
       )}
 
-      {filteredPhotos.length > 0 && (
+      {tableProps.total > 0 && (
         <PhotoViewer
           photos={filteredPhotos as any}
           open={viewerOpen}
