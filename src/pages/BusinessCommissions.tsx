@@ -1,0 +1,493 @@
+import { useEffect, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { DataTablePagination, useDataTable } from '@/components/DataTable';
+import { BusinessCommissionService } from '@/services/BusinessCommissionService';
+import { formatCurrency } from '@/lib/utils';
+import { toast } from '@/components/Toast';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+
+type CommissionType = 'OUTGOING' | 'INCOMING';
+type CommissionCategory = 'INTRODUCER' | 'SUPPLIER';
+
+interface Commission {
+  id: string;
+  type: CommissionType;
+  category: CommissionCategory;
+  amount: number;
+  recordedAt: string;
+  remark?: string;
+  contact?: { name: string };
+  supplier?: { name: string };
+  product?: { name: string };
+  saleOrder?: { invoiceNo?: string; id: string };
+}
+
+export function BusinessCommissions() {
+  const [commissions, setCommissions] = useState<Commission[]>([]);
+  const [sales, setSales] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
+  const [formData, setFormData] = useState({
+    type: 'OUTGOING' as CommissionType,
+    category: 'INTRODUCER' as CommissionCategory,
+    saleOrderId: '',
+    contactId: '',
+    supplierId: '',
+    productId: '',
+    amount: '',
+    remark: '',
+  });
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    if (showAddDialog) {
+      loadSales();
+      loadContacts();
+      loadSuppliers();
+      loadProducts();
+    }
+  }, [showAddDialog]);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const data = await BusinessCommissionService.getCommissions();
+      setCommissions(data);
+    } catch (error) {
+      console.error('Failed to load commissions:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadSales = async () => {
+    try {
+      const data = await BusinessCommissionService.getSaleOrders();
+      setSales(data);
+    } catch (error) {
+      console.error('Failed to load sales:', error);
+    }
+  };
+
+  const loadContacts = async () => {
+    try {
+      const data = await BusinessCommissionService.getContacts();
+      setContacts(data);
+    } catch (error) {
+      console.error('Failed to load contacts:', error);
+    }
+  };
+
+  const loadSuppliers = async () => {
+    try {
+      const data = await BusinessCommissionService.getSuppliers();
+      setSuppliers(data);
+    } catch (error) {
+      console.error('Failed to load suppliers:', error);
+    }
+  };
+
+  const loadProducts = async () => {
+    try {
+      const data = await BusinessCommissionService.getProducts();
+      setProducts(data);
+    } catch (error) {
+      console.error('Failed to load products:', error);
+    }
+  };
+
+  const handleAddCommission = async () => {
+    if (!formData.amount || parseFloat(formData.amount) <= 0) {
+      toast('请输入金额', 'warning');
+      return;
+    }
+
+    try {
+      const contactId = formData.contactId === '__none__' ? undefined : formData.contactId;
+      const supplierId = formData.supplierId === '__none__' ? undefined : formData.supplierId;
+      const productId = formData.productId === '__none__' ? undefined : formData.productId;
+      const saleOrderId = formData.saleOrderId === '__none__' ? undefined : formData.saleOrderId;
+
+      await BusinessCommissionService.createCommission({
+        type: formData.type,
+        category: formData.category,
+        saleOrderId,
+        contactId,
+        supplierId,
+        productId,
+        amount: parseFloat(formData.amount),
+        remark: formData.remark || undefined,
+      });
+
+      setShowAddDialog(false);
+      setFormData({
+        type: 'OUTGOING',
+        category: 'INTRODUCER',
+        saleOrderId: '',
+        contactId: '',
+        supplierId: '',
+        productId: '',
+        amount: '',
+        remark: '',
+      });
+      loadData();
+      toast('业务返点记录添加成功', 'success');
+    } catch (error) {
+      console.error('Failed to add commission:', error);
+      toast('添加失败，请重试', 'error');
+    }
+  };
+
+  const handleDeleteCommission = async (id: string) => {
+    if (!confirm('确定要删除这条返点记录吗？')) return;
+    try {
+      await BusinessCommissionService.deleteCommission(id);
+      loadData();
+      toast('删除成功', 'success');
+    } catch (error) {
+      console.error('Failed to delete commission:', error);
+      toast('删除失败，请重试', 'error');
+    }
+  };
+
+  const filteredCommissions = commissions.filter((c) => {
+    const matchesSearch =
+      !searchTerm ||
+      c.contact?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.supplier?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.product?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.remark?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesType = typeFilter === 'all' || c.type === typeFilter;
+    const matchesCategory = categoryFilter === 'all' || c.category === categoryFilter;
+    return matchesSearch && matchesType && matchesCategory;
+  });
+
+  const tableProps = useDataTable<Commission>({
+    data: filteredCommissions,
+    defaultPageSize: 20,
+  });
+
+  const totalOutgoing = filteredCommissions.filter(c => c.type === 'OUTGOING').reduce((sum, c) => sum + c.amount, 0);
+  const totalIncoming = filteredCommissions.filter(c => c.type === 'INCOMING').reduce((sum, c) => sum + c.amount, 0);
+
+  const typeLabels: Record<string, string> = {
+    OUTGOING: '支出（介绍人返点）',
+    INCOMING: '收入（供应商返点）',
+  };
+
+  const categoryLabels: Record<string, string> = {
+    INTRODUCER: '介绍人',
+    SUPPLIER: '供应商',
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">业务返点</h2>
+          <p className="text-slate-500 mt-1">记录介绍人返点（支出）和供应商返点（收入）</p>
+        </div>
+        <Button onClick={() => setShowAddDialog(true)} className="bg-blue-500 hover:bg-blue-600">
+          + 添加返点记录
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">介绍人返点（支出）</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">{formatCurrency(totalOutgoing)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">供应商返点（收入）</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{formatCurrency(totalIncoming)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">净返点</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${totalIncoming - totalOutgoing >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+              {formatCurrency(totalIncoming - totalOutgoing)}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {showAddDialog && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardHeader>
+            <CardTitle>添加返点记录</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Tabs defaultValue="introducer" onValueChange={(value) => {
+              const type = value === 'introducer' ? 'OUTGOING' : 'INCOMING';
+              const category = value === 'introducer' ? 'INTRODUCER' : 'SUPPLIER';
+              setFormData({
+                ...formData,
+                type,
+                category,
+                contactId: '',
+                supplierId: '',
+                productId: '',
+              });
+            }}>
+              <TabsList>
+                <TabsTrigger value="introducer">介绍人返点（支出）</TabsTrigger>
+                <TabsTrigger value="supplier">供应商返点（收入）</TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">关联销售单（可选）</label>
+                <Select
+                  value={formData.saleOrderId}
+                  onValueChange={(value) => setFormData({ ...formData, saleOrderId: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择销售单" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">无</SelectItem>
+                    {sales.map((sale) => (
+                      <SelectItem key={sale.id} value={sale.id}>
+                        {sale.invoiceNo || sale.id.slice(0, 8)} - {sale.buyer?.name || sale.buyerId || '散客'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {formData.category === 'INTRODUCER' ? (
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">介绍人（可选）</label>
+                  <Select
+                    value={formData.contactId}
+                    onValueChange={(value) => setFormData({ ...formData, contactId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择介绍人" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">无</SelectItem>
+                      {contacts.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name} ({c.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">供应商</label>
+                    <Select
+                      value={formData.supplierId}
+                      onValueChange={(value) => setFormData({ ...formData, supplierId: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择供应商" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">无</SelectItem>
+                        {suppliers.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">关联商品（可选）</label>
+                    <Select
+                      value={formData.productId}
+                      onValueChange={(value) => setFormData({ ...formData, productId: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择商品" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">无</SelectItem>
+                        {products.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">金额</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.amount}
+                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="text-sm font-medium text-slate-700 mb-1 block">备注</label>
+                <Input
+                  value={formData.remark}
+                  onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
+                  placeholder="可选"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+                取消
+              </Button>
+              <Button onClick={handleAddCommission} className="bg-blue-500 hover:bg-blue-600">
+                保存
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Input
+              placeholder="搜索介绍人、供应商、商品..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-48 h-8"
+            />
+
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-32 h-8">
+                <SelectValue placeholder="类型" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部类型</SelectItem>
+                <SelectItem value="OUTGOING">支出</SelectItem>
+                <SelectItem value="INCOMING">收入</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-32 h-8">
+                <SelectValue placeholder="分类" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部分类</SelectItem>
+                <SelectItem value="INTRODUCER">介绍人</SelectItem>
+                <SelectItem value="SUPPLIER">供应商</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearchTerm('');
+                setTypeFilter('all');
+                setCategoryFilter('all');
+              }}
+              className="h-8 text-slate-500"
+            >
+              🔄 重置筛选
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="text-center py-8 text-slate-500">加载中...</div>
+          ) : tableProps.total === 0 ? (
+            <div className="text-center py-8 text-slate-500">暂无返点记录</div>
+          ) : (
+            <div className="space-y-3">
+              {tableProps.data.map((commission) => (
+                <div
+                  key={commission.id}
+                  className={`flex items-center justify-between p-4 rounded-lg border ${
+                    commission.type === 'OUTGOING' ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'
+                  }`}
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <Badge variant={commission.type === 'OUTGOING' ? 'destructive' : 'default'}>
+                        {typeLabels[commission.type]}
+                      </Badge>
+                      <Badge variant="secondary">{categoryLabels[commission.category]}</Badge>
+                    </div>
+                    <div className="text-sm text-slate-500 mt-1">
+                      {new Date(commission.recordedAt).toLocaleDateString('zh-CN')}
+                      {commission.contact && ` - 介绍人: ${commission.contact.name}`}
+                      {commission.supplier && ` - 供应商: ${commission.supplier.name}`}
+                      {commission.product && ` - 商品: ${commission.product.name}`}
+                      {commission.remark && ` - ${commission.remark}`}
+                    </div>
+                    {commission.saleOrder && (
+                      <div className="text-xs text-slate-400 mt-1">
+                        关联销售单: {commission.saleOrder.invoiceNo || commission.saleOrder.id.slice(0, 8)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className={`font-bold ${commission.type === 'OUTGOING' ? 'text-orange-600' : 'text-green-600'}`}>
+                      {commission.type === 'OUTGOING' ? '-' : '+'}{formatCurrency(commission.amount)}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteCommission(commission.id)}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      删除
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <DataTablePagination
+            pagination={{
+              page: tableProps.page,
+              pageSize: tableProps.pageSize,
+              total: tableProps.total,
+            }}
+            onPageChange={tableProps.setPage}
+            onPageSizeChange={tableProps.setPageSize}
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

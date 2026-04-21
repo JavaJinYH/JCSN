@@ -14,7 +14,7 @@ import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
 import { Purchases } from './pages/Purchases';
 import { Projects } from './pages/Projects';
-import { Rebates } from './pages/Rebates';
+import { BusinessCommissions } from './pages/BusinessCommissions';
 import { Deliveries } from './pages/Deliveries';
 import { Settlements } from './pages/Settlements';
 import { Collections } from './pages/Collections';
@@ -27,6 +27,8 @@ import { BadDebts } from './pages/BadDebts';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastContainer } from './components/Toast';
 import { Suppliers } from './pages/Suppliers';
+import { DailyExpenses } from './pages/DailyExpenses';
+import { ServiceAppointments } from './pages/ServiceAppointments';
 
 function App() {
   return (
@@ -55,7 +57,9 @@ function App() {
           <Route path="projects" element={<ErrorBoundary><Projects /></ErrorBoundary>} />
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />
-          <Route path="rebates" element={<Rebates />} />
+          <Route path="business-commissions" element={<BusinessCommissions />} />
+          <Route path="daily-expenses" element={<DailyExpenses />} />
+          <Route path="service-appointments" element={<ServiceAppointments />} />
           <Route path="deliveries" element={<Deliveries />} />
           <Route path="settlements" element={<Settlements />} />
           <Route path="collections" element={<Collections />} />

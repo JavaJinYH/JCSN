@@ -50,11 +50,12 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
-    title: '配送与回扣',
+    title: '配送与返点',
     icon: '🚚',
     items: [
       { path: '/deliveries', label: '配送管理', icon: '🚚' },
-      { path: '/rebates', label: '回扣管理', icon: '💵' },
+      { path: '/business-commissions', label: '业务返点', icon: '💵' },
+      { path: '/service-appointments', label: '服务预约', icon: '🔧' },
     ],
   },
   {
@@ -65,6 +66,7 @@ const menuGroups: MenuGroup[] = [
       { path: '/collections', label: '催账记录', icon: '📞' },
       { path: '/statements', label: '欠款统计', icon: '📄' },
       { path: '/bad-debts', label: '坏账管理', icon: '💀' },
+      { path: '/daily-expenses', label: '日常支出', icon: '💰' },
       { path: '/reports', label: '报表统计', icon: '📈' },
     ],
   },

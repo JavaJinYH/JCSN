@@ -91,7 +91,7 @@ async function createWindow() {
 function registerDbHandlers() {
   const models = [
     'category', 'product', 'customerCategory', 'systemSetting', 'purchase',
-    'rebate', 'deliveryFee', 'deliveryRecord',
+    'deliveryFee', 'deliveryRecord',
     'paymentPlan', 'auditLog',
     'purchasePhoto', 'collectionRecord',
     'inventoryCheck', 'inventoryCheckItem',
@@ -106,6 +106,9 @@ function registerDbHandlers() {
     'purchaseOrder',
     'receivableAuditLog',
     'legacyBill',
+    'businessCommission',
+    'dailyExpense',
+    'serviceAppointment',
   ];
 
   const toPascalCase = (str) => str.charAt(0).toUpperCase() + str.slice(1);

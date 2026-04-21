@@ -43,6 +43,7 @@ model Product {
   returnItems        SaleReturnItem[]
   purchaseReturns    PurchaseReturnItem[]
   businessCommissions BusinessCommission[]
+  serviceAppointments ServiceAppointment[]
   createdAt          DateTime                  @default(now())
   updatedAt          DateTime                  @updatedAt
 
@@ -224,6 +225,32 @@ model BusinessCommission {
   updatedAt     DateTime  @updatedAt
 }
 
+model DailyExpense {
+  id          String   @id @default(cuid())
+  date        DateTime @default(now())
+  category    String   // 房租、水电费、工资、杂费等
+  amount      Float
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ServiceAppointment {
+  id             String   @id @default(cuid())
+  contactId      String?
+  contact        Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  productId      String?
+  product        Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  appointmentDate DateTime
+  serviceType    String   // 水暖安装、维修等
+  installer      String?  // 安装人员：爸、妈、水电工等
+  status         String   // 待上门、已上门、待返工、已完成
+  notes          String?
+  installationFee Float  // 安装费（如果有）
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
 model DeliveryFee {
   id        String   @id @default(cuid())
   zoneName  String   @unique
@@ -400,7 +427,6 @@ model Contact {
   ordersAsIntroducer   SaleOrder[]  @relation("IntroducerContact")
   ordersAsPicker       SaleOrder[]  @relation("PickerContact")
   personalEntity       Entity?
-  rebatesAsPlumber     Rebate[]
   supplierContacts     Supplier[]
   badDebtWriteOffs     BadDebtWriteOff[]
   paymentPlans         PaymentPlan[]
@@ -411,6 +437,7 @@ model Contact {
   slipAsIntroducer     SaleSlip[]  @relation("SaleSlipIntroducer")
   slipAsPicker         SaleSlip[]  @relation("SaleSlipPicker")
   businessCommissions  BusinessCommission[] @relation("CommissionContact")
+  serviceAppointments  ServiceAppointment[]
 }
 
 model ContactPhone {
@@ -554,8 +581,8 @@ model SaleOrder {
 
   items            OrderItem[]
   payments         OrderPayment[]
-  rebates          Rebate[]
   receivables      Receivable[]
+  businessCommissions BusinessCommission[]
   photos           SaleOrderPhoto[]
   returns          SaleReturn[]
   badDebtWriteOffs BadDebtWriteOff[]

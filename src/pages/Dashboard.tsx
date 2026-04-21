@@ -35,9 +35,13 @@ interface FlowStats {
   salesIncome: number;
   collectionIncome: number;
   purchaseReturnIncome: number;
+  supplierCommissionIncome: number;
   // 支出明细
   purchaseExpense: number;
   saleReturnExpense: number;
+  dailyExpenseTotal: number;
+  introducerCommissionExpense: number;
+  installationFeeTotal: number;
   // 按支付方式统计
   cashAmount: number;
   wechatAmount: number;
@@ -76,6 +80,25 @@ interface Sale {
 
 type FlowPeriod = 'today' | 'week' | 'month';
 
+interface ReminderOrder {
+  id: string;
+  deliveryStatus: string;
+  totalFee: number;
+  saleOrder: {
+    buyer: { name: string } | null;
+    totalAmount: number;
+  } | null;
+}
+
+interface ReminderAppointment {
+  id: string;
+  contact: { name: string } | null;
+  appointmentDate: Date;
+  serviceType: string;
+  installer: string | null;
+  status: string;
+}
+
 export function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     todaySales: 0,
@@ -87,6 +110,8 @@ export function Dashboard() {
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
   const [recentSales, setRecentSales] = useState<Sale[]>([]);
+  const [reminderOrders, setReminderOrders] = useState<ReminderOrder[]>([]);
+  const [reminderAppointments, setReminderAppointments] = useState<ReminderAppointment[]>([]);
   const [flowStats, setFlowStats] = useState<FlowStats>({
     totalIncome: 0,
     totalExpense: 0,
@@ -101,6 +126,10 @@ export function Dashboard() {
     wechatAmount: 0,
     alipayAmount: 0,
     transferAmount: 0,
+    supplierCommissionIncome: 0,
+    dailyExpenseTotal: 0,
+    introducerCommissionExpense: 0,
+    installationFeeTotal: 0,
   });
   const [flowPeriod, setFlowPeriod] = useState<FlowPeriod>('today');
   const [flowCollapsed, setFlowCollapsed] = useState(true);
@@ -128,13 +157,20 @@ export function Dashboard() {
         recentNewOrders,
         allNewOrders,
         newOrderItems,
+        deliveringOrders,
+        upcomingAppointments,
       ] = await Promise.all([
         DashboardService.getAllProducts(),
         DashboardService.getTodayNewOrders(today),
         DashboardService.getRecentNewOrders(weekAgo),
         DashboardService.getAllNewOrdersInPeriod(weekAgo),
         DashboardService.getNewOrderItemsInPeriod(weekAgo),
+        DashboardService.getDeliveringOrders(),
+        DashboardService.getUpcomingAppointments(),
       ]);
+
+      setReminderOrders(deliveringOrders);
+      setReminderAppointments(upcomingAppointments);
 
       const lowStock = allProducts.filter(p => p.stock <= p.minStock && p.minStock > 0);
       const todayNewOrdersTotal = todayNewOrders.reduce((sum, o) => sum + o.paidAmount, 0);
@@ -228,14 +264,17 @@ export function Dashboard() {
         startDate = new Date(today.getFullYear(), today.getMonth(), 1);
       }
 
-      const [orders, collections, purchases, purchaseReturns] = await Promise.all([
+      const [orders, collections, purchases, purchaseReturns, commissions, dailyExpenses, serviceAppointments] = await Promise.all([
         DashboardService.getOrdersInDateRange(startDate, endDate),
         DashboardService.getCollectionsInDateRange(startDate, endDate),
         DashboardService.getPurchasesInDateRange(startDate, endDate),
         DashboardService.getPurchaseReturnsInDateRange(startDate, endDate),
+        DashboardService.getBusinessCommissionsInDateRange(startDate, endDate),
+        DashboardService.getDailyExpensesInDateRange(startDate, endDate),
+        DashboardService.getServiceAppointmentsInDateRange(startDate, endDate),
       ]);
 
-      const stats = calculateFlowStats(orders, collections, purchases, purchaseReturns);
+      const stats = calculateFlowStats(orders, collections, purchases, purchaseReturns, commissions, dailyExpenses, serviceAppointments);
       setFlowStats(stats);
     } catch (error) {
       console.error('Failed to load flow stats:', error);
@@ -308,6 +347,80 @@ export function Dashboard() {
 
       <QuickActions />
       </div>
+
+      {(reminderOrders.length > 0 || reminderAppointments.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {reminderOrders.length > 0 && (
+            <Card className="border-orange-200 bg-orange-50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-orange-700 flex items-center gap-2">
+                  🚚 即将配送（3天内）
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {reminderOrders.map((order) => (
+                    <div key={order.id} className="flex items-center justify-between p-2 bg-white rounded border border-orange-100">
+                      <div>
+                        <div className="font-medium text-slate-800 text-sm">
+                          {order.saleOrder?.buyer?.name || '散客'}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {order.deliveryStatus === 'pending' ? '待发货' :
+                           order.deliveryStatus === 'shipped' ? '已发货' :
+                           order.deliveryStatus === 'in_transit' ? '配送中' : order.deliveryStatus}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant="outline" className="text-orange-600 border-orange-300">
+                          待处理
+                        </Badge>
+                        <div className="text-xs text-slate-500 mt-1">
+                          ¥{(order.totalFee || 0).toFixed(0)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {reminderAppointments.length > 0 && (
+            <Card className="border-blue-200 bg-blue-50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-blue-700 flex items-center gap-2">
+                  📅 今日预约
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {reminderAppointments.map((appt) => (
+                    <div key={appt.id} className="flex items-center justify-between p-2 bg-white rounded border border-blue-100">
+                      <div>
+                        <div className="font-medium text-slate-800 text-sm">
+                          {appt.serviceType}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {appt.contact?.name || '无联系人'} {appt.installer && `- ${appt.installer}`}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant="outline" className="text-blue-600 border-blue-300">
+                          {appt.status}
+                        </Badge>
+                        <div className="text-xs text-slate-500 mt-1">
+                          {new Date(appt.appointmentDate).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       <Card>
         <CardHeader 
@@ -393,6 +506,12 @@ export function Dashboard() {
                     <span>进货退款</span>
                     <span className="font-bold text-slate-800">{formatCurrency(flowStats.purchaseReturnIncome)}</span>
                   </div>
+                  {flowStats.supplierCommissionIncome > 0 && (
+                    <div className="flex justify-between p-3 bg-green-50 rounded-lg">
+                      <span>供应商返点</span>
+                      <span className="font-bold text-green-800">{formatCurrency(flowStats.supplierCommissionIncome)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -409,6 +528,24 @@ export function Dashboard() {
                     <span>销售退款</span>
                     <span className="font-bold text-slate-800">{formatCurrency(flowStats.saleReturnExpense)}</span>
                   </div>
+                  {flowStats.dailyExpenseTotal > 0 && (
+                    <div className="flex justify-between p-3 bg-orange-50 rounded-lg">
+                      <span>日常支出</span>
+                      <span className="font-bold text-orange-800">{formatCurrency(flowStats.dailyExpenseTotal)}</span>
+                    </div>
+                  )}
+                  {flowStats.introducerCommissionExpense > 0 && (
+                    <div className="flex justify-between p-3 bg-orange-50 rounded-lg">
+                      <span>介绍人返点</span>
+                      <span className="font-bold text-orange-800">{formatCurrency(flowStats.introducerCommissionExpense)}</span>
+                    </div>
+                  )}
+                  {flowStats.installationFeeTotal > 0 && (
+                    <div className="flex justify-between p-3 bg-orange-50 rounded-lg">
+                      <span>安装费</span>
+                      <span className="font-bold text-orange-800">{formatCurrency(flowStats.installationFeeTotal)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

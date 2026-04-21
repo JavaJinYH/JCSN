@@ -10,8 +10,12 @@ interface FlowStatsResult {
   salesIncome: number;
   collectionIncome: number;
   purchaseReturnIncome: number;
+  supplierCommissionIncome: number;
   purchaseExpense: number;
   saleReturnExpense: number;
+  dailyExpenseTotal: number;
+  introducerCommissionExpense: number;
+  installationFeeTotal: number;
   cashAmount: number;
   wechatAmount: number;
   alipayAmount: number;
@@ -38,6 +42,20 @@ interface PurchaseReturn {
   totalAmount: number;
 }
 
+interface BusinessCommission {
+  type: 'OUTGOING' | 'INCOMING';
+  category: 'INTRODUCER' | 'SUPPLIER';
+  amount: number;
+}
+
+interface DailyExpense {
+  amount: number;
+}
+
+interface ServiceAppointment {
+  installationFee?: number;
+}
+
 /**
  * 计算流水账统计数据
  */
@@ -45,7 +63,10 @@ export function calculateFlowStats(
   orders: SaleOrderWithDetails[],
   collections: CollectionRecord[],
   purchases: Purchase[],
-  purchaseReturns: PurchaseReturn[]
+  purchaseReturns: PurchaseReturn[],
+  commissions: BusinessCommission[],
+  dailyExpenses: DailyExpense[],
+  serviceAppointments: ServiceAppointment[]
 ): FlowStatsResult {
   let cashAmount = 0;
   let wechatAmount = 0;
@@ -54,8 +75,12 @@ export function calculateFlowStats(
   let salesIncome = 0;
   let collectionIncome = 0;
   let purchaseReturnIncome = 0;
+  let supplierCommissionIncome = 0;
   let purchaseExpense = 0;
   let saleReturnExpense = 0;
+  let dailyExpenseTotal = 0;
+  let introducerCommissionExpense = 0;
+  let installationFeeTotal = 0;
   let orderCount = 0;
 
   // 处理销售订单
@@ -111,8 +136,29 @@ export function calculateFlowStats(
     purchaseReturnIncome += ret.totalAmount;
   });
 
-  const totalIncome = salesIncome + collectionIncome + purchaseReturnIncome;
-  const totalExpense = purchaseExpense + saleReturnExpense;
+  // 处理业务返点
+  commissions.forEach(comm => {
+    if (comm.type === 'INCOMING' && comm.category === 'SUPPLIER') {
+      supplierCommissionIncome += comm.amount;
+    } else if (comm.type === 'OUTGOING' && comm.category === 'INTRODUCER') {
+      introducerCommissionExpense += comm.amount;
+    }
+  });
+
+  // 处理日常支出
+  dailyExpenses.forEach(exp => {
+    dailyExpenseTotal += exp.amount;
+  });
+
+  // 处理安装费
+  serviceAppointments.forEach(appt => {
+    if (appt.installationFee) {
+      installationFeeTotal += appt.installationFee;
+    }
+  });
+
+  const totalIncome = salesIncome + collectionIncome + purchaseReturnIncome + supplierCommissionIncome;
+  const totalExpense = purchaseExpense + saleReturnExpense + dailyExpenseTotal + introducerCommissionExpense + installationFeeTotal;
   const netIncome = totalIncome - totalExpense;
 
   return {
@@ -123,8 +169,12 @@ export function calculateFlowStats(
     salesIncome,
     collectionIncome,
     purchaseReturnIncome,
+    supplierCommissionIncome,
     purchaseExpense,
     saleReturnExpense,
+    dailyExpenseTotal,
+    introducerCommissionExpense,
+    installationFeeTotal,
     cashAmount,
     wechatAmount,
     alipayAmount,

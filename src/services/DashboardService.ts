@@ -68,4 +68,68 @@ export const DashboardService = {
       include: { items: { include: { product: true } } },
     });
   },
+
+  async getDailyExpensesInDateRange(start: Date, end: Date) {
+    return db.dailyExpense.findMany({
+      where: { date: { gte: start, lte: end } },
+    });
+  },
+
+  async getServiceAppointmentsInDateRange(start: Date, end: Date) {
+    return db.serviceAppointment.findMany({
+      where: { appointmentDate: { gte: start, lte: end } },
+      include: {
+        contact: true,
+        product: true,
+      },
+    });
+  },
+
+  async getBusinessCommissionsInDateRange(start: Date, end: Date) {
+    return db.businessCommission.findMany({
+      where: { recordedAt: { gte: start, lte: end } },
+      include: {
+        contact: true,
+        supplier: true,
+        product: true,
+      },
+    });
+  },
+
+  async getDeliveringOrders() {
+    return db.deliveryRecord.findMany({
+      where: {
+        deliveryStatus: { in: ['pending', 'shipped', 'in_transit'] },
+      },
+      include: {
+        saleOrder: {
+          include: {
+            buyer: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    });
+  },
+
+  async getUpcomingAppointments() {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    return db.serviceAppointment.findMany({
+      where: {
+        status: { in: ['待上门', '已上门'] },
+        appointmentDate: {
+          gte: todayStart,
+          lte: todayEnd,
+        },
+      },
+      include: {
+        contact: true,
+        product: true,
+      },
+      orderBy: { appointmentDate: 'asc' },
+    });
+  },
 };

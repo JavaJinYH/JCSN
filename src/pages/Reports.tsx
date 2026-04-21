@@ -223,14 +223,17 @@ export function Reports() {
   };
 
   const loadFlowReport = async (start: Date, end: Date) => {
-    const [orders, collections, purchases, purchaseReturns] = await Promise.all([
+    const [orders, collections, purchases, purchaseReturns, commissions, dailyExpenses, serviceAppointments] = await Promise.all([
       DashboardService.getOrdersInDateRange(start, end),
       DashboardService.getCollectionsInDateRange(start, end),
       DashboardService.getPurchasesInDateRange(start, end),
       DashboardService.getPurchaseReturnsInDateRange(start, end),
+      DashboardService.getBusinessCommissionsInDateRange(start, end),
+      DashboardService.getDailyExpensesInDateRange(start, end),
+      DashboardService.getServiceAppointmentsInDateRange(start, end),
     ]);
 
-    const stats = calculateFlowStats(orders, collections, purchases, purchaseReturns);
+    const stats = calculateFlowStats(orders, collections, purchases, purchaseReturns, commissions, dailyExpenses, serviceAppointments);
     setFlowData(stats);
   };
 
@@ -603,42 +606,66 @@ export function Reports() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-3">
-                    <h3 className="font-medium text-slate-700 flex items-center gap-2">
-                      <span className="text-green-600">📥</span> 收入明细
-                    </h3>
-                    <div className="grid grid-cols-1 gap-2">
-                      <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
-                        <span>销售收款</span>
-                        <span className="font-bold text-slate-800">{formatCurrency(flowData.salesIncome)}</span>
+                      <div className="space-y-3">
+                        <h3 className="font-medium text-slate-700 flex items-center gap-2">
+                          <span className="text-green-600">📥</span> 收入明细
+                        </h3>
+                        <div className="grid grid-cols-1 gap-2">
+                          <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                            <span>销售收款</span>
+                            <span className="font-bold text-slate-800">{formatCurrency(flowData.salesIncome)}</span>
+                          </div>
+                          <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                            <span>客户回款</span>
+                            <span className="font-bold text-slate-800">{formatCurrency(flowData.collectionIncome)}</span>
+                          </div>
+                          <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                            <span>进货退款</span>
+                            <span className="font-bold text-slate-800">{formatCurrency(flowData.purchaseReturnIncome)}</span>
+                          </div>
+                          {flowData.supplierCommissionIncome > 0 && (
+                            <div className="flex justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                              <span>供应商返点</span>
+                              <span className="font-bold text-green-700">{formatCurrency(flowData.supplierCommissionIncome)}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
-                        <span>客户回款</span>
-                        <span className="font-bold text-slate-800">{formatCurrency(flowData.collectionIncome)}</span>
-                      </div>
-                      <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
-                        <span>进货退款</span>
-                        <span className="font-bold text-slate-800">{formatCurrency(flowData.purchaseReturnIncome)}</span>
-                      </div>
-                    </div>
-                  </div>
 
-                  <div className="space-y-3">
-                    <h3 className="font-medium text-slate-700 flex items-center gap-2">
-                      <span className="text-red-600">📤</span> 支出明细
-                    </h3>
-                    <div className="grid grid-cols-1 gap-2">
-                      <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
-                        <span>进货付款</span>
-                        <span className="font-bold text-slate-800">{formatCurrency(flowData.purchaseExpense)}</span>
-                      </div>
-                      <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
-                        <span>销售退款</span>
-                        <span className="font-bold text-slate-800">{formatCurrency(flowData.saleReturnExpense)}</span>
+                      <div className="space-y-3">
+                        <h3 className="font-medium text-slate-700 flex items-center gap-2">
+                          <span className="text-red-600">📤</span> 支出明细
+                        </h3>
+                        <div className="grid grid-cols-1 gap-2">
+                          <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                            <span>进货付款</span>
+                            <span className="font-bold text-slate-800">{formatCurrency(flowData.purchaseExpense)}</span>
+                          </div>
+                          <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                            <span>销售退款</span>
+                            <span className="font-bold text-slate-800">{formatCurrency(flowData.saleReturnExpense)}</span>
+                          </div>
+                          {flowData.introducerCommissionExpense > 0 && (
+                            <div className="flex justify-between p-3 bg-orange-50 rounded-lg border border-orange-200">
+                              <span>介绍人返点</span>
+                              <span className="font-bold text-orange-700">{formatCurrency(flowData.introducerCommissionExpense)}</span>
+                            </div>
+                          )}
+                          {flowData.dailyExpenseTotal > 0 && (
+                            <div className="flex justify-between p-3 bg-orange-50 rounded-lg border border-orange-200">
+                              <span>日常支出</span>
+                              <span className="font-bold text-orange-700">{formatCurrency(flowData.dailyExpenseTotal)}</span>
+                            </div>
+                          )}
+                          {flowData.installationFeeTotal > 0 && (
+                            <div className="flex justify-between p-3 bg-orange-50 rounded-lg border border-orange-200">
+                              <span>安装费</span>
+                              <span className="font-bold text-orange-700">{formatCurrency(flowData.installationFeeTotal)}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
 
                 <div className="pt-4 border-t border-slate-200">
                   <h3 className="font-medium text-slate-700 mb-3 flex items-center gap-2">
