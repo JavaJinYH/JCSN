@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { DataTableFilters, DataTablePagination, useDataTable } from '@/components/DataTable';
 import { LegacyBillService } from '@/services/LegacyBillService';
 import { ProjectService } from '@/services/ProjectService';
 import { EntityService } from '@/services/EntityService';

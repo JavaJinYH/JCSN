@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useEffect, useState, useMemo } from 'react';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -18,20 +18,42 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { DataTableFilters, DataTablePagination, useDataTable } from '@/components/DataTable';
 import { CollectionService } from '@/services/CollectionService';
-import { formatCurrency, formatDateTime, getAgingLevel } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import type { CollectionRecord, Contact, AccountReceivable } from '@/lib/types';
+
+const filters = [
+  { key: 'search', label: '关键词', type: 'text' as const, placeholder: '客户姓名、备注、沟通内容...' },
+  { key: 'collectionMethod', label: '催账方式', type: 'select' as const, options: [
+    { value: 'all', label: '全部' },
+    { value: '电话', label: '电话' },
+    { value: '微信', label: '微信' },
+    { value: '短信', label: '短信' },
+    { value: '上门', label: '上门' },
+    { value: '面谈', label: '面谈' },
+    { value: '其他', label: '其他' },
+  ]},
+  { key: 'collectionResult', label: '催账结果', type: 'select' as const, options: [
+    { value: 'all', label: '全部' },
+    { value: '已承诺付款', label: '已承诺付款' },
+    { value: '部分付款', label: '部分付款' },
+    { value: '拒绝付款', label: '拒绝付款' },
+    { value: '无法联系', label: '无法联系' },
+    { value: '协商中', label: '协商中' },
+  ]},
+];
 
 export function Collections() {
   const [records, setRecords] = useState<(CollectionRecord & { customer?: Contact })[]>([]);
   const [customers, setCustomers] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
   const [selectedReceivable, setSelectedReceivable] = useState<string>('');
   const [receivables, setReceivables] = useState<AccountReceivable[]>([]);
+  const [filterValues, setFilterValues] = useState<Record<string, any>>({});
   const [formData, setFormData] = useState({
     collectionDate: '',
     collectionTime: '',
@@ -66,12 +88,43 @@ export function Collections() {
     }
   };
 
-  const filteredRecords = records.filter((r) => {
-    if (!searchTerm) return true;
-    return (
-      r.customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.remark?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+  const handleFilterChange = (key: string, value: any) => {
+    setFilterValues((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleResetFilters = () => {
+    setFilterValues({});
+  };
+
+  const filteredRecords = useMemo(() => {
+    return records.filter((r) => {
+      if (filterValues.search) {
+        const search = filterValues.search.toLowerCase();
+        const matchCustomer = r.customer?.name.toLowerCase().includes(search);
+        const matchRemark = r.remark?.toLowerCase().includes(search);
+        const matchCommunication = r.communication?.toLowerCase().includes(search);
+        const matchNextPlan = r.nextPlan?.toLowerCase().includes(search);
+        if (!matchCustomer && !matchRemark && !matchCommunication && !matchNextPlan) {
+          return false;
+        }
+      }
+      if (filterValues.collectionMethod && filterValues.collectionMethod !== 'all') {
+        if (r.collectionMethod !== filterValues.collectionMethod) {
+          return false;
+        }
+      }
+      if (filterValues.collectionResult && filterValues.collectionResult !== 'all') {
+        if (r.collectionResult !== filterValues.collectionResult) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [records, filterValues]);
+
+  const tableProps = useDataTable({
+    data: filteredRecords,
+    defaultPageSize: 20,
   });
 
   const handleAddRecord = async () => {
@@ -166,13 +219,13 @@ export function Collections() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <div className="flex items-center gap-4 flex-wrap">
-            <Input
-              placeholder="搜索客户姓名、备注..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-64"
+            <DataTableFilters
+              filters={filters}
+              values={filterValues}
+              onChange={handleFilterChange}
+              onReset={handleResetFilters}
             />
             <Button variant="outline" onClick={loadData}>
               🔄 刷新
@@ -194,14 +247,14 @@ export function Collections() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredRecords.length === 0 ? (
+              {tableProps.data.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-slate-500">
                     暂无催账记录
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredRecords.map((record) => (
+                tableProps.data.map((record) => (
                   <TableRow key={record.id}>
                     <TableCell className="font-medium">
                       {record.customer?.name || '未知客户'}
@@ -250,6 +303,15 @@ export function Collections() {
               )}
             </TableBody>
           </Table>
+          <DataTablePagination
+            pagination={{
+              page: tableProps.page,
+              pageSize: tableProps.pageSize,
+              total: tableProps.total,
+            }}
+            onPageChange={tableProps.setPage}
+            onPageSizeChange={tableProps.setPageSize}
+          />
         </CardContent>
       </Card>
 

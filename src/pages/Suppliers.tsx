@@ -321,19 +321,17 @@ export function Suppliers() {
               )}
             </TableBody>
           </Table>
-          {tableProps.totalPages > 1 && (
-            <div className="mt-4">
-              <DataTablePagination
-                pagination={{
-                  page: tableProps.page,
-                  pageSize: tableProps.pageSize,
-                  total: tableProps.total,
-                }}
-                onPageChange={tableProps.setPage}
-                onPageSizeChange={tableProps.setPageSize}
-              />
-            </div>
-          )}
+          <div className="mt-4">
+            <DataTablePagination
+              pagination={{
+                page: tableProps.page,
+                pageSize: tableProps.pageSize,
+                total: tableProps.total,
+              }}
+              onPageChange={tableProps.setPage}
+              onPageSizeChange={tableProps.setPageSize}
+            />
+          </div>
         </CardContent>
       </Card>
 

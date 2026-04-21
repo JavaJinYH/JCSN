@@ -471,26 +471,43 @@ async function main() {
   const appointment1 = await prisma.serviceAppointment.create({
     data: {
       contactId: contacts[0].id,
-      productId: products[7].id,
       appointmentDate: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 0),
       serviceType: '水暖安装',
-      installer: '店主',
+      installerType: '店主',
       status: '待上门',
       installationFee: 100.0,
       notes: '厨房龙头安装',
     }
   });
 
+  await prisma.serviceAppointmentItem.create({
+    data: {
+      appointmentId: appointment1.id,
+      productId: products[7].id,
+      quantity: 1,
+      remark: '厨房龙头',
+    }
+  });
+
   const appointment2 = await prisma.serviceAppointment.create({
     data: {
       contactId: contacts[1].id,
-      productId: products[8].id,
       appointmentDate: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 14, 30),
       serviceType: '水暖安装',
-      installer: '水电工',
+      installerType: '水电工',
+      installerContactId: contacts[2].id,
       status: '待上门',
       installationFee: 150.0,
       notes: '花洒套装安装',
+    }
+  });
+
+  await prisma.serviceAppointmentItem.create({
+    data: {
+      appointmentId: appointment2.id,
+      productId: products[8].id,
+      quantity: 1,
+      remark: '花洒套装',
     }
   });
   console.log(`   ✅ 2 个服务预约（今日）`);
