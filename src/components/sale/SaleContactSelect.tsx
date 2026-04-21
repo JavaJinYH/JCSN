@@ -188,11 +188,11 @@ export function SaleContactSelect({
               <Input
                 value={newBuyer.primaryPhone}
                 onChange={(e) => setNewBuyer({ ...newBuyer, primaryPhone: e.target.value })}
-                placeholder="输入手机号（唯一标识）"
+                placeholder="输入手机号"
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">联系人类型</label>
+              <label className="text-sm font-medium mb-1 block">联系人类型 (可随便选，不影响系统)</label>
               <Select value={newBuyer.contactType} onValueChange={(v) => setNewBuyer({ ...newBuyer, contactType: v })}>
                 <SelectTrigger>
                   <SelectValue />

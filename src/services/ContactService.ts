@@ -219,8 +219,8 @@ export const ContactService = {
   },
 
   async getContactRebates(contactId: string) {
-    return db.rebate.findMany({
-      where: { plumberId: contactId },
+    return db.businessCommission.findMany({
+      where: { contactId: contactId },
       orderBy: { recordedAt: 'desc' },
     });
   },

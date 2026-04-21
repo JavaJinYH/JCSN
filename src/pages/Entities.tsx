@@ -36,9 +36,10 @@ type EntityWithRelations = Entity & {
 };
 
 const entityTypeOptions = [
-  { value: 'company', label: '公司/企业' },
+  { value: 'company', label: '装修/建材公司' },
+  { value: 'contractor', label: '包工头/水电工' },
+  { value: 'personal', label: '个人/业主' },
   { value: 'government', label: '政府/事业单位' },
-  { value: 'personal', label: '个人' },
 ];
 
 const filters = [
@@ -59,7 +60,7 @@ export function Entities() {
 
   const [formData, setFormData] = useState({
     name: '',
-    entityType: 'company' as 'company' | 'government' | 'personal',
+    entityType: 'company' as 'company' | 'contractor' | 'personal' | 'government',
     contactId: '',
     address: '',
     remark: '',
@@ -67,7 +68,7 @@ export function Entities() {
 
   const [editFormData, setEditFormData] = useState({
     name: '',
-    entityType: 'company' as 'company' | 'government' | 'personal',
+    entityType: 'company' as 'company' | 'contractor' | 'personal' | 'government',
     contactId: '',
     address: '',
     remark: '',
@@ -227,7 +228,7 @@ export function Entities() {
     setSelectedEntity(entity);
     setEditFormData({
       name: entity.name,
-      entityType: entity.entityType as 'company' | 'government' | 'personal',
+      entityType: entity.entityType as 'company' | 'contractor' | 'personal' | 'government',
       contactId: entity.contact?.id || '',
       address: entity.address || '',
       remark: entity.remark || '',
@@ -255,11 +256,13 @@ export function Entities() {
   const getEntityTypeBadge = (type: string) => {
     switch (type) {
       case 'company':
-        return <Badge className="bg-blue-500 hover:bg-blue-600">公司</Badge>;
+        return <Badge className="bg-blue-500 hover:bg-blue-600">装修/建材公司</Badge>;
+      case 'contractor':
+        return <Badge className="bg-green-500 hover:bg-green-600">包工头/水电工</Badge>;
+      case 'personal':
+        return <Badge variant="secondary">个人/业主</Badge>;
       case 'government':
         return <Badge className="bg-purple-500 hover:bg-purple-600">政府/事业单位</Badge>;
-      case 'personal':
-        return <Badge variant="secondary">个人</Badge>;
       default:
         return <Badge>{type}</Badge>;
     }
@@ -300,19 +303,21 @@ export function Entities() {
             <div className="text-2xl font-bold text-blue-600">
               {filteredEntities.filter((e) => e.entityType === 'company').length}
             </div>
-            <div className="text-sm text-slate-500">公司</div>
+            <div className="text-sm text-slate-500">装修/建材公司</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold text-green-600">
+              {filteredEntities.filter((e) => e.entityType === 'contractor').length}
+            </div>
+            <div className="text-sm text-slate-500">包工头/水电工</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-orange-600">{formatCurrency(totalEntityAmount)}</div>
             <div className="text-sm text-slate-500">主体销售额</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-green-600">{formatCurrency(totalPaidAmount)}</div>
-            <div className="text-sm text-slate-500">已收款</div>
           </CardContent>
         </Card>
       </div>
@@ -412,7 +417,7 @@ export function Entities() {
               <label className="text-sm font-medium mb-2 block">主体类型</label>
               <Select
                 value={formData.entityType}
-                onValueChange={(v) => setFormData({ ...formData, entityType: v as 'company' | 'government' | 'personal' })}
+                onValueChange={(v) => setFormData({ ...formData, entityType: v as 'company' | 'contractor' | 'personal' | 'government' })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -493,7 +498,7 @@ export function Entities() {
               <label className="text-sm font-medium mb-2 block">主体类型</label>
               <Select
                 value={editFormData.entityType}
-                onValueChange={(v) => setEditFormData({ ...editFormData, entityType: v as 'company' | 'government' | 'personal' })}
+                onValueChange={(v) => setEditFormData({ ...editFormData, entityType: v as 'company' | 'contractor' | 'personal' | 'government' })}
               >
                 <SelectTrigger>
                   <SelectValue />

@@ -2,7 +2,7 @@ import { db } from '@/lib/db';
 
 export const PhotoService = {
   async getSalePhotos(include?: any) {
-    return db.SaleOrderPhoto.findMany({
+    return db.saleOrderPhoto.findMany({
       include: include?.sale
         ? { saleOrder: { include: { buyer: true } } }
         : undefined,
@@ -11,9 +11,9 @@ export const PhotoService = {
   },
 
   async getPurchasePhotos(include?: any) {
-    return db.PurchasePhoto.findMany({
+    return db.purchasePhoto.findMany({
       include: include?.purchase
-        ? { purchase: { include: { product: true } } }
+        ? { purchase: { include: { product: true, supplier: true } } }
         : undefined,
       orderBy: { createdAt: 'desc' },
     });

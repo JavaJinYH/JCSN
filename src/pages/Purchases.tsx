@@ -31,6 +31,8 @@ import {
 } from '@/components/purchase';
 import { Combobox } from '@/components/Combobox';
 import { PhotoUpload } from '@/components/PhotoUpload';
+import { PhotoThumbnail } from '@/components/PhotoThumbnail';
+import { PhotoViewer } from '@/components/PhotoViewer';
 
 interface PurchaseItemRow {
   id: string;
@@ -184,7 +186,7 @@ export function Purchases() {
         ? suppliers.find(s => s.id === commonSupplierId)
         : null;
 
-      const { order, items: createdItems } = await PurchaseService.createPurchaseOrder({
+      const result = await PurchaseService.createPurchaseOrder({
         items: validItems.map(item => ({
           productId: item.productId,
           quantity: parseInt(item.quantity),
@@ -198,35 +200,8 @@ export function Purchases() {
         driverName: driverName || null,
         driverPhone: driverPhone || null,
         estimatedDeliveryDate: needDelivery && estimatedDate ? new Date(estimatedDate) : null,
+        photos: photos,
       });
-
-      for (const photo of photos) {
-        if (photo.file) {
-          const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-          const photoTypeNames: Record<string, string> = {
-            delivery: '送货单',
-            signed: '签收单',
-          };
-          const typeName = photoTypeNames[photo.type] || photo.type;
-          const ext = photo.file.name.split('.').pop() || 'jpg';
-          const fileName = `${dateStr}_${order.id}_${typeName}.${ext}`;
-
-          const reader = new FileReader();
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(photo.file);
-          });
-
-          await (window as any).electronAPI.photo.save(fileName, dataUrl, 'purchases');
-
-          await PurchaseService.createPurchasePhoto(createdItems[0].id, {
-            url: `purchases/${fileName}`,
-            type: photo.type,
-            remark: photo.remark || undefined,
-          });
-        }
-      }
 
       setShowAddDialog(false);
       setPurchaseItems([{ id: '1', productId: '', quantity: '', unitPrice: '' }]);
@@ -239,7 +214,7 @@ export function Purchases() {
       setEstimatedDate('');
       setPhotos([]);
       loadData();
-      toast(`成功添加进货单，包含 ${createdItems.length} 种商品！`, 'success');
+      toast(`成功添加进货单，包含 ${validItems.length} 种商品！`, 'success');
     } catch (error) {
       console.error('Failed to add purchase:', error);
       toast('添加失败，请重试', 'error');
@@ -677,6 +652,10 @@ function OrderDetail({
   const [editQuantity, setEditQuantity] = useState('');
   const [editUnitPrice, setEditUnitPrice] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showPhotoUploadDialog, setShowPhotoUploadDialog] = useState(false);
+  const [uploadPhotos, setUploadPhotos] = useState<{ id: string; file?: File; preview: string; remark: string; type: string }[]>([]);
+  const [showPhotoViewer, setShowPhotoViewer] = useState(false);
+  const [photoViewerIndex, setPhotoViewerIndex] = useState(0);
 
   useEffect(() => {
     if (open && orderId) {
@@ -775,12 +754,75 @@ function OrderDetail({
       loadOrder();
       onStatusChange();
       toast('已确认到货，库存已增加', 'success');
+      // 建议上传签收单
+      setTimeout(() => {
+        setShowPhotoUploadDialog(true);
+      }, 500);
     } catch (error) {
       console.error('[OrderDetail] 确认到货失败:', error);
       toast('操作失败', 'error');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleUploadPhotos = async () => {
+    if (!order || uploadPhotos.length === 0) {
+      setShowPhotoUploadDialog(false);
+      setUploadPhotos([]);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      for (const photo of uploadPhotos) {
+        if (photo.file) {
+          const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+          const fileName = `${dateStr}_${order.id}_${photo.type || 'signed'}_${Date.now()}.${photo.file.name.split('.').pop() || 'jpg'}`;
+
+          const reader = new FileReader();
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(photo.file);
+          });
+
+          await (window as any).electronAPI.photo.save(fileName, dataUrl, 'purchases');
+
+          // 为订单中的第一个商品添加照片关联（因为照片是属于订单级别的，但数据库只支持关联到单个采购项）
+          // 未来可以改进数据库结构，支持订单级别的照片
+          if (order.items.length > 0) {
+            await PurchaseService.createPurchasePhoto(order.items[0].id, {
+              url: `purchases/${fileName}`,
+              type: photo.type || 'signed',
+              remark: photo.remark || undefined,
+            });
+          }
+        }
+      }
+      loadOrder();
+      onStatusChange();
+      setShowPhotoUploadDialog(false);
+      setUploadPhotos([]);
+      toast('照片上传成功', 'success');
+    } catch (error) {
+      console.error('[OrderDetail] 照片上传失败:', error);
+      toast('照片上传失败', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const getAllPhotos = () => {
+    if (!order) return [];
+    // 收集所有商品的照片
+    const allPhotos: any[] = [];
+    order.items.forEach(item => {
+      if (item.photos) {
+        allPhotos.push(...item.photos);
+      }
+    });
+    return allPhotos;
   };
 
   const handleComplete = async () => {
@@ -979,6 +1021,94 @@ function OrderDetail({
           ))}
         </div>
       </div>
+
+      {/* 显示已上传的照片 */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium text-slate-700">单据照片</div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowPhotoUploadDialog(true)}
+          >
+            + 添加照片
+          </Button>
+        </div>
+        {getAllPhotos().length > 0 ? (
+          <div className="grid grid-cols-4 gap-3">
+            {getAllPhotos().map((photo, index) => (
+              <div
+                key={photo.id}
+                onClick={() => {
+                  setPhotoViewerIndex(index);
+                  setShowPhotoViewer(true);
+                }}
+              >
+                <PhotoThumbnail
+                  photo={photo}
+                  onClick={() => {
+                    setPhotoViewerIndex(index);
+                    setShowPhotoViewer(true);
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-slate-500">
+            <div className="text-3xl mb-2">📷</div>
+            <div>暂无照片</div>
+          </div>
+        )}
+      </div>
+
+      {/* 照片上传对话框 */}
+      <Dialog open={showPhotoUploadDialog} onOpenChange={setShowPhotoUploadDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>上传单据照片</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-700">
+              建议上传签字确认单，方便年底对账（可选）
+            </div>
+            <PhotoUpload
+              photos={uploadPhotos}
+              onChange={setUploadPhotos}
+              maxPhotos={5}
+            />
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowPhotoUploadDialog(false);
+                  setUploadPhotos([]);
+                }}
+                disabled={saving}
+              >
+                取消
+              </Button>
+              <Button
+                onClick={handleUploadPhotos}
+                disabled={saving}
+                className="bg-orange-500 hover:bg-orange-600"
+              >
+                {saving ? '上传中...' : '上传照片'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 照片查看器 */}
+      {showPhotoViewer && (
+        <PhotoViewer
+          photos={getAllPhotos()}
+          open={showPhotoViewer}
+          onOpenChange={setShowPhotoViewer}
+          initialIndex={photoViewerIndex}
+        />
+      )}
     </div>
   );
 }

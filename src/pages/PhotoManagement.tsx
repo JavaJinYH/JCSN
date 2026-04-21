@@ -17,10 +17,10 @@ interface SalePhotoItem {
   photoRemark: string | null;
   createdAt: string;
   _type: 'sale';
-  sale?: {
+  saleOrder?: {
     invoiceNo: string | null;
     saleDate: string;
-    customer?: { name: string } | null;
+    buyer?: { name: string } | null;
   };
 }
 
@@ -33,7 +33,7 @@ interface PurchasePhotoItem {
   _type: 'purchase';
   purchase?: {
     purchaseDate: string;
-    supplier: string | null;
+    supplierName: string | null;
     product?: { name: string } | null;
   };
 }
@@ -67,8 +67,16 @@ export function PhotoManagement() {
       ]);
 
       const allPhotos: PhotoItem[] = [
-        ...salePhotos.map((p) => ({ ...p, _type: 'sale' as const })),
-        ...purchasePhotos.map((p) => ({ ...p, _type: 'purchase' as const })),
+        ...salePhotos.map((p) => ({ 
+          ...p, 
+          _type: 'sale' as const,
+          createdAt: p.createdAt.toString()
+        })),
+        ...purchasePhotos.map((p) => ({ 
+          ...p, 
+          _type: 'purchase' as const,
+          createdAt: p.createdAt.toString()
+        })),
       ];
 
       setPhotos(allPhotos);
@@ -90,8 +98,9 @@ export function PhotoManagement() {
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch =
       !searchTerm ||
-      (photo as any).sale?.invoiceNo?.toLowerCase().includes(searchLower) ||
-      (photo as any).purchase?.supplier?.toLowerCase().includes(searchLower) ||
+      (photo as any).saleOrder?.invoiceNo?.toLowerCase().includes(searchLower) ||
+      (photo as any).purchase?.supplierName?.toLowerCase().includes(searchLower) ||
+      (photo as any).purchase?.product?.name?.toLowerCase().includes(searchLower) ||
       photo.photoRemark?.toLowerCase().includes(searchLower);
 
     return matchesDateStart && matchesDateEnd && matchesType && matchesSearch;

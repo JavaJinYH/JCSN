@@ -26,7 +26,7 @@ import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 
 const SERVICE_TYPES = ['水暖安装', '维修', '其他'];
-const INSTALLER_TYPES = ['无', '店主', '水电工', '第三方'];
+const INSTALLER_TYPES = ['店主', '水电工', '第三方'];
 const STATUS_OPTIONS = ['待上门', '已上门', '待返工', '已完成'];
 const STATUS_COLORS: Record<string, 'success' | 'warning' | 'default' | 'destructive' | 'outline' | 'secondary'> = {
   '待上门': 'secondary',

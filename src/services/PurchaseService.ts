@@ -1,17 +1,25 @@
 import { db } from '@/lib/db';
 import { generateBatchNo } from '@/lib/utils';
 
+export interface CreatePhotoDTO {
+  file?: File;
+  preview: string;
+  remark?: string;
+  type: string;
+}
+
 export interface CreatePurchaseOrderDTO {
   items: CreatePurchaseItemDTO[];
   supplierId?: string | null;
   supplierName?: string | null;
   commonBatchNo?: string;
-  commonRemark?: string;
+  commonRemark?: string | null;
   purchaseDate?: Date;
   needDelivery?: boolean;
   driverName?: string | null;
   driverPhone?: string | null;
   estimatedDeliveryDate?: Date | null;
+  photos?: CreatePhotoDTO[];
 }
 
 export interface CreatePurchaseItemDTO {
@@ -71,7 +79,28 @@ export const PurchaseService = {
       createdItems.push(purchase);
     }
 
-    return { order, items: createdItems };
+    let savedPhotos: any[] = [];
+    if (data.photos && data.photos.length > 0 && createdItems.length > 0) {
+      for (const photo of data.photos) {
+        if (photo.file) {
+          const fileName = `purchase_${order.id}_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+          const result = await (window as any).electronAPI.photo.save(fileName, photo.preview, 'purchases');
+          if (result.success) {
+            const savedPhoto = await db.purchasePhoto.create({
+              data: {
+                purchaseId: createdItems[0].id,
+                photoPath: result.data.path,
+                photoType: photo.type,
+                photoRemark: photo.remark || null,
+              },
+            });
+            savedPhotos.push(savedPhoto);
+          }
+        }
+      }
+    }
+
+    return { order, items: createdItems, photos: savedPhotos };
   },
 
   async getPurchaseOrders(filters?: PurchaseOrderFilters) {
@@ -353,10 +382,9 @@ export const PurchaseService = {
     return db.purchasePhoto.create({
       data: {
         purchaseId,
-        url: data.url,
-        photoPath: data.photoPath,
-        type: data.type || data.photoType,
-        remark: data.remark || data.photoRemark,
+        photoPath: data.photoPath || data.url || '',
+        photoType: data.type || data.photoType || 'delivery',
+        photoRemark: data.remark || data.photoRemark || null,
       },
     });
   },

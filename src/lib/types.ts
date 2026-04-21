@@ -124,6 +124,7 @@ export interface Purchase {
   driverPhone: string | null;
   estimatedDeliveryDate: Date | null;
   createdAt: Date;
+  photos?: PurchasePhoto[];
 }
 
 export interface CreditRecord {

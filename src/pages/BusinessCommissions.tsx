@@ -58,11 +58,11 @@ export function BusinessCommissions() {
   const [formData, setFormData] = useState({
     type: 'OUTGOING' as CommissionType,
     category: 'INTRODUCER' as CommissionCategory,
-    projectId: '__none__' as string,
-    saleOrderId: '__none__' as string,
-    contactId: '__none__' as string,
-    supplierId: '__none__' as string,
-    productId: '__none__' as string,
+    projectId: '' as string,
+    saleOrderId: '' as string,
+    contactId: '' as string,
+    supplierId: '' as string,
+    productId: '' as string,
     amount: '',
     remark: '',
   });
@@ -104,7 +104,7 @@ export function BusinessCommissions() {
   const loadSalesByProject = async (projectId: string) => {
     try {
       let data;
-      if (projectId && projectId !== '__none__') {
+      if (projectId) {
         data = await BusinessCommissionService.getSaleOrdersByProject(projectId);
       } else {
         data = await BusinessCommissionService.getAllSaleOrders();
@@ -159,11 +159,11 @@ export function BusinessCommissions() {
     }
 
     try {
-      const contactId = formData.contactId === '__none__' ? undefined : formData.contactId;
-      const supplierId = formData.supplierId === '__none__' ? undefined : formData.supplierId;
-      const productId = formData.productId === '__none__' ? undefined : formData.productId;
-      const saleOrderId = formData.saleOrderId === '__none__' ? undefined : formData.saleOrderId;
-      const projectId = formData.projectId === '__none__' ? undefined : formData.projectId;
+      const contactId = formData.contactId || undefined;
+      const supplierId = formData.supplierId || undefined;
+      const productId = formData.productId || undefined;
+      const saleOrderId = formData.saleOrderId || undefined;
+      const projectId = formData.projectId || undefined;
 
       await BusinessCommissionService.createCommission({
         type: formData.type,
@@ -181,11 +181,11 @@ export function BusinessCommissions() {
       setFormData({
         type: 'OUTGOING',
         category: 'INTRODUCER',
-        projectId: '__none__',
-        saleOrderId: '__none__',
-        contactId: '__none__',
-        supplierId: '__none__',
-        productId: '__none__',
+        projectId: '',
+        saleOrderId: '',
+        contactId: '',
+        supplierId: '',
+        productId: '',
         amount: '',
         remark: '',
       });
@@ -314,11 +314,11 @@ export function BusinessCommissions() {
                 ...formData,
                 type,
                 category,
-                projectId: '__none__',
-                saleOrderId: '__none__',
-                contactId: '__none__',
-                supplierId: '__none__',
-                productId: '__none__',
+                projectId: '',
+                saleOrderId: '',
+                contactId: '',
+                supplierId: '',
+                productId: '',
               });
             }}>
               <TabsList>
@@ -333,7 +333,7 @@ export function BusinessCommissions() {
                 <Combobox
                   value={formData.projectId}
                   onValueChange={(value) => {
-                    setFormData({ ...formData, projectId: value, saleOrderId: '__none__' });
+                    setFormData({ ...formData, projectId: value, saleOrderId: '' });
                   }}
                   options={projectOptions}
                   placeholder="搜索并选择项目"
@@ -347,7 +347,7 @@ export function BusinessCommissions() {
                 <div className="flex gap-2">
                   <Input
                     value={(() => {
-                      if (formData.saleOrderId === '__none__') return '';
+                      if (!formData.saleOrderId) return '';
                       const sale = sales.find((s) => s.id === formData.saleOrderId);
                       if (sale) return sale.invoiceNo || sale.id.slice(0, 8);
                       return '已选择';
@@ -359,7 +359,7 @@ export function BusinessCommissions() {
                   />
                   <Button
                     variant="outline"
-                    onClick={() => setFormData({ ...formData, saleOrderId: '__none__' })}
+                    onClick={() => setFormData({ ...formData, saleOrderId: '' })}
                   >
                     清除
                   </Button>
@@ -444,7 +444,7 @@ export function BusinessCommissions() {
           <div className="py-4">
             {sales.length === 0 ? (
               <div className="text-center text-slate-500 py-8">
-                {formData.projectId === '__none__' ? '暂无销售单' : '该项目暂无销售单'}
+                {!formData.projectId ? '暂无销售单' : '该项目暂无销售单'}
               </div>
             ) : (
               <div className="space-y-2 max-h-96 overflow-y-auto">

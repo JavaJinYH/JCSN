@@ -239,7 +239,6 @@ export function Inventory() {
               📝 生成进货单 ({selectedProducts.size})
             </Button>
           )}
-          <Button variant="outline">📥 导出库存</Button>
         </div>
       </div>
 

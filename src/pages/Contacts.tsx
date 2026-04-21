@@ -611,7 +611,7 @@ export function Contacts() {
         <h3 className="font-medium text-blue-800 mb-2">数据说明</h3>
         <div className="text-sm text-blue-700 space-y-1">
           <p>• 联系人数据用于新建销售单，支持选择购货人、付款人、介绍人、提货人</p>
-          <p>• 点击「详情」查看联系人的订单、返点、项目等信息</p>
+          <p>• 点击「详情」查看联系人的订单、佣金、项目等信息</p>
           <p>• 点击「编辑」修改联系人基本信息</p>
           <p>• 新增联系人请使用「+ 添加联系人」按钮</p>
         </div>
@@ -635,7 +635,7 @@ export function Contacts() {
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">
-                联系人类型
+                联系人类型 (可随便选，不影响系统)
               </label>
               <Select value={formData.contactType} onValueChange={(v) => setFormData({ ...formData, contactType: v })}>
                 <SelectTrigger>
@@ -679,7 +679,7 @@ export function Contacts() {
               <Input
                 value={formData.primaryPhone}
                 onChange={(e) => setFormData({ ...formData, primaryPhone: e.target.value })}
-                placeholder="输入手机号（唯一标识）"
+                placeholder="输入手机号"
               />
             </div>
             <div>
@@ -726,7 +726,7 @@ export function Contacts() {
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">
-                联系人类型
+                联系人类型 (可随便选，不影响系统)
               </label>
               <Select value={formData.contactType} onValueChange={(v) => setFormData({ ...formData, contactType: v })}>
                 <SelectTrigger>
@@ -746,7 +746,7 @@ export function Contacts() {
               <Input
                 value={formData.primaryPhone}
                 onChange={(e) => setFormData({ ...formData, primaryPhone: e.target.value })}
-                placeholder="输入手机号（唯一标识）"
+                placeholder="输入手机号"
               />
             </div>
             <div>
@@ -796,9 +796,9 @@ export function Contacts() {
                   <div className="text-xl font-bold text-green-600">{contactDetail.orderCount} 笔</div>
                 </div>
                 <div className="bg-purple-50 p-4 rounded-lg">
-                  <div className="text-sm text-slate-500">累计返点</div>
+                  <div className="text-sm text-slate-500">累计佣金</div>
                   <div className="text-xl font-bold text-purple-600">
-                    {formatCurrency(detailRebates.reduce((sum, r) => sum + (r.rebateAmount || 0), 0))}
+                    {formatCurrency(detailRebates.reduce((sum, r) => sum + (r.amount || 0), 0))}
                   </div>
                 </div>
                 <div className="bg-slate-50 p-4 rounded-lg">
@@ -915,7 +915,7 @@ export function Contacts() {
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">返点记录:</span>
+                      <span className="text-slate-500">佣金记录:</span>
                       <span>{detailRebates.length} 条</span>
                     </div>
                     <div className="flex justify-between">
@@ -966,7 +966,7 @@ export function Contacts() {
 
               {detailRebates.length > 0 && (
                 <div>
-                  <h4 className="font-medium mb-3">返点记录 ({detailRebates.length})</h4>
+                  <h4 className="font-medium mb-3">业务佣金记录 ({detailRebates.length})</h4>
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -978,12 +978,12 @@ export function Contacts() {
                     <TableBody>
                       {detailRebates.slice(0, 5).map((rebate, index) => (
                         <TableRow key={index}>
-                          <TableCell className="font-mono text-purple-600">
-                            {formatCurrency(rebate.rebateAmount)}
+                          <TableCell className={`font-mono ${rebate.type === 'OUTGOING' ? 'text-purple-600' : 'text-green-600'}`}>
+                            {formatCurrency(rebate.amount)}
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline">
-                              {rebate.rebateType === 'cash' ? '现金' : rebate.rebateType === 'transfer' ? '转账' : '抵扣'}
+                              {rebate.category === 'INTRODUCER' ? '介绍人返点' : '供应商返点'}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-slate-500">
