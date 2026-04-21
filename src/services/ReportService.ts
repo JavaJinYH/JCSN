@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { calculateNetSales, calculateOrderProfit } from '@/lib/calculations';
 
 export const ReportService = {
   async getSalesInPeriod(start: Date, end: Date) {
@@ -35,27 +36,11 @@ export const ReportService = {
   },
 
   calculateNetSales(order: any) {
-    let sales = order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0);
-    for (const ret of order.returns || []) {
-      sales -= ret.totalAmount;
-    }
-    return sales;
+    return calculateNetSales(order);
   },
 
   calculateNetProfit(order: any) {
-    const netSales = this.calculateNetSales(order);
-    let cost = 0;
-
-    for (const item of order.items || []) {
-      cost += (item.costPriceSnapshot || 0) * item.quantity;
-    }
-
-    let writeOffs = 0;
-    for (const writeOff of order.badDebtWriteOffs || []) {
-      writeOffs += writeOff.writtenOffAmount;
-    }
-
-    return Math.max(0, netSales - cost - writeOffs);
+    return calculateOrderProfit(order);
   },
 
   async getReturnsInPeriod(start: Date, end: Date) {

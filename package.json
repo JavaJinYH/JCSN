@@ -12,7 +12,9 @@
     "electron:build": "npm run build && electron-builder",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "db:seed": "node prisma/seed.js"
+    "db:seed": "scripts\\run-node.cmd prisma/seed.js",
+    "db:cleanup-walkin": "scripts\\run-node.cmd prisma/cleanup-duplicate-walk-in.js",
+    "db:clear": "scripts\\run-node.cmd prisma/clear-data.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

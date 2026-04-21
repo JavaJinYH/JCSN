@@ -35,6 +35,8 @@ import {
 } from 'recharts';
 import { ReportService } from '@/services/ReportService';
 import { ContactAnalyticsService } from '@/services/ContactAnalyticsService';
+import { calculateFlowStats, calculateNetSales, calculateOrderCost } from '@/lib/calculations';
+import { DashboardService } from '@/services/DashboardService';
 import { formatCurrency } from '@/lib/utils';
 import type { Contact } from '@/lib/types';
 import dayjs from 'dayjs';
@@ -132,6 +134,8 @@ export function Reports() {
   const [contactAsEntity, setContactAsEntity] = useState<any[]>([]);
   const [contactAsIntroducer, setContactAsIntroducer] = useState<any[]>([]);
   const [contactSubTab, setContactSubTab] = useState<'entity' | 'introducer'>('entity');
+  const [dailySubTab, setDailySubTab] = useState<'sales' | 'flow'>('sales');
+  const [flowData, setFlowData] = useState<any>(null);
 
   useEffect(() => {
     loadReport();
@@ -147,7 +151,10 @@ export function Reports() {
         case 'daily':
         case 'monthly':
         case 'yearly':
-          await loadSalesReport(start, end);
+          await Promise.all([
+            loadSalesReport(start, end),
+            loadFlowReport(start, end),
+          ]);
           break;
         case 'products':
           await loadProductReport(start, end);
@@ -178,18 +185,9 @@ export function Reports() {
     let totalSales = 0;
     let totalCost = 0;
     orders.forEach(order => {
-      const netSales = ReportService.calculateNetSales(order);
+      const netSales = calculateNetSales(order);
       totalSales += netSales;
-
-      let orderCost = order.items.reduce((sum, item) => sum + item.costPriceSnapshot * item.quantity, 0);
-      let orderTotal = order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0);
-
-      if (orderTotal > 0) {
-        const retRatio = order.returns?.reduce((sum, r) => sum + r.totalAmount, 0) / orderTotal || 0;
-        const writeOffRatio = order.badDebtWriteOffs?.reduce((sum, w) => sum + w.writtenOffAmount, 0) / orderTotal || 0;
-        orderCost = orderCost * (1 - retRatio - writeOffRatio);
-      }
-      totalCost += Math.max(0, orderCost);
+      totalCost += calculateOrderCost(order);
     });
 
     const totalProfit = totalSales - totalCost;
@@ -210,7 +208,7 @@ export function Reports() {
       const key = dayjs(order.saleDate).format('MM-DD');
       const existing = dailyData.get(key);
       if (existing) {
-        existing.sales += ReportService.calculateNetSales(order);
+        existing.sales += calculateNetSales(order);
         existing.orders += 1;
       }
     });
@@ -222,6 +220,18 @@ export function Reports() {
         orders: data.orders,
       }))
     );
+  };
+
+  const loadFlowReport = async (start: Date, end: Date) => {
+    const [orders, collections, purchases, purchaseReturns] = await Promise.all([
+      DashboardService.getOrdersInDateRange(start, end),
+      DashboardService.getCollectionsInDateRange(start, end),
+      DashboardService.getPurchasesInDateRange(start, end),
+      DashboardService.getPurchaseReturnsInDateRange(start, end),
+    ]);
+
+    const stats = calculateFlowStats(orders, collections, purchases, purchaseReturns);
+    setFlowData(stats);
   };
 
   const loadProductReport = async (start: Date, end: Date) => {
@@ -268,15 +278,8 @@ export function Reports() {
       const key = dayjs(order.saleDate).format('MM-DD');
       const existing = dailyData.get(key);
       if (existing) {
-        const netSales = ReportService.calculateNetSales(order);
-        let orderCost = order.items.reduce((sum, item) => sum + item.costPriceSnapshot * item.quantity, 0);
-        let orderTotal = order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0);
-
-        if (orderTotal > 0) {
-          const retRatio = order.returns?.reduce((sum, r) => sum + r.totalAmount, 0) / orderTotal || 0;
-          const writeOffRatio = order.badDebtWriteOffs?.reduce((sum, w) => sum + w.writtenOffAmount, 0) / orderTotal || 0;
-          orderCost = orderCost * (1 - retRatio - writeOffRatio);
-        }
+        const netSales = calculateNetSales(order);
+        const orderCost = calculateOrderCost(order);
         
         existing.revenue += netSales;
         existing.cost += orderCost;
@@ -296,16 +299,8 @@ export function Reports() {
     let totalRevenue = 0;
     let totalCost = 0;
     orders.forEach(order => {
-      totalRevenue += ReportService.calculateNetSales(order);
-      let orderCost = order.items.reduce((sum, item) => sum + item.costPriceSnapshot * item.quantity, 0);
-      let orderTotal = order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0);
-
-      if (orderTotal > 0) {
-        const retRatio = order.returns?.reduce((sum, r) => sum + r.totalAmount, 0) / orderTotal || 0;
-        const writeOffRatio = order.badDebtWriteOffs?.reduce((sum, w) => sum + w.writtenOffAmount, 0) / orderTotal || 0;
-        orderCost = orderCost * (1 - retRatio - writeOffRatio);
-      }
-      totalCost += Math.max(0, orderCost);
+      totalRevenue += calculateNetSales(order);
+      totalCost += calculateOrderCost(order);
     });
 
     setReportData({
@@ -534,41 +529,142 @@ export function Reports() {
       {(reportType === 'daily' || reportType === 'monthly' || reportType === 'yearly') && (
         <Card>
           <CardHeader>
-            <CardTitle>销售趋势</CardTitle>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={dailySubTab === 'sales' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDailySubTab('sales')}
+              >
+                销售报表
+              </Button>
+              <Button
+                variant={dailySubTab === 'flow' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDailySubTab('flow')}
+              >
+                流水账
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="date" stroke="#64748b" fontSize={12} />
-                  <YAxis stroke="#64748b" fontSize={12} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                    }}
-                    formatter={(value: number) => formatCurrency(value)}
-                  />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="sales"
-                    stroke="#f97316"
-                    strokeWidth={2}
-                    name="销售额"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="orders"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    name="订单数"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            {dailySubTab === 'sales' && (
+              <div>
+                <div className="h-[400px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="date" stroke="#64748b" fontSize={12} />
+                      <YAxis stroke="#64748b" fontSize={12} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#fff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px',
+                        }}
+                        formatter={(value: number) => formatCurrency(value)}
+                      />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="sales"
+                        stroke="#f97316"
+                        strokeWidth={2}
+                        name="销售额"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="orders"
+                        stroke="#3b82f6"
+                        strokeWidth={2}
+                        name="订单数"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {dailySubTab === 'flow' && flowData && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+                    <div className="text-sm text-green-600">📈 总收入</div>
+                    <div className="text-2xl font-bold text-green-700">{formatCurrency(flowData.totalIncome)}</div>
+                  </div>
+                  <div className="text-center p-4 bg-red-50 rounded-lg border border-red-200">
+                    <div className="text-sm text-red-600">📉 总支出</div>
+                    <div className="text-2xl font-bold text-red-700">{formatCurrency(flowData.totalExpense)}</div>
+                  </div>
+                  <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="text-sm text-blue-600">💰 净收入</div>
+                    <div className="text-2xl font-bold text-blue-700">{formatCurrency(flowData.netIncome)}</div>
+                    <div className="text-xs text-blue-500">{flowData.orderCount} 笔订单</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <h3 className="font-medium text-slate-700 flex items-center gap-2">
+                      <span className="text-green-600">📥</span> 收入明细
+                    </h3>
+                    <div className="grid grid-cols-1 gap-2">
+                      <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                        <span>销售收款</span>
+                        <span className="font-bold text-slate-800">{formatCurrency(flowData.salesIncome)}</span>
+                      </div>
+                      <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                        <span>客户回款</span>
+                        <span className="font-bold text-slate-800">{formatCurrency(flowData.collectionIncome)}</span>
+                      </div>
+                      <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                        <span>进货退款</span>
+                        <span className="font-bold text-slate-800">{formatCurrency(flowData.purchaseReturnIncome)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="font-medium text-slate-700 flex items-center gap-2">
+                      <span className="text-red-600">📤</span> 支出明细
+                    </h3>
+                    <div className="grid grid-cols-1 gap-2">
+                      <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                        <span>进货付款</span>
+                        <span className="font-bold text-slate-800">{formatCurrency(flowData.purchaseExpense)}</span>
+                      </div>
+                      <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                        <span>销售退款</span>
+                        <span className="font-bold text-slate-800">{formatCurrency(flowData.saleReturnExpense)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-200">
+                  <h3 className="font-medium text-slate-700 mb-3 flex items-center gap-2">
+                    <span>💳</span> 收款方式统计
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center p-3 bg-green-50 rounded-lg">
+                      <div className="text-sm text-green-600">💵 现金</div>
+                      <div className="text-xl font-bold text-green-700">{formatCurrency(flowData.cashAmount)}</div>
+                    </div>
+                    <div className="text-center p-3 bg-green-50 rounded-lg">
+                      <div className="text-sm text-green-600">💚 微信</div>
+                      <div className="text-xl font-bold text-green-700">{formatCurrency(flowData.wechatAmount)}</div>
+                    </div>
+                    <div className="text-center p-3 bg-blue-50 rounded-lg">
+                      <div className="text-sm text-blue-600">💙 支付宝</div>
+                      <div className="text-xl font-bold text-blue-700">{formatCurrency(flowData.alipayAmount)}</div>
+                    </div>
+                    <div className="text-center p-3 bg-purple-50 rounded-lg">
+                      <div className="text-sm text-purple-600">💜 转账</div>
+                      <div className="text-xl font-bold text-purple-700">{formatCurrency(flowData.transferAmount)}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

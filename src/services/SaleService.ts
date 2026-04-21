@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { generateInvoiceNo } from '@/lib/utils';
+import { calculateReturnTotal } from '@/lib/calculations';
 import { ContactService } from './ContactService';
 import { EntityService } from './EntityService';
 import { ProductService } from './ProductService';
@@ -314,7 +315,7 @@ export const SaleService = {
   },
 
   async createSaleReturn(saleOrderId: string, items: { productId: string; quantity: number; unitPrice: number }[]) {
-    const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    const totalAmount = calculateReturnTotal(items);
 
     const returnRecord = await db.saleReturn.create({
       data: {

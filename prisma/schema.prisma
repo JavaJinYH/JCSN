@@ -37,13 +37,14 @@ model Product {
   minStock         Float                     @default(0)
   imagePath        String?
   imageUrl         String?
-  purchases        Purchase[]
-  orderItems       OrderItem[]
-  productSpecs     ProductSpec[]
-  returnItems      SaleReturnItem[]
-  purchaseReturns  PurchaseReturnItem[]
-  createdAt        DateTime                  @default(now())
-  updatedAt        DateTime                  @updatedAt
+  purchases          Purchase[]
+  orderItems         OrderItem[]
+  productSpecs       ProductSpec[]
+  returnItems        SaleReturnItem[]
+  purchaseReturns    PurchaseReturnItem[]
+  businessCommissions BusinessCommission[]
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
 
   @@index([name, brand, specification])
 }
@@ -194,21 +195,33 @@ model SystemSetting {
   updatedAt          DateTime @updatedAt
 }
 
-model Rebate {
-  id           String    @id @default(cuid())
-  saleId       String
-  sale         SaleOrder @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  plumberId    String?
-  plumber      Contact? @relation(fields: [plumberId], references: [id], onDelete: SetNull)
-  supplierName String
-  rebateAmount Float
-  rebateType   String    @default("cash")
-  rebateRate   Float     @default(0)
-  recordedAt   DateTime  @default(now())
-  remark       String?
-  isHidden     Boolean   @default(false)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+model BusinessCommission {
+  id            String    @id @default(cuid())
+  
+  // 类型：OUTGOING (介绍人返点，支出) / INCOMING (供应商返点，收入)
+  type          String    @default("OUTGOING")
+  
+  // 分类：INTRODUCER (介绍人) / SUPPLIER (供应商)
+  category      String    @default("INTRODUCER")
+  
+  // 关联
+  saleOrderId   String?
+  saleOrder     SaleOrder? @relation(fields: [saleOrderId], references: [id], onDelete: Cascade)
+  contactId     String?
+  contact       Contact?   @relation("CommissionContact", fields: [contactId], references: [id], onDelete: SetNull)
+  supplierId    String?
+  supplier      Supplier?  @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  productId     String?
+  product       Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
+  
+  // 金额
+  amount        Float
+  
+  // 其他
+  recordedAt    DateTime  @default(now())
+  remark        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model DeliveryFee {
@@ -397,6 +410,7 @@ model Contact {
   slipAsBuyer          SaleSlip[]  @relation("SaleSlipBuyer")
   slipAsIntroducer     SaleSlip[]  @relation("SaleSlipIntroducer")
   slipAsPicker         SaleSlip[]  @relation("SaleSlipPicker")
+  businessCommissions  BusinessCommission[] @relation("CommissionContact")
 }
 
 model ContactPhone {
@@ -423,8 +437,9 @@ model Supplier {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  purchases        Purchase[]
-  purchaseOrders   PurchaseOrder[]
+  purchases          Purchase[]
+  purchaseOrders     PurchaseOrder[]
+  businessCommissions BusinessCommission[]
 }
 
 model Entity {

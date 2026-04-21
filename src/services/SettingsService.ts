@@ -11,8 +11,9 @@ export const SettingsService = {
 
   async upsertSettings(data: {
     shopName?: string;
-    shopAddress?: string;
-    shopPhone?: string;
+    ownerName?: string;
+    phone?: string;
+    address?: string;
     idleTimeoutMinutes?: number;
     lockPassword?: string;
   }) {
@@ -63,11 +64,21 @@ export const SettingsService = {
   },
 
   async backupData() {
+    // 按正确的备份顺序（从无依赖到有依赖）
     const modelsToBackup = [
-      'contact', 'entity', 'product', 'category',
-      'saleOrder', 'orderItem', 'payment', 'sale', 'saleItem',
-      'purchase', 'purchaseItem', 'purchaseReturn', 'purchaseReturnItem',
-      'badDebtWriteOff', 'customerPrice', 'inventoryCheck', 'auditLog'
+      'category', 'customerCategory', 'brand', 'systemSetting', 'deliveryFee',
+      'contact', 'supplier', 'entity', 'bizProject',
+      'contactPhone', 'contactEntityRole', 'contactProjectRole',
+      'product', 'productSpec', 'entityPrice',
+      'purchaseOrder', 'purchase', 'purchaseReturn', 'purchaseReturnItem', 'purchasePhoto',
+      'saleOrder', 'orderItem', 'orderPayment', 'saleOrderPhoto',
+      'saleReturn', 'saleReturnItem',
+      'saleSlip', 'saleSlipItem',
+      'rebate', 'deliveryRecord', 'paymentPlan',
+      'receivable', 'receivableAuditLog', 'badDebtWriteOff',
+      'collectionRecord', 'creditRecord',
+      'inventoryCheck', 'inventoryCheckItem',
+      'legacyBill', 'auditLog'
     ];
 
     const backup: Record<string, any[]> = {};
@@ -82,7 +93,7 @@ export const SettingsService = {
     }
 
     return {
-      version: '1.0',
+      version: '2.0',
       exportTime: new Date().toISOString(),
       system: '折柳建材管理系统',
       data: backup,
@@ -90,15 +101,68 @@ export const SettingsService = {
   },
 
   async restoreData(data: Record<string, any[]>) {
-    for (const [model, records] of Object.entries(data)) {
-      try {
-        await (db as any)[model].deleteMany({});
-        if (records.length > 0) {
-          await (db as any)[model].createMany({ data: records });
+    // 按正确的删除顺序（从有依赖到无依赖）
+    const deleteOrder = [
+      'auditLog', 'legacyBill',
+      'inventoryCheckItem', 'inventoryCheck',
+      'creditRecord', 'collectionRecord',
+      'badDebtWriteOff', 'receivableAuditLog', 'receivable',
+      'paymentPlan', 'deliveryRecord', 'rebate',
+      'saleSlipItem', 'saleSlip',
+      'saleReturnItem', 'saleReturn',
+      'saleOrderPhoto', 'orderPayment', 'orderItem', 'saleOrder',
+      'purchasePhoto', 'purchaseReturnItem', 'purchaseReturn', 'purchase', 'purchaseOrder',
+      'entityPrice', 'productSpec', 'product',
+      'contactProjectRole', 'contactEntityRole', 'contactPhone',
+      'bizProject', 'entity', 'supplier', 'contact',
+      'deliveryFee', 'systemSetting', 'brand', 'customerCategory', 'category'
+    ];
+
+    // 按正确的恢复顺序（从无依赖到有依赖）
+    const createOrder = [
+      'category', 'customerCategory', 'brand', 'systemSetting', 'deliveryFee',
+      'contact', 'supplier', 'entity', 'bizProject',
+      'contactPhone', 'contactEntityRole', 'contactProjectRole',
+      'product', 'productSpec', 'entityPrice',
+      'purchaseOrder', 'purchase', 'purchaseReturn', 'purchaseReturnItem', 'purchasePhoto',
+      'saleOrder', 'orderItem', 'orderPayment', 'saleOrderPhoto',
+      'saleReturn', 'saleReturnItem',
+      'saleSlip', 'saleSlipItem',
+      'rebate', 'deliveryRecord', 'paymentPlan',
+      'receivable', 'receivableAuditLog', 'badDebtWriteOff',
+      'collectionRecord', 'creditRecord',
+      'inventoryCheck', 'inventoryCheckItem',
+      'legacyBill', 'auditLog'
+    ];
+
+    console.log('[Restore] Starting restore process...');
+
+    // 先删除所有数据
+    for (const model of deleteOrder) {
+      if (data[model]) {
+        try {
+          await (db as any)[model].deleteMany({});
+          console.log(`[Restore] Deleted ${model}`);
+        } catch (e) {
+          console.warn(`[Restore] Delete ${model} error (maybe doesn't exist):`, e);
         }
-      } catch (e) {
-        console.warn(`[Restore] ${model} error:`, e);
       }
     }
+
+    // 再恢复数据
+    for (const model of createOrder) {
+      const records = data[model];
+      if (records && records.length > 0) {
+        try {
+          await (db as any)[model].createMany({ data: records });
+          console.log(`[Restore] Restored ${model}: ${records.length} records`);
+        } catch (e) {
+          console.error(`[Restore] Failed to restore ${model}:`, e);
+          throw e;
+        }
+      }
+    }
+
+    console.log('[Restore] Complete!');
   },
 };

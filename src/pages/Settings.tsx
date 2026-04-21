@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,20 +14,15 @@ import {
 import { formatCurrency } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import { SettingsService } from '@/services/SettingsService';
-import type { SystemSetting, Category } from '@/lib/types';
+import type { SystemSetting } from '@/lib/types';
 import * as XLSX from 'xlsx';
 
 export function Settings() {
   const [settings, setSettings] = useState<SystemSetting | null>(null);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showBackupDialog, setShowBackupDialog] = useState(false);
   const [showRestoreDialog, setShowRestoreDialog] = useState(false);
-  const [showCategoryDialog, setShowCategoryDialog] = useState(false);
-  const [editCategory, setEditCategory] = useState<Category | null>(null);
-  const [categoryName, setCategoryName] = useState('');
-  const [categoryDesc, setCategoryDesc] = useState('');
   const [backupLoading, setBackupLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
   const [backupData, setBackupData] = useState<any>(null);
@@ -55,24 +50,19 @@ export function Settings() {
 
   const loadData = async () => {
     try {
-      const [settingsData, categoriesData] = await Promise.all([
-        SettingsService.getSettings(),
-        SettingsService.getCategories(),
-      ]);
+      const data = await SettingsService.getSettings();
 
-      if (settingsData) {
-        setSettings(settingsData);
+      if (data) {
+        setSettings(data);
         setShopForm({
-          shopName: settingsData.shopName,
-          ownerName: settingsData.ownerName || '',
-          phone: settingsData.phone || '',
-          address: settingsData.address || '',
+          shopName: data.shopName,
+          ownerName: data.ownerName || '',
+          phone: data.phone || '',
+          address: data.address || '',
         });
-        setIdleTimeoutMinutes((settingsData as any).idleTimeoutMinutes ?? 5);
-        setLockPassword((settingsData as any).lockPassword ?? '123456');
+        setIdleTimeoutMinutes((data as any).idleTimeoutMinutes ?? 5);
+        setLockPassword((data as any).lockPassword ?? '123456');
       }
-
-      setCategories(categoriesData);
     } catch (error) {
       console.error('Failed to load settings:', error);
     } finally {
@@ -85,8 +75,9 @@ export function Settings() {
     try {
       await SettingsService.upsertSettings({
         shopName: shopForm.shopName,
-        shopAddress: shopForm.address,
-        shopPhone: shopForm.phone,
+        ownerName: shopForm.ownerName,
+        phone: shopForm.phone,
+        address: shopForm.address,
       });
 
       toast('店铺信息保存成功！', 'success');
@@ -259,73 +250,10 @@ export function Settings() {
     }
   };
 
-  const handleAddCategory = async () => {
-    if (!categoryName.trim()) {
-      toast('请输入分类名称', 'warning');
-      return;
-    }
-
-    try {
-      await SettingsService.createCategory({
-        name: categoryName.trim(),
-        description: categoryDesc.trim() || undefined,
-      });
-
-      setShowCategoryDialog(false);
-      setCategoryName('');
-      setCategoryDesc('');
-      loadData();
-      toast('分类添加成功', 'success');
-    } catch (error) {
-      console.error('Failed to add category:', error);
-      toast('添加分类失败', 'error');
-    }
-  };
-
-  const handleUpdateCategory = async () => {
-    if (!editCategory || !categoryName.trim()) {
-      toast('请输入分类名称', 'warning');
-      return;
-    }
-
-    try {
-      await SettingsService.updateCategory(editCategory.id, {
-        name: categoryName.trim(),
-        description: categoryDesc.trim() || undefined,
-      });
-
-      setEditCategory(null);
-      setCategoryName('');
-      setCategoryDesc('');
-      loadData();
-      toast('分类更新成功', 'success');
-    } catch (error) {
-      console.error('Failed to update category:', error);
-      toast('更新分类失败', 'error');
-    }
-  };
-
-  const handleDeleteCategory = async (id: string) => {
-    try {
-      await SettingsService.deleteCategory(id);
-      loadData();
-      toast('分类删除成功', 'success');
-    } catch (error) {
-      console.error('Failed to delete category:', error);
-      toast('删除失败，该分类下可能有商品', 'error');
-    }
-  };
-
-  const openEditCategory = (category: Category) => {
-    setEditCategory(category);
-    setCategoryName(category.name);
-    setCategoryDesc(category.description || '');
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-slate-500">加载中...</div>
+        <div className="text-slate-50">加载中...</div>
       </div>
     );
   }
@@ -333,7 +261,7 @@ export function Settings() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-slate-800">系统设置</h2>
+        <h2 className="text-2xl font-bold text-slate-80">系统设置</h2>
         <p className="text-slate-500 mt-1">管理店铺信息和系统配置</p>
       </div>
 
@@ -385,47 +313,6 @@ export function Settings() {
             >
               {saving ? '保存中...' : '💾 保存设置'}
             </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>📂 商品分类</CardTitle>
-              <CardDescription>管理商品分类</CardDescription>
-            </div>
-            <Button onClick={() => setShowCategoryDialog(true)}>+ 添加分类</Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {categories.map((category) => (
-              <div
-                key={category.id}
-                className="p-3 border border-slate-200 rounded-lg hover:border-orange-300 transition-colors"
-              >
-                <div className="font-medium text-slate-800">{category.name}</div>
-                {category.description && (
-                  <div className="text-xs text-slate-500 mt-1">{category.description}</div>
-                )}
-                <div className="flex items-center gap-2 mt-2">
-                  <button
-                    onClick={() => openEditCategory(category)}
-                    className="text-xs text-orange-500 hover:text-orange-600"
-                  >
-                    编辑
-                  </button>
-                  <button
-                    onClick={() => handleDeleteCategory(category.id)}
-                    className="text-xs text-red-500 hover:text-red-600"
-                  >
-                    删除
-                  </button>
-                </div>
-              </div>
-            ))}
           </div>
         </CardContent>
       </Card>
@@ -487,14 +374,14 @@ export function Settings() {
             <div className={`p-4 rounded-lg ${indexReport.missing === 0 && indexReport.orphans === 0 ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
               <div className="font-medium mb-2">📋 扫描报告</div>
               <div className="text-sm space-y-1">
-                <div>📁 文件系统中照片：<strong>{indexReport.totalFiles}</strong> 张</div>
-                <div>💾 数据库记录：<strong>{indexReport.totalDbRecords}</strong> 条</div>
+                <div>📁 文件系统中照片: <strong>{indexReport.totalFiles}</strong> 张</div>
+                <div>💾 数据库记录: <strong>{indexReport.totalDbRecords}</strong> 条</div>
                 <div className="border-t pt-1 mt-1">
                   <div className={indexReport.missing > 0 ? 'text-red-600' : 'text-green-600'}>
-                    ⚠️ 数据库有记录但文件缺失：<strong>{indexReport.missing}</strong> 条
+                    ⚠️ 数据库有记录但文件缺失: <strong>{indexReport.missing}</strong> 条
                   </div>
                   <div className={indexReport.orphans > 0 ? 'text-orange-600' : 'text-green-600'}>
-                    📤 文件存在但无数据库记录：<strong>{indexReport.orphans}</strong> 个
+                    📤 文件存在但无数据库记录: <strong>{indexReport.orphans}</strong> 个
                   </div>
                 </div>
               </div>
@@ -601,87 +488,6 @@ export function Settings() {
             <Button onClick={handleBackupData} disabled={backupLoading}>
               {backupLoading ? '备份中...' : '确认备份'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={showCategoryDialog}
-        onOpenChange={(open) => {
-          setShowCategoryDialog(open);
-          if (!open) {
-            setCategoryName('');
-            setCategoryDesc('');
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>添加分类</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm font-medium mb-1 block">
-                分类名称 <span className="text-red-500">*</span>
-              </label>
-              <Input
-                value={categoryName}
-                onChange={(e) => setCategoryName(e.target.value)}
-                placeholder="输入分类名称"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">分类描述</label>
-              <Input
-                value={categoryDesc}
-                onChange={(e) => setCategoryDesc(e.target.value)}
-                placeholder="输入分类描述（可选）"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCategoryDialog(false)}>
-              取消
-            </Button>
-            <Button onClick={handleAddCategory}>保存</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={!!editCategory}
-        onOpenChange={(open) => {
-          if (!open) {
-            setEditCategory(null);
-            setCategoryName('');
-            setCategoryDesc('');
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>编辑分类</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm font-medium mb-1 block">
-                分类名称 <span className="text-red-500">*</span>
-              </label>
-              <Input value={categoryName} onChange={(e) => setCategoryName(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">分类描述</label>
-              <Input
-                value={categoryDesc}
-                onChange={(e) => setCategoryDesc(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditCategory(null)}>
-              取消
-            </Button>
-            <Button onClick={handleUpdateCategory}>保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

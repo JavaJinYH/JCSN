@@ -13,6 +13,7 @@ import {
 import { Combobox } from '@/components/Combobox';
 import { formatCurrency, formatProductName } from '@/lib/utils';
 import { sortByFrequency, recordFrequency } from '@/lib/frequency';
+import { calculateCartTotals } from '@/lib/calculations';
 import type { Product } from '@/lib/types';
 
 export interface CartItem {
@@ -62,22 +63,25 @@ export function SaleCart({
   onHandleMoli,
 }: SaleCartProps) {
   const [showCostDetails, setShowCostDetails] = useState(false);
-  const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const costTotal = cart.reduce((sum, item) => sum + item.costPrice * item.quantity, 0);
-  const rateDiscount = subtotal * (100 - discountRate) / 100;
-  const totalDiscount = discount + rateDiscount;
-  const deliveryFeeAmount = needsDelivery ? parseFloat(deliveryFee) || 0 : 0;
-  const calculatedFinalAmount = subtotal - totalDiscount + deliveryFeeAmount;
-  const finalAmount = manualFinalAmount !== null ? manualFinalAmount : calculatedFinalAmount;
+  const cartTotals = calculateCartTotals(cart, discount, discountRate, manualFinalAmount, needsDelivery, deliveryFee);
+  const {
+    subtotal,
+    costTotal,
+    rateDiscount,
+    totalDiscount,
+    deliveryFeeAmount,
+    calculatedFinalAmount,
+    finalAmount,
+    totalCost,
+    totalProfit,
+    profitRate,
+    showLowProfitWarning,
+    showLossWarning,
+  } = cartTotals;
   const totalPaid = 0;
   const paidAmount = Math.min(totalPaid, finalAmount);
   const remainingAmount = Math.max(0, finalAmount - totalPaid);
   const isManualFinalAmount = manualFinalAmount !== null;
-  const totalCost = costTotal + deliveryFeeAmount;
-  const totalProfit = finalAmount - totalCost;
-  const profitRate = finalAmount > 0 ? (totalProfit / finalAmount) * 100 : 0;
-  const showLowProfitWarning = profitRate < 10 && profitRate >= 0 && finalAmount > 0;
-  const showLossWarning = totalProfit < 0 && finalAmount > 0;
 
   return (
     <div className="space-y-4">

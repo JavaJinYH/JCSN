@@ -40,4 +40,32 @@ export const DashboardService = {
       include: { payments: true },
     });
   },
+
+  async getOrdersInDateRange(start: Date, end: Date) {
+    return db.saleOrder.findMany({
+      where: { saleDate: { gte: start, lte: end } },
+      include: { payments: true, returns: true },
+    });
+  },
+
+  async getCollectionsInDateRange(start: Date, end: Date) {
+    return db.collectionRecord.findMany({
+      where: { collectionDate: { gte: start, lte: end } },
+      include: { customer: true },
+    });
+  },
+
+  async getPurchasesInDateRange(start: Date, end: Date) {
+    return db.purchase.findMany({
+      where: { purchaseDate: { gte: start, lte: end } },
+      include: { product: true, supplier: true },
+    });
+  },
+
+  async getPurchaseReturnsInDateRange(start: Date, end: Date) {
+    return db.purchaseReturn.findMany({
+      where: { createdAt: { gte: start, lte: end } },
+      include: { items: { include: { product: true } } },
+    });
+  },
 };

@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
 import { DashboardService } from '@/services/DashboardService';
 import { formatCurrency } from '@/lib/utils';
+import { calculateFlowStats } from '@/lib/calculations';
 import {
   AreaChart,
   Area,
@@ -26,13 +27,22 @@ interface DashboardStats {
 }
 
 interface FlowStats {
-  totalSales: number;
+  totalIncome: number;
+  totalExpense: number;
+  netIncome: number;
+  orderCount: number;
+  // 收入明细
+  salesIncome: number;
+  collectionIncome: number;
+  purchaseReturnIncome: number;
+  // 支出明细
+  purchaseExpense: number;
+  saleReturnExpense: number;
+  // 按支付方式统计
   cashAmount: number;
   wechatAmount: number;
   alipayAmount: number;
   transferAmount: number;
-  newReceivable: number;
-  orderCount: number;
 }
 
 interface ChartData {
@@ -78,15 +88,22 @@ export function Dashboard() {
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
   const [recentSales, setRecentSales] = useState<Sale[]>([]);
   const [flowStats, setFlowStats] = useState<FlowStats>({
-    totalSales: 0,
+    totalIncome: 0,
+    totalExpense: 0,
+    netIncome: 0,
+    orderCount: 0,
+    salesIncome: 0,
+    collectionIncome: 0,
+    purchaseReturnIncome: 0,
+    purchaseExpense: 0,
+    saleReturnExpense: 0,
     cashAmount: 0,
     wechatAmount: 0,
     alipayAmount: 0,
     transferAmount: 0,
-    newReceivable: 0,
-    orderCount: 0,
   });
   const [flowPeriod, setFlowPeriod] = useState<FlowPeriod>('today');
+  const [flowCollapsed, setFlowCollapsed] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -202,6 +219,7 @@ export function Dashboard() {
       today.setHours(0, 0, 0, 0);
 
       let startDate: Date;
+      let endDate: Date = new Date();
       if (period === 'today') {
         startDate = today;
       } else if (period === 'week') {
@@ -210,47 +228,15 @@ export function Dashboard() {
         startDate = new Date(today.getFullYear(), today.getMonth(), 1);
       }
 
-      const [newOrdersInPeriod] = await Promise.all([
-        DashboardService.getNewOrdersInPeriod(startDate),
+      const [orders, collections, purchases, purchaseReturns] = await Promise.all([
+        DashboardService.getOrdersInDateRange(startDate, endDate),
+        DashboardService.getCollectionsInDateRange(startDate, endDate),
+        DashboardService.getPurchasesInDateRange(startDate, endDate),
+        DashboardService.getPurchaseReturnsInDateRange(startDate, endDate),
       ]);
 
-      let cashAmount = 0;
-      let wechatAmount = 0;
-      let alipayAmount = 0;
-      let transferAmount = 0;
-      let totalSales = 0;
-      let newReceivable = 0;
-      let orderCount = 0;
-
-      newOrdersInPeriod.forEach(order => {
-        totalSales += order.totalAmount;
-        const receivable = order.totalAmount - order.paidAmount;
-        newReceivable += receivable;
-        orderCount++;
-
-        order.payments.forEach(payment => {
-          const method = payment.method?.toLowerCase() || '';
-          if (method.includes('现金') || method === 'cash') {
-            cashAmount += payment.amount;
-          } else if (method.includes('微信') || method === 'wechat') {
-            wechatAmount += payment.amount;
-          } else if (method.includes('支付宝') || method === 'alipay') {
-            alipayAmount += payment.amount;
-          } else if (method.includes('转账') || method === 'transfer') {
-            transferAmount += payment.amount;
-          }
-        });
-      });
-
-      setFlowStats({
-        totalSales,
-        cashAmount,
-        wechatAmount,
-        alipayAmount,
-        transferAmount,
-        newReceivable,
-        orderCount,
-      });
+      const stats = calculateFlowStats(orders, collections, purchases, purchaseReturns);
+      setFlowStats(stats);
     } catch (error) {
       console.error('Failed to load flow stats:', error);
     }
@@ -324,61 +310,134 @@ export function Dashboard() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>💰 流水账</CardTitle>
-          <div className="flex gap-1">
-            <Button
-              variant={flowPeriod === 'today' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFlowPeriod('today')}
-            >
-              今日
-            </Button>
-            <Button
-              variant={flowPeriod === 'week' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFlowPeriod('week')}
-            >
-              本周
-            </Button>
-            <Button
-              variant={flowPeriod === 'month' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFlowPeriod('month')}
-            >
-              本月
+        <CardHeader 
+          className="flex flex-row items-center justify-between cursor-pointer"
+          onClick={() => setFlowCollapsed(!flowCollapsed)}
+        >
+          <div className="flex items-center gap-2">
+            <CardTitle>💰 流水账</CardTitle>
+          </div>
+          <div className="flex items-center gap-2">
+            {!flowCollapsed && (
+              <div className="flex gap-1">
+                <Button
+                  variant={flowPeriod === 'today' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFlowPeriod('today');
+                  }}
+                >
+                  今日
+                </Button>
+                <Button
+                  variant={flowPeriod === 'week' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFlowPeriod('week');
+                  }}
+                >
+                  本周
+                </Button>
+                <Button
+                  variant={flowPeriod === 'month' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFlowPeriod('month');
+                  }}
+                >
+                  本月
+                </Button>
+              </div>
+            )}
+            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setFlowCollapsed(!flowCollapsed); }}>
+              {flowCollapsed ? '展开' : '收起'}
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <div className="text-center p-3 bg-slate-50 rounded-lg">
-              <div className="text-sm text-slate-500">总销售额</div>
-              <div className="text-xl font-bold text-slate-900">{formatCurrency(flowStats.totalSales)}</div>
-              <div className="text-xs text-slate-400">{flowStats.orderCount} 笔订单</div>
+        {!flowCollapsed && (
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+                <div className="text-sm text-green-600">📈 总收入</div>
+                <div className="text-2xl font-bold text-green-700">{formatCurrency(flowStats.totalIncome)}</div>
+              </div>
+              <div className="text-center p-4 bg-red-50 rounded-lg border border-red-200">
+                <div className="text-sm text-red-600">📉 总支出</div>
+                <div className="text-2xl font-bold text-red-700">{formatCurrency(flowStats.totalExpense)}</div>
+              </div>
+              <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="text-sm text-blue-600">💰 净收入</div>
+                <div className="text-2xl font-bold text-blue-700">{formatCurrency(flowStats.netIncome)}</div>
+                <div className="text-xs text-blue-500">{flowStats.orderCount} 笔订单</div>
+              </div>
             </div>
-            <div className="text-center p-3 bg-green-50 rounded-lg">
-              <div className="text-sm text-green-600">💵 现金</div>
-              <div className="text-xl font-bold text-green-700">{formatCurrency(flowStats.cashAmount)}</div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <h3 className="font-medium text-slate-700 flex items-center gap-2">
+                  <span className="text-green-600">📥</span> 收入明细
+                </h3>
+                <div className="grid grid-cols-1 gap-2">
+                  <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                    <span>销售收款</span>
+                    <span className="font-bold text-slate-800">{formatCurrency(flowStats.salesIncome)}</span>
+                  </div>
+                  <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                    <span>客户回款</span>
+                    <span className="font-bold text-slate-800">{formatCurrency(flowStats.collectionIncome)}</span>
+                  </div>
+                  <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                    <span>进货退款</span>
+                    <span className="font-bold text-slate-800">{formatCurrency(flowStats.purchaseReturnIncome)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="font-medium text-slate-700 flex items-center gap-2">
+                  <span className="text-red-600">📤</span> 支出明细
+                </h3>
+                <div className="grid grid-cols-1 gap-2">
+                  <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                    <span>进货付款</span>
+                    <span className="font-bold text-slate-800">{formatCurrency(flowStats.purchaseExpense)}</span>
+                  </div>
+                  <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                    <span>销售退款</span>
+                    <span className="font-bold text-slate-800">{formatCurrency(flowStats.saleReturnExpense)}</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="text-center p-3 bg-green-50 rounded-lg">
-              <div className="text-sm text-green-600">💚 微信</div>
-              <div className="text-xl font-bold text-green-700">{formatCurrency(flowStats.wechatAmount)}</div>
+
+            <div className="mt-6 pt-6 border-t border-slate-200">
+              <h3 className="font-medium text-slate-700 mb-3 flex items-center gap-2">
+                <span>💳</span> 收款方式统计
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center p-3 bg-green-50 rounded-lg">
+                  <div className="text-sm text-green-600">💵 现金</div>
+                  <div className="text-xl font-bold text-green-700">{formatCurrency(flowStats.cashAmount)}</div>
+                </div>
+                <div className="text-center p-3 bg-green-50 rounded-lg">
+                  <div className="text-sm text-green-600">💚 微信</div>
+                  <div className="text-xl font-bold text-green-700">{formatCurrency(flowStats.wechatAmount)}</div>
+                </div>
+                <div className="text-center p-3 bg-blue-50 rounded-lg">
+                  <div className="text-sm text-blue-600">💙 支付宝</div>
+                  <div className="text-xl font-bold text-blue-700">{formatCurrency(flowStats.alipayAmount)}</div>
+                </div>
+                <div className="text-center p-3 bg-purple-50 rounded-lg">
+                  <div className="text-sm text-purple-600">💜 转账</div>
+                  <div className="text-xl font-bold text-purple-700">{formatCurrency(flowStats.transferAmount)}</div>
+                </div>
+              </div>
             </div>
-            <div className="text-center p-3 bg-blue-50 rounded-lg">
-              <div className="text-sm text-blue-600">💙 支付宝</div>
-              <div className="text-xl font-bold text-blue-700">{formatCurrency(flowStats.alipayAmount)}</div>
-            </div>
-            <div className="text-center p-3 bg-purple-50 rounded-lg">
-              <div className="text-sm text-purple-600">💜 转账</div>
-              <div className="text-xl font-bold text-purple-700">{formatCurrency(flowStats.transferAmount)}</div>
-            </div>
-            <div className="text-center p-3 bg-orange-50 rounded-lg">
-              <div className="text-sm text-orange-600">📋 新增欠款</div>
-              <div className="text-xl font-bold text-orange-700">{formatCurrency(flowStats.newReceivable)}</div>
-            </div>
-          </div>
-        </CardContent>
+          </CardContent>
+        )}
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

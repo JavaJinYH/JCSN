@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { calculateOrderOriginalAmount } from '@/lib/calculations'
 
 export const ReceivableService = {
   async getById(id: string) {
@@ -52,16 +53,7 @@ export const ReceivableService = {
       throw new Error('订单不存在')
     }
 
-    let originalAmount = order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0)
-    
-    for (const ret of order.returns || []) {
-      originalAmount -= ret.totalAmount
-    }
-
-    for (const writeOff of order.badDebtWriteOffs || []) {
-      originalAmount -= writeOff.writtenOffAmount
-    }
-
+    const originalAmount = calculateOrderOriginalAmount(order)
     const remainingAmount = Math.max(0, originalAmount - order.paidAmount)
 
     const receivable = await db.receivable.create({
