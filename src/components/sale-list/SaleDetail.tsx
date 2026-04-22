@@ -18,6 +18,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { PhotoThumbnail } from '@/components/PhotoThumbnail';
+import { PrintPreviewDialog } from '@/components/PrintPreviewDialog';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { SaleService } from '@/services/SaleService';
 import { toast } from '@/components/Toast';
@@ -66,6 +67,7 @@ export function SaleDetail({
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnItemIndex, setReturnItemIndex] = useState(0);
   const [returnQuantity, setReturnQuantity] = useState('');
+  const [printDialogOpen, setPrintDialogOpen] = useState(false);
 
   useEffect(() => {
     if (open && saleId) {
@@ -138,6 +140,12 @@ export function SaleDetail({
         </div>
       ) : sale ? (
         <>
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-bold">销售详情</h2>
+            <Button onClick={() => setPrintDialogOpen(true)} variant="outline">
+              🖨️ 打印销售单
+            </Button>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <div className="text-sm text-slate-500">单据号</div>
@@ -398,6 +406,13 @@ export function SaleDetail({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PrintPreviewDialog
+        open={printDialogOpen}
+        onOpenChange={setPrintDialogOpen}
+        slipData={sale}
+        slipType="sale"
+      />
     </div>
   );
 }

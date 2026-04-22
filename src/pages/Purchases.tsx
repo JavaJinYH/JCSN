@@ -33,6 +33,7 @@ import { Combobox } from '@/components/Combobox';
 import { PhotoUpload } from '@/components/PhotoUpload';
 import { PhotoThumbnail } from '@/components/PhotoThumbnail';
 import { PhotoViewer } from '@/components/PhotoViewer';
+import { PrintPreviewDialog } from '@/components/PrintPreviewDialog';
 
 interface PurchaseItemRow {
   id: string;
@@ -656,6 +657,7 @@ function OrderDetail({
   const [uploadPhotos, setUploadPhotos] = useState<{ id: string; file?: File; preview: string; remark: string; type: string }[]>([]);
   const [showPhotoViewer, setShowPhotoViewer] = useState(false);
   const [photoViewerIndex, setPhotoViewerIndex] = useState(0);
+  const [printDialogOpen, setPrintDialogOpen] = useState(false);
 
   useEffect(() => {
     if (open && orderId) {
@@ -862,6 +864,9 @@ function OrderDetail({
           <span className="font-medium text-slate-800">
             {order.batchNo || order.id.slice(-8)}
           </span>
+          <Button onClick={() => setPrintDialogOpen(true)} variant="outline" size="sm">
+            🖨️ 打印
+          </Button>
         </div>
         <div className="text-right">
           <div className="text-sm text-slate-500">进货总额</div>
@@ -1109,6 +1114,25 @@ function OrderDetail({
           initialIndex={photoViewerIndex}
         />
       )}
+
+      <PrintPreviewDialog
+        open={printDialogOpen}
+        onOpenChange={setPrintDialogOpen}
+        slipData={{
+          batchNo: order.batchNo || order.id.slice(-8),
+          purchaseDate: order.purchaseDate,
+          supplier: order.supplier ? { name: order.supplier.name, phone: order.supplier.phone } : { name: order.supplierName || '-' },
+          totalAmount: order.items.reduce((sum, item) => sum + item.totalAmount, 0),
+          items: order.items.map(item => ({
+            product: item.product,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            subtotal: item.totalAmount,
+          })),
+          remark: order.remark || undefined,
+        }}
+        slipType="purchase"
+      />
     </div>
   );
 }
