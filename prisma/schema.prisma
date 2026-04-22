@@ -157,6 +157,7 @@ model Purchase {
   createdAt    DateTime        @default(now())
 
   returns      PurchaseReturn[]
+  payments     SupplierPayment[]
 
   @@index([orderId])
 }
@@ -394,14 +395,15 @@ model CreditRecord {
 
 model CollectionRecord {
   id               String              @id @default(cuid())
-  customerId       String
-  customer         Contact             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  entityId         String
+  entity           Entity              @relation(fields: [entityId], references: [id], onDelete: Cascade)
   receivableId     String?
   receivable       Receivable?        @relation(fields: [receivableId], references: [id], onDelete: SetNull)
   collectionDate   DateTime            @default(now())
   collectionTime   String?             @default("00:00")
   collectionMethod String
   collectionResult String
+  attitude         String?             // 态度：积极友好、敷衍、态度恶劣、回避
   collectionAmount Float?
   followUpDate     DateTime?
   followUpTime     String?
@@ -470,7 +472,6 @@ model Contact {
   personalEntity       Entity?
   supplierContacts     Supplier[]
   paymentPlans         PaymentPlan[]
-  collectionRecords    CollectionRecord[]
   creditRecords        CreditRecord[]
   contactPrices        ContactPrice[]
   slipAsCustomer       SaleSlip[]
@@ -509,6 +510,20 @@ model Supplier {
   purchases          Purchase[]
   purchaseOrders     PurchaseOrder[]
   businessCommissions BusinessCommission[]
+  payments          SupplierPayment[]
+}
+
+model SupplierPayment {
+  id           String   @id @default(cuid())
+  supplierId   String
+  supplier     Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  purchaseId   String?
+  purchase     Purchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  amount       Float
+  paymentDate  DateTime @default(now())
+  paymentMethod String?
+  remark       String?
+  createdAt    DateTime @default(now())
 }
 
 model Entity {
@@ -535,6 +550,7 @@ model Entity {
   legacyBills LegacyBill[]
   entityPrices EntityPrice[]
   badDebtWriteOffs BadDebtWriteOff[]
+  collectionRecords CollectionRecord[]
 }
 
 model BizProject {

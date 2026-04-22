@@ -51,7 +51,7 @@ export const DashboardService = {
   async getCollectionsInDateRange(start: Date, end: Date) {
     return db.collectionRecord.findMany({
       where: { collectionDate: { gte: start, lte: end } },
-      include: { customer: true },
+      include: { entity: true },
     });
   },
 

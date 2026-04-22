@@ -30,6 +30,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { StatementService } from '@/services/StatementService';
+import { SupplierPaymentService } from '@/services/SupplierPaymentService';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { getAgingLevel, calculateAgingDays } from '@/lib/utils';
 import { toast } from '@/components/Toast';
@@ -87,6 +88,8 @@ interface SupplierPayable {
   contactName: string | null;
   contactPhone: string | null;
   totalPayable: number;
+  totalPaid: number;
+  remaining: number;
   recordCount: number;
 }
 
@@ -112,12 +115,18 @@ export function Statements() {
 
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [purchases, setPurchases] = useState<any[]>([]);
+  const [supplierPayments, setSupplierPayments] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [showStatementDialog, setShowStatementDialog] = useState(false);
   const [selectedStatement, setSelectedStatement] = useState<ContactSummary | null>(null);
   const [statementDetailData, setStatementDetailData] = useState<any>(null);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [selectedSupplierForPayment, setSelectedSupplierForPayment] = useState<SupplierPayable | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [paymentRemark, setPaymentRemark] = useState('');
 
   useEffect(() => {
     loadData();
@@ -141,19 +150,54 @@ export function Statements() {
         setSaleOrders(saleOrdersData);
         setReceivables(receivablesData);
       } else {
-        const [suppliersData, purchasesData] = await Promise.all([
+        const [suppliersData, purchasesData, paymentsData] = await Promise.all([
           StatementService.getSuppliers({ supplierContact: true }),
           StatementService.getPurchases({ totalAmount: { gt: 0 } }),
+          SupplierPaymentService.getAllPayments(),
         ]);
 
         setSuppliers(suppliersData);
         setPurchases(purchasesData);
+        setSupplierPayments(paymentsData);
       }
     } catch (error) {
       console.error('[Statements] 加载数据失败:', error);
       toast('数据加载失败，请刷新页面重试', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAddPayment = async () => {
+    if (!selectedSupplierForPayment || !paymentAmount) {
+      toast('请填写付款金额', 'error');
+      return;
+    }
+
+    const amount = parseFloat(paymentAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast('请输入有效的付款金额', 'error');
+      return;
+    }
+
+    try {
+      await SupplierPaymentService.createPayment({
+        supplierId: selectedSupplierForPayment.supplierId,
+        amount,
+        paymentMethod: paymentMethod || undefined,
+        remark: paymentRemark || undefined,
+      });
+
+      toast('付款记录已添加', 'success');
+      setShowPaymentDialog(false);
+      setPaymentAmount('');
+      setPaymentMethod('');
+      setPaymentRemark('');
+      setSelectedSupplierForPayment(null);
+      loadData();
+    } catch (error) {
+      console.error('[Statements] 添加付款记录失败:', error);
+      toast('添加付款记录失败', 'error');
     }
   };
 
@@ -321,12 +365,24 @@ export function Statements() {
           contactName: supplier.supplierContact?.name || null,
           contactPhone: supplier.supplierContact?.primaryPhone || supplier.phone || null,
           totalPayable: unpaidAmount,
+          totalPaid: 0,
+          remaining: unpaidAmount,
           recordCount: 1,
         });
       }
     });
 
-    let result = Array.from(supplierMap.values()).sort((a, b) => b.totalPayable - a.totalPayable);
+    supplierPayments.forEach(payment => {
+      const supplier = supplierMap.get(payment.supplierId);
+      if (supplier) {
+        supplier.totalPaid += payment.amount;
+        supplier.remaining = Math.max(0, supplier.totalPayable - supplier.totalPaid);
+      }
+    });
+
+    let result = Array.from(supplierMap.values())
+      .filter(s => s.totalPayable > 0)
+      .sort((a, b) => b.remaining - a.remaining);
 
     if (searchKeyword) {
       const keyword = searchKeyword.toLowerCase();
@@ -338,7 +394,7 @@ export function Statements() {
     }
 
     return result;
-  }, [purchases, suppliers, searchKeyword]);
+  }, [purchases, suppliers, supplierPayments, searchKeyword]);
 
   const totalReceivableSummary = useMemo(() => {
     return contactSummaries.reduce((sum, cs) => sum + cs.totalReceivable, 0);
@@ -349,7 +405,7 @@ export function Statements() {
   }, [contactSummaries]);
 
   const totalPayableSummary = useMemo(() => {
-    return supplierPayables.reduce((sum, s) => sum + s.totalPayable, 0);
+    return supplierPayables.reduce((sum, s) => sum + s.remaining, 0);
   }, [supplierPayables]);
 
   const agingChartData = useMemo(() => {
@@ -978,13 +1034,35 @@ export function Statements() {
                               </div>
                               <div className="text-sm text-slate-500 mt-1">
                                 欠款笔数: {supplier.recordCount}
+                                {supplier.totalPaid > 0 && (
+                                  <span className="text-green-600 ml-2">
+                                    已付: {formatCurrency(supplier.totalPaid)}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
                           <div className="text-right">
                             <div className="text-lg font-bold text-orange-600">
-                              {formatCurrency(supplier.totalPayable)}
+                              {formatCurrency(supplier.remaining)}
                             </div>
+                            <div className="text-xs text-slate-500">
+                              应付: {formatCurrency(supplier.totalPayable)}
+                            </div>
+                            {supplier.remaining > 0 && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="mt-1 text-xs h-7"
+                                onClick={() => {
+                                  setSelectedSupplierForPayment(supplier);
+                                  setPaymentAmount(supplier.remaining.toString());
+                                  setShowPaymentDialog(true);
+                                }}
+                              >
+                                付款
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1108,6 +1186,80 @@ export function Statements() {
                 </Button>
                 <Button onClick={handlePrint} className="bg-orange-500 hover:bg-orange-600">
                   🖨️ 打印对账单
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showPaymentDialog} onOpenChange={(open) => {
+        setShowPaymentDialog(open);
+        if (!open) {
+          setPaymentAmount('');
+          setPaymentMethod('');
+          setPaymentRemark('');
+          setSelectedSupplierForPayment(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>添加付款记录</DialogTitle>
+          </DialogHeader>
+
+          {selectedSupplierForPayment && (
+            <div className="space-y-4">
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <div className="font-medium">{selectedSupplierForPayment.supplierName}</div>
+                <div className="text-sm text-slate-500 mt-1">
+                  应付总额: {formatCurrency(selectedSupplierForPayment.totalPayable)} |
+                  已付: {formatCurrency(selectedSupplierForPayment.totalPaid)} |
+                  剩余: {formatCurrency(selectedSupplierForPayment.remaining)}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-1 block">付款金额 *</label>
+                <Input
+                  type="number"
+                  placeholder="输入付款金额"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-1 block">付款方式</label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择付款方式" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="银行转账">银行转账</SelectItem>
+                    <SelectItem value="现金">现金</SelectItem>
+                    <SelectItem value="微信">微信</SelectItem>
+                    <SelectItem value="支付宝">支付宝</SelectItem>
+                    <SelectItem value="支票">支票</SelectItem>
+                    <SelectItem value="其他">其他</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-1 block">备注</label>
+                <Input
+                  placeholder="输入备注信息"
+                  value={paymentRemark}
+                  onChange={(e) => setPaymentRemark(e.target.value)}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowPaymentDialog(false)}>
+                  取消
+                </Button>
+                <Button onClick={handleAddPayment}>
+                  确认付款
                 </Button>
               </div>
             </div>

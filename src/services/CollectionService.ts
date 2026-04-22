@@ -1,15 +1,16 @@
 import { db } from '@/lib/db';
+import { EntityCreditService } from './EntityCreditService';
 
 export const CollectionService = {
   async getCollectionRecords() {
     return db.collectionRecord.findMany({
-      include: { customer: true, receivable: { include: { order: true } } },
+      include: { entity: true, receivable: { include: { order: true } } },
       orderBy: { collectionDate: 'desc' },
     });
   },
 
-  async getContacts() {
-    return db.contact.findMany({ orderBy: { name: 'asc' } });
+  async getEntities() {
+    return db.entity.findMany({ orderBy: { name: 'asc' } });
   },
 
   async getReceivables(where?: any) {
@@ -21,31 +22,30 @@ export const CollectionService = {
   },
 
   async createCollectionRecord(data: {
-    customerId: string;
+    entityId: string;
     receivableId?: string;
     collectionDate: Date;
     collectionTime?: string;
     collectionMethod?: string;
     collectionResult?: string;
+    attitude?: string;
     collectionAmount?: number;
     followUpDate?: Date;
     followUpTime?: string;
     communication?: string;
     nextPlan?: string;
     remark?: string;
-    amount?: number;
-    paymentMethod?: string;
-    operator?: string;
   }) {
-    return db.collectionRecord.create({
+    const result = await db.collectionRecord.create({
       data: {
-        customerId: data.customerId,
+        entityId: data.entityId,
         receivableId: data.receivableId,
         collectionDate: data.collectionDate,
         collectionTime: data.collectionTime,
         collectionMethod: data.collectionMethod,
         collectionResult: data.collectionResult,
-        collectionAmount: data.collectionAmount || data.amount,
+        attitude: data.attitude,
+        collectionAmount: data.collectionAmount,
         followUpDate: data.followUpDate,
         followUpTime: data.followUpTime,
         communication: data.communication,
@@ -53,10 +53,54 @@ export const CollectionService = {
         remark: data.remark,
       },
     });
+
+    if (data.receivableId && data.collectionAmount && data.collectionAmount > 0) {
+      await this.updateReceivableAfterCollection(data.receivableId, data.collectionAmount);
+    }
+
+    if (data.entityId) {
+      await EntityCreditService.updateEntityCredit(data.entityId);
+    }
+
+    return result;
   },
 
   async deleteCollectionRecord(id: string) {
-    return db.collectionRecord.delete({ where: { id } });
+    const record = await db.collectionRecord.findUnique({ where: { id } });
+    const result = await db.collectionRecord.delete({ where: { id } });
+
+    if (record?.entityId) {
+      await EntityCreditService.updateEntityCredit(record.entityId);
+    }
+
+    return result;
+  },
+
+  async updateCollectionRecord(id: string, data: {
+    entityId?: string;
+    receivableId?: string | null;
+    collectionDate?: Date;
+    collectionTime?: string | null;
+    collectionMethod?: string;
+    collectionResult?: string;
+    attitude?: string | null;
+    collectionAmount?: number | null;
+    followUpDate?: Date | null;
+    followUpTime?: string | null;
+    communication?: string | null;
+    nextPlan?: string | null;
+    remark?: string | null;
+  }) {
+    const result = await db.collectionRecord.update({
+      where: { id },
+      data,
+    });
+
+    if (data.entityId) {
+      await EntityCreditService.updateEntityCredit(data.entityId);
+    }
+
+    return result;
   },
 
   async updateReceivableAfterCollection(receivableId: string, amount: number) {

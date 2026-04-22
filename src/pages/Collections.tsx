@@ -17,15 +17,24 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { DataTableFilters, DataTablePagination, useDataTable } from '@/components/DataTable';
 import { CollectionService } from '@/services/CollectionService';
 import { formatCurrency } from '@/lib/utils';
 import { toast } from '@/components/Toast';
-import type { CollectionRecord, Contact, AccountReceivable } from '@/lib/types';
+import type { CollectionRecord, Entity, AccountReceivable } from '@/lib/types';
 
 const filters = [
-  { key: 'search', label: '关键词', type: 'text' as const, placeholder: '客户姓名、备注、沟通内容...' },
+  { key: 'search', label: '关键词', type: 'text' as const, placeholder: '主体名称、备注、沟通内容...' },
   { key: 'collectionMethod', label: '催账方式', type: 'select' as const, options: [
     { value: 'all', label: '全部' },
     { value: '电话', label: '电话' },
@@ -46,19 +55,25 @@ const filters = [
 ];
 
 export function Collections() {
-  const [records, setRecords] = useState<(CollectionRecord & { customer?: Contact })[]>([]);
-  const [customers, setCustomers] = useState<Contact[]>([]);
+  const [records, setRecords] = useState<(CollectionRecord & { entity?: Entity })[]>([]);
+  const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState<string>('');
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [selectedEntity, setSelectedEntity] = useState<string>('');
   const [selectedReceivable, setSelectedReceivable] = useState<string>('');
   const [receivables, setReceivables] = useState<AccountReceivable[]>([]);
   const [filterValues, setFilterValues] = useState<Record<string, any>>({});
+  const [selectedRecord, setSelectedRecord] = useState<(CollectionRecord & { entity?: Entity }) | null>(null);
+  
   const [formData, setFormData] = useState({
     collectionDate: '',
     collectionTime: '',
     collectionMethod: '电话',
     collectionResult: '已承诺付款',
+    attitude: '',
     collectionAmount: '',
     followUpDate: '',
     followUpTime: '',
@@ -73,13 +88,13 @@ export function Collections() {
 
   const loadData = async () => {
     try {
-      const [recordsData, customersData, receivablesData] = await Promise.all([
+      const [recordsData, entitiesData, receivablesData] = await Promise.all([
         CollectionService.getCollectionRecords(),
-        CollectionService.getContacts(),
+        CollectionService.getEntities(),
         CollectionService.getReceivables(),
       ]);
       setRecords(recordsData);
-      setCustomers(customersData);
+      setEntities(entitiesData);
       setReceivables(receivablesData);
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -100,11 +115,11 @@ export function Collections() {
     return records.filter((r) => {
       if (filterValues.search) {
         const search = filterValues.search.toLowerCase();
-        const matchCustomer = r.customer?.name.toLowerCase().includes(search);
+        const matchEntity = r.entity?.name.toLowerCase().includes(search);
         const matchRemark = r.remark?.toLowerCase().includes(search);
         const matchCommunication = r.communication?.toLowerCase().includes(search);
         const matchNextPlan = r.nextPlan?.toLowerCase().includes(search);
-        if (!matchCustomer && !matchRemark && !matchCommunication && !matchNextPlan) {
+        if (!matchEntity && !matchRemark && !matchCommunication && !matchNextPlan) {
           return false;
         }
       }
@@ -128,8 +143,8 @@ export function Collections() {
   });
 
   const handleAddRecord = async () => {
-    if (!selectedCustomer) {
-      toast('请选择客户', 'warning');
+    if (!selectedEntity) {
+      toast('请选择主体', 'warning');
       return;
     }
 
@@ -144,12 +159,13 @@ export function Collections() {
       }
 
       await CollectionService.createCollectionRecord({
-        customerId: selectedCustomer,
+        entityId: selectedEntity,
         receivableId: selectedReceivable || undefined,
         collectionDate,
         collectionTime: formData.collectionTime || undefined,
         collectionMethod: formData.collectionMethod,
         collectionResult: formData.collectionResult,
+        attitude: formData.attitude || undefined,
         collectionAmount: formData.collectionAmount ? parseFloat(formData.collectionAmount) : undefined,
         followUpDate: formData.followUpDate ? new Date(formData.followUpDate) : undefined,
         followUpTime: formData.followUpTime || undefined,
@@ -159,13 +175,14 @@ export function Collections() {
       });
 
       setShowAddDialog(false);
-      setSelectedCustomer('');
+      setSelectedEntity('');
       setSelectedReceivable('');
       setFormData({
         collectionDate: '',
         collectionTime: '',
         collectionMethod: '电话',
         collectionResult: '已承诺付款',
+        attitude: '',
         collectionAmount: '',
         followUpDate: '',
         followUpTime: '',
@@ -174,15 +191,89 @@ export function Collections() {
         remark: '',
       });
       loadData();
+      toast('添加成功', 'success');
     } catch (error) {
       console.error('Failed to add record:', error);
       toast('添加失败，请重试', 'error');
     }
   };
 
-  const handleDeleteRecord = async (id: string) => {
+  const handleViewDetail = (record: any) => {
+    setSelectedRecord(record);
+    setShowDetailDialog(true);
+  };
+
+  const handleEditRecord = (record: any) => {
+    setSelectedRecord(record);
+    setSelectedEntity(record.entityId);
+    setSelectedReceivable(record.receivableId || '');
+    setFormData({
+      collectionDate: record.collectionDate ? new Date(record.collectionDate).toISOString().split('T')[0] : '',
+      collectionTime: record.collectionTime || '',
+      collectionMethod: record.collectionMethod || '电话',
+      collectionResult: record.collectionResult || '已承诺付款',
+      attitude: record.attitude || '',
+      collectionAmount: record.collectionAmount?.toString() || '',
+      followUpDate: record.followUpDate ? new Date(record.followUpDate).toISOString().split('T')[0] : '',
+      followUpTime: record.followUpTime || '',
+      communication: record.communication || '',
+      nextPlan: record.nextPlan || '',
+      remark: record.remark || '',
+    });
+    setShowEditDialog(true);
+  };
+
+  const handleUpdateRecord = async () => {
+    if (!selectedRecord || !selectedEntity) {
+      toast('请选择主体', 'warning');
+      return;
+    }
+
     try {
-      await CollectionService.deleteCollectionRecord(id);
+      let collectionDate = new Date(selectedRecord.collectionDate);
+      if (formData.collectionDate) {
+        collectionDate = new Date(formData.collectionDate);
+        if (formData.collectionTime) {
+          const [hours, minutes] = formData.collectionTime.split(':');
+          collectionDate.setHours(parseInt(hours), parseInt(minutes));
+        }
+      }
+
+      await CollectionService.updateCollectionRecord(selectedRecord.id, {
+        entityId: selectedEntity,
+        receivableId: selectedReceivable || null,
+        collectionDate,
+        collectionTime: formData.collectionTime || null,
+        collectionMethod: formData.collectionMethod,
+        collectionResult: formData.collectionResult,
+        attitude: formData.attitude || null,
+        collectionAmount: formData.collectionAmount ? parseFloat(formData.collectionAmount) : null,
+        followUpDate: formData.followUpDate ? new Date(formData.followUpDate) : null,
+        followUpTime: formData.followUpTime || null,
+        communication: formData.communication || null,
+        nextPlan: formData.nextPlan || null,
+        remark: formData.remark || null,
+      });
+
+      setShowEditDialog(false);
+      setSelectedRecord(null);
+      setSelectedEntity('');
+      setSelectedReceivable('');
+      loadData();
+      toast('更新成功', 'success');
+    } catch (error) {
+      console.error('Failed to update record:', error);
+      toast('更新失败，请重试', 'error');
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedRecord) return;
+    
+    try {
+      await CollectionService.deleteCollectionRecord(selectedRecord.id);
+      setShowDeleteDialog(false);
+      setSelectedRecord(null);
       loadData();
       toast('删除成功', 'success');
     } catch (error) {
@@ -211,7 +302,7 @@ export function Collections() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">催账记录</h2>
-          <p className="text-slate-500 mt-1">记录催账历史，便于追踪客户欠款情况</p>
+          <p className="text-slate-500 mt-1">记录催账历史，便于追踪主体欠款情况</p>
         </div>
         <Button className="bg-orange-500 hover:bg-orange-600" onClick={() => setShowAddDialog(true)}>
           + 添加记录
@@ -236,7 +327,7 @@ export function Collections() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>客户名称</TableHead>
+                <TableHead>主体名称</TableHead>
                 <TableHead>催账时间</TableHead>
                 <TableHead>催账方式</TableHead>
                 <TableHead>催账结果</TableHead>
@@ -257,7 +348,7 @@ export function Collections() {
                 tableProps.data.map((record) => (
                   <TableRow key={record.id}>
                     <TableCell className="font-medium">
-                      {record.customer?.name || '未知客户'}
+                      {record.entity?.name || '未知主体'}
                     </TableCell>
                     <TableCell className="text-slate-500">
                       <div>{new Date(record.collectionDate).toLocaleDateString('zh-CN')}</div>
@@ -291,8 +382,25 @@ export function Collections() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => handleViewDetail(record)}
+                        >
+                          详情
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditRecord(record)}
+                        >
+                          编辑
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => handleDeleteRecord(record.id)}
+                          onClick={() => {
+                            setSelectedRecord(record);
+                            setShowDeleteDialog(true);
+                          }}
                         >
                           删除
                         </Button>
@@ -348,45 +456,67 @@ export function Collections() {
         </Card>
       </div>
 
-      <Dialog open={showAddDialog} onOpenChange={() => setShowAddDialog(false)}>
+      {/* 添加记录对话框 */}
+      <Dialog 
+        open={showAddDialog} 
+        onOpenChange={(open) => {
+          setShowAddDialog(open);
+          if (!open) {
+            setSelectedEntity('');
+            setSelectedReceivable('');
+            setFormData({
+              collectionDate: '',
+              collectionTime: '',
+              collectionMethod: '电话',
+              collectionResult: '已承诺付款',
+              attitude: '',
+              collectionAmount: '',
+              followUpDate: '',
+              followUpTime: '',
+              communication: '',
+              nextPlan: '',
+              remark: '',
+            });
+          }
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>添加催账记录</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-1 block">
-                  客户 <span className="text-red-500">*</span>
-                </label>
-                <select
-                  className="w-full h-10 px-3 border rounded-md"
-                  value={selectedCustomer}
-                  onChange={(e) => setSelectedCustomer(e.target.value)}
-                >
-                  <option value="">选择客户</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} {c.primaryPhone ? `(${c.primaryPhone})` : ''}
-                    </option>
+            <div>
+              <label className="text-sm font-medium mb-1 block">
+                主体 <span className="text-red-500">*</span>
+              </label>
+              <Select value={selectedEntity} onValueChange={setSelectedEntity}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择主体" />
+                </SelectTrigger>
+                <SelectContent>
+                  {entities.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.name}
+                    </SelectItem>
                   ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block">关联应收账款</label>
-                <select
-                  className="w-full h-10 px-3 border rounded-md"
-                  value={selectedReceivable}
-                  onChange={(e) => setSelectedReceivable(e.target.value)}
-                >
-                  <option value="">不关联</option>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">关联应收账款</label>
+              <Select value={selectedReceivable || '__none__'} onValueChange={(v) => setSelectedReceivable(v === '__none__' ? '' : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="不关联" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">不关联</SelectItem>
                   {receivables.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.contact?.name} - {formatCurrency(r.remainingAmount)}
-                    </option>
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.contact?.name || (r as any).order?.paymentEntity?.name} - {formatCurrency(r.remainingAmount)}
+                    </SelectItem>
                   ))}
-                </select>
-              </div>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -411,39 +541,66 @@ export function Collections() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1 block">催账方式</label>
-                <select
-                  className="w-full h-10 px-3 border rounded-md"
-                  value={formData.collectionMethod}
-                  onChange={(e) => setFormData({ ...formData, collectionMethod: e.target.value })}
+                <Select 
+                  value={formData.collectionMethod} 
+                  onValueChange={(v) => setFormData({ ...formData, collectionMethod: v })}
                 >
-                  <option value="电话">电话</option>
-                  <option value="微信">微信</option>
-                  <option value="短信">短信</option>
-                  <option value="上门">上门</option>
-                  <option value="面谈">面谈</option>
-                  <option value="其他">其他</option>
-                </select>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="电话">电话</SelectItem>
+                    <SelectItem value="微信">微信</SelectItem>
+                    <SelectItem value="短信">短信</SelectItem>
+                    <SelectItem value="上门">上门</SelectItem>
+                    <SelectItem value="面谈">面谈</SelectItem>
+                    <SelectItem value="其他">其他</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">催账结果</label>
-                <select
-                  className="w-full h-10 px-3 border rounded-md"
-                  value={formData.collectionResult}
-                  onChange={(e) => setFormData({ ...formData, collectionResult: e.target.value })}
+                <Select 
+                  value={formData.collectionResult} 
+                  onValueChange={(v) => setFormData({ ...formData, collectionResult: v })}
                 >
-                  <option value="已承诺付款">已承诺付款</option>
-                  <option value="部分付款">部分付款</option>
-                  <option value="拒绝付款">拒绝付款</option>
-                  <option value="无法联系">无法联系</option>
-                  <option value="协商中">协商中</option>
-                </select>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="已承诺付款">已承诺付款</SelectItem>
+                    <SelectItem value="部分付款">部分付款</SelectItem>
+                    <SelectItem value="拒绝付款">拒绝付款</SelectItem>
+                    <SelectItem value="无法联系">无法联系</SelectItem>
+                    <SelectItem value="协商中">协商中</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
             <div>
+              <label className="text-sm font-medium mb-1 block">对方态度</label>
+              <Select
+                value={formData.attitude || '__none__'}
+                onValueChange={(v) => setFormData({ ...formData, attitude: v === '__none__' ? '' : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择态度（影响信用评分）" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">不记录</SelectItem>
+                  <SelectItem value="积极友好">积极友好 😊</SelectItem>
+                  <SelectItem value="正常配合">正常配合</SelectItem>
+                  <SelectItem value="敷衍">敷衍 😑</SelectItem>
+                  <SelectItem value="态度恶劣">态度恶劣 😠</SelectItem>
+                  <SelectItem value="回避">回避 🙈</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
               <label className="text-sm font-medium mb-1 block">沟通内容</label>
-              <textarea
-                className="w-full h-20 px-3 py-2 border rounded-md resize-none"
+              <Textarea
                 placeholder="输入本次沟通的主要内容..."
                 value={formData.communication}
                 onChange={(e) => setFormData({ ...formData, communication: e.target.value })}
@@ -452,8 +609,7 @@ export function Collections() {
 
             <div>
               <label className="text-sm font-medium mb-1 block">后续跟进计划</label>
-              <textarea
-                className="w-full h-20 px-3 py-2 border rounded-md resize-none"
+              <Textarea
                 placeholder="输入后续跟进计划..."
                 value={formData.nextPlan}
                 onChange={(e) => setFormData({ ...formData, nextPlan: e.target.value })}
@@ -506,6 +662,315 @@ export function Collections() {
               取消
             </Button>
             <Button onClick={handleAddRecord}>保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 编辑记录对话框 */}
+      <Dialog 
+        open={showEditDialog} 
+        onOpenChange={(open) => {
+          setShowEditDialog(open);
+          if (!open) {
+            setSelectedRecord(null);
+            setSelectedEntity('');
+            setSelectedReceivable('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>编辑催账记录</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-1 block">
+                主体 <span className="text-red-500">*</span>
+              </label>
+              <Select value={selectedEntity} onValueChange={setSelectedEntity}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择主体" />
+                </SelectTrigger>
+                <SelectContent>
+                  {entities.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">关联应收账款</label>
+              <Select value={selectedReceivable || '__none__'} onValueChange={(v) => setSelectedReceivable(v === '__none__' ? '' : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="不关联" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">不关联</SelectItem>
+                  {receivables.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.contact?.name || (r as any).order?.paymentEntity?.name} - {formatCurrency(r.remainingAmount)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">催账日期</label>
+                <Input
+                  type="date"
+                  value={formData.collectionDate}
+                  onChange={(e) => setFormData({ ...formData, collectionDate: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">催账时间</label>
+                <Input
+                  type="time"
+                  value={formData.collectionTime}
+                  onChange={(e) => setFormData({ ...formData, collectionTime: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">催账方式</label>
+                <Select 
+                  value={formData.collectionMethod} 
+                  onValueChange={(v) => setFormData({ ...formData, collectionMethod: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="电话">电话</SelectItem>
+                    <SelectItem value="微信">微信</SelectItem>
+                    <SelectItem value="短信">短信</SelectItem>
+                    <SelectItem value="上门">上门</SelectItem>
+                    <SelectItem value="面谈">面谈</SelectItem>
+                    <SelectItem value="其他">其他</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">催账结果</label>
+                <Select 
+                  value={formData.collectionResult} 
+                  onValueChange={(v) => setFormData({ ...formData, collectionResult: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="已承诺付款">已承诺付款</SelectItem>
+                    <SelectItem value="部分付款">部分付款</SelectItem>
+                    <SelectItem value="拒绝付款">拒绝付款</SelectItem>
+                    <SelectItem value="无法联系">无法联系</SelectItem>
+                    <SelectItem value="协商中">协商中</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1 block">对方态度</label>
+              <Select
+                value={formData.attitude || '__none__'}
+                onValueChange={(v) => setFormData({ ...formData, attitude: v === '__none__' ? '' : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择态度（影响信用评分）" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">不记录</SelectItem>
+                  <SelectItem value="积极友好">积极友好</SelectItem>
+                  <SelectItem value="正常配合">正常配合</SelectItem>
+                  <SelectItem value="敷衍">敷衍</SelectItem>
+                  <SelectItem value="态度恶劣">态度恶劣</SelectItem>
+                  <SelectItem value="回避">回避</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1 block">沟通内容</label>
+              <Textarea
+                placeholder="输入本次沟通的主要内容..."
+                value={formData.communication}
+                onChange={(e) => setFormData({ ...formData, communication: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1 block">后续跟进计划</label>
+              <Textarea
+                placeholder="输入后续跟进计划..."
+                value={formData.nextPlan}
+                onChange={(e) => setFormData({ ...formData, nextPlan: e.target.value })}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">催账金额</label>
+                <Input
+                  type="number"
+                  placeholder="输入金额"
+                  value={formData.collectionAmount}
+                  onChange={(e) => setFormData({ ...formData, collectionAmount: e.target.value })}
+                />
+              </div>
+              <div></div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">下次跟进日期</label>
+                <Input
+                  type="date"
+                  value={formData.followUpDate}
+                  onChange={(e) => setFormData({ ...formData, followUpDate: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">下次跟进时间</label>
+                <Input
+                  type="time"
+                  value={formData.followUpTime}
+                  onChange={(e) => setFormData({ ...formData, followUpTime: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1 block">备注</label>
+              <Input
+                placeholder="输入备注信息"
+                value={formData.remark}
+                onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+              取消
+            </Button>
+            <Button onClick={handleUpdateRecord}>保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 详情对话框 */}
+      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>催账记录详情</DialogTitle>
+          </DialogHeader>
+          {selectedRecord && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm text-slate-500">主体</div>
+                  <div className="font-medium">{selectedRecord.entity?.name}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-500">催账时间</div>
+                  <div>
+                    {new Date(selectedRecord.collectionDate).toLocaleDateString('zh-CN')}
+                    {selectedRecord.collectionTime && (
+                      <span className="ml-2">{selectedRecord.collectionTime}</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-500">催账方式</div>
+                  <div><Badge variant="outline">{selectedRecord.collectionMethod}</Badge></div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-500">催账结果</div>
+                  <div>{getResultBadge(selectedRecord.collectionResult)}</div>
+                </div>
+              </div>
+
+              {selectedRecord.collectionAmount && (
+                <div>
+                  <div className="text-sm text-slate-500">催账金额</div>
+                  <div className="text-lg font-bold text-orange-600">{formatCurrency(selectedRecord.collectionAmount)}</div>
+                </div>
+              )}
+
+              {selectedRecord.communication && (
+                <div>
+                  <div className="text-sm text-slate-500">沟通内容</div>
+                  <div className="p-3 bg-slate-50 rounded-lg">{selectedRecord.communication}</div>
+                </div>
+              )}
+
+              {selectedRecord.nextPlan && (
+                <div>
+                  <div className="text-sm text-slate-500">后续跟进计划</div>
+                  <div className="p-3 bg-slate-50 rounded-lg">{selectedRecord.nextPlan}</div>
+                </div>
+              )}
+
+              {selectedRecord.followUpDate && (
+                <div>
+                  <div className="text-sm text-slate-500">下次跟进</div>
+                  <div>
+                    {new Date(selectedRecord.followUpDate).toLocaleDateString('zh-CN')}
+                    {selectedRecord.followUpTime && (
+                      <span className="ml-2">{selectedRecord.followUpTime}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {selectedRecord.remark && (
+                <div>
+                  <div className="text-sm text-slate-500">备注</div>
+                  <div className="p-3 bg-slate-50 rounded-lg">{selectedRecord.remark}</div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDetailDialog(false)}>
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除确认对话框 */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认删除</DialogTitle>
+            <DialogDescription>
+              确定要删除这条催账记录吗？此操作不可恢复。
+            </DialogDescription>
+          </DialogHeader>
+          {selectedRecord && (
+            <div className="py-4">
+              <p>
+                主体：<strong>{selectedRecord.entity?.name}</strong>
+              </p>
+              <p className="text-sm text-slate-500 mt-2">
+                时间：{new Date(selectedRecord.collectionDate).toLocaleDateString('zh-CN')}
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDelete}>
+              确认删除
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

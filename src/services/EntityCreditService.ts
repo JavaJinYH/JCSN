@@ -11,6 +11,7 @@ export interface CreditScoreResult {
     debtScore: number;
     stabilityScore: number;
     profitScore: number;
+    collectionAttitudeScore: number;
   };
 }
 
@@ -25,7 +26,7 @@ export class EntityCreditService {
     const twelveMonthsAgo = new Date(now.setMonth(now.getMonth() - 12));
 
     // 1. 获取所有必要数据
-    const [entity, orders, receivables, badDebts, legacyBills, orderItems] = await Promise.all([
+    const [entity, orders, receivables, badDebts, legacyBills, orderItems, collectionRecords] = await Promise.all([
       db.entity.findUnique({ where: { id: entityId } }),
       db.saleOrder.findMany({
         where: {
@@ -50,7 +51,12 @@ export class EntityCreditService {
         where: {
           saleOrder: { entityId, saleDate: { gte: twelveMonthsAgo } }
         }
-      })
+      }),
+      db.collectionRecord.findMany({
+        where: { entityId },
+        orderBy: { collectionDate: 'desc' },
+        take: 20,
+      }),
     ]);
 
     if (!entity) {
@@ -63,14 +69,16 @@ export class EntityCreditService {
     const debtScore = this.calculateDebtScore(entity);
     const stabilityScore = this.calculateStabilityScore(orders, legacyBills, entity.createdAt);
     const profitScore = this.calculateProfitScore(orderItems);
+    const collectionAttitudeScore = this.calculateCollectionAttitudeScore(collectionRecords);
 
-    // 3. 加权计算总分
+    // 3. 加权计算总分（催账态度占 15%）
     const totalScore = Math.round(
-      repaymentScore * 0.35 +
-      scaleScore * 0.25 +
-      debtScore * 0.20 +
+      repaymentScore * 0.30 +
+      scaleScore * 0.20 +
+      debtScore * 0.15 +
       stabilityScore * 0.10 +
-      profitScore * 0.10
+      profitScore * 0.10 +
+      collectionAttitudeScore * 0.15
     );
 
     // 4. 计算等级
@@ -85,7 +93,8 @@ export class EntityCreditService {
         scaleScore,
         debtScore,
         stabilityScore,
-        profitScore
+        profitScore,
+        collectionAttitudeScore,
       }
     };
   }
@@ -248,6 +257,52 @@ export class EntityCreditService {
     if (avgMargin >= 0.1) return 60;
     if (avgMargin >= 0.05) return 40;
     return 20;
+  }
+
+  /**
+   * 计算催账态度评分
+   * 根据最近 20 条催账记录中记录的态度计算
+   */
+  private static calculateCollectionAttitudeScore(collections: any[]): number {
+    if (collections.length === 0) {
+      return 100;
+    }
+
+    const attitudeScores: Record<string, number> = {
+      '积极友好': 100,
+      '正常配合': 80,
+      '敷衍': 50,
+      '态度恶劣': 20,
+      '回避': 10,
+    };
+
+    let totalScore = 0;
+    let scoredCount = 0;
+
+    for (const col of collections) {
+      if (col.attitude && attitudeScores[col.attitude] !== undefined) {
+        totalScore += attitudeScores[col.attitude];
+        scoredCount++;
+      }
+    }
+
+    if (scoredCount === 0) {
+      return 100;
+    }
+
+    const attitudeScore = Math.round(totalScore / scoredCount);
+
+    const recentCount = collections.filter(c => {
+      const daysSince = (Date.now() - new Date(c.collectionDate).getTime()) / (1000 * 60 * 60 * 24);
+      return daysSince <= 90;
+    }).length;
+
+    let urgencyBonus = 0;
+    if (recentCount >= 10) urgencyBonus = -15;
+    else if (recentCount >= 5) urgencyBonus = -10;
+    else if (recentCount >= 3) urgencyBonus = -5;
+
+    return Math.max(0, Math.min(100, attitudeScore + urgencyBonus));
   }
 
   /**

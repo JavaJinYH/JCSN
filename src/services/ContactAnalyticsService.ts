@@ -164,8 +164,16 @@ export class ContactAnalyticsService {
     }
     const avgPaymentDays = paidOrders.length > 0 ? totalPaymentDays / paidOrders.length : 0;
 
-    // 坏账率：暂时设为 0，因为 SaleOrder 和 BadDebtWriteOff 没有直接关系
-    const badDebtRate = 0;
+    // 获取介绍人介绍订单所产生的坏账
+    // 通过订单关联的挂靠主体获取坏账
+    const paymentEntityIds = introducedOrders.map(o => o.paymentEntityId);
+    const badDebtWriteOffs = await db.badDebtWriteOff.findMany({
+      where: {
+        entityId: { in: paymentEntityIds }
+      }
+    });
+    const totalBadDebt = badDebtWriteOffs.reduce((sum, bd) => sum + (bd.writtenOffAmount || 0), 0);
+    const badDebtRate = introducedTotalSales > 0 ? totalBadDebt / introducedTotalSales : 0;
 
     // 复购率：有多少个客户（联系人）是重复下单的
     const buyerIds = new Set(introducedOrders.map(o => o.buyerId).filter(id => id));
@@ -223,10 +231,10 @@ export class ContactAnalyticsService {
     else if (avgProfitMargin >= 0.05) profitScore = 40;
     else profitScore = 20;
 
-    // 3. 坏账率评分（20%，倒数关系）
+    // 3. 坏账率评分（10%，间接因素权重较低）
     const badDebtScore = Math.max(0, 100 - badDebtRate * 100 * 2);
 
-    // 4. 推荐频次评分（20%）
+    // 4. 推荐频次评分（30%）
     let frequencyScore = 0;
     if (orderCount >= 20) frequencyScore = 100;
     else if (orderCount >= 10) frequencyScore = 80;
@@ -234,8 +242,8 @@ export class ContactAnalyticsService {
     else if (orderCount >= 2) frequencyScore = 40;
     else frequencyScore = 20;
 
-    // 加权总分
-    const total = scaleScore * 0.3 + profitScore * 0.3 + badDebtScore * 0.2 + frequencyScore * 0.2;
+    // 加权总分（坏账率占10%作为间接因素）
+    const total = scaleScore * 0.30 + profitScore * 0.30 + badDebtScore * 0.10 + frequencyScore * 0.30;
     return Math.round(total);
   }
 

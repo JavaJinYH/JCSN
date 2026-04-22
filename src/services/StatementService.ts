@@ -60,6 +60,14 @@ export const StatementService = {
     });
   },
 
+  async getSupplierPayments(where?: any) {
+    return db.supplierPayment.findMany({
+      where,
+      include: { supplier: true, purchase: true },
+      orderBy: { paymentDate: 'desc' },
+    });
+  },
+
   async getShopInfo() {
     return db.systemSetting.findFirst();
   },

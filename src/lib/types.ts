@@ -379,13 +379,15 @@ export interface PurchasePhoto {
 
 export interface CollectionRecord {
   id: string;
-  customerId: string;
-  customer?: Contact;
+  entityId: string;
+  entity?: Entity;
   receivableId: string | null;
+  receivable?: Receivable | null;
   collectionDate: Date;
   collectionTime: string | null;
   collectionMethod: string;
   collectionResult: string;
+  attitude: string | null;
   collectionAmount: number | null;
   followUpDate: Date | null;
   followUpTime: string | null;
