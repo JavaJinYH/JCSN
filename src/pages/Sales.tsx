@@ -42,12 +42,45 @@ interface SaleListItem {
 export function Sales() {
   const [sales, setSales] = useState<SaleListItem[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
+  const [entities, setEntities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
   const [customerTypeFilter, setCustomerTypeFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [selectedEntity, setSelectedEntity] = useState<string>('');
+  const [quarterFilter, setQuarterFilter] = useState<string>('');
+
+  // 生成季度选项
+  const generateQuarterOptions = () => {
+    const options = [{ value: '__all__', label: '全部季度' }];
+    const currentYear = new Date().getFullYear();
+    
+    for (let year = currentYear; year >= currentYear - 3; year--) {
+      for (let q = 4; q >= 1; q--) {
+        options.push({
+          value: `${year}-Q${q}`,
+          label: `${year}年第${q}季度`
+        });
+      }
+    }
+    return options;
+  };
+
+  // 检查日期是否在指定季度
+  const isDateInQuarter = (date: Date, quarterValue: string) => {
+    if (!quarterValue || quarterValue === '__all__') return true;
+    
+    const [year, q] = quarterValue.split('-Q');
+    const yearNum = parseInt(year);
+    const quarterNum = parseInt(q);
+    
+    const dateYear = date.getFullYear();
+    const dateQuarter = Math.floor(date.getMonth() / 3) + 1;
+    
+    return dateYear === yearNum && dateQuarter === quarterNum;
+  };
 
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedSale, setSelectedSale] = useState<{ id: string } | null>(null);
@@ -63,10 +96,9 @@ export function Sales() {
       type: 'select' as const,
       options: [
         { value: '__all__', label: '全部' },
-        { value: 'customer', label: '普通客户' },
+        { value: 'customer', label: '客户' },
         { value: 'plumber', label: '水电工' },
         { value: 'company', label: '公司联系人' },
-        { value: 'wholesaler', label: '批发商' },
       ],
     },
     {
@@ -77,6 +109,21 @@ export function Sales() {
         { value: '__all__', label: '全部' },
         ...contacts.map((c) => ({ value: c.id, label: c.name })),
       ],
+    },
+    {
+      key: 'entity',
+      label: '挂靠主体',
+      type: 'select' as const,
+      options: [
+        { value: '__all__', label: '全部' },
+        ...entities.map((e) => ({ value: e.id, label: e.name })),
+      ],
+    },
+    {
+      key: 'quarter',
+      label: '季度筛选',
+      type: 'select' as const,
+      options: generateQuarterOptions(),
     },
     { key: 'saleDate', label: '销售日期', type: 'dateRange' as const },
     {
@@ -96,6 +143,8 @@ export function Sales() {
     search: searchTerm,
     customerType: customerTypeFilter,
     customer: selectedCustomer,
+    entity: selectedEntity,
+    quarter: quarterFilter,
     saleDateStart: dateRange.start,
     saleDateEnd: dateRange.end,
     status: statusFilter,
@@ -105,6 +154,8 @@ export function Sales() {
     if (key === 'search') setSearchTerm(value);
     else if (key === 'customerType') setCustomerTypeFilter(value);
     else if (key === 'customer') setSelectedCustomer(value);
+    else if (key === 'entity') setSelectedEntity(value);
+    else if (key === 'quarter') setQuarterFilter(value);
     else if (key === 'saleDateStart') setDateRange((prev) => ({ ...prev, start: value }));
     else if (key === 'saleDateEnd') setDateRange((prev) => ({ ...prev, end: value }));
     else if (key === 'status') setStatusFilter(value);
@@ -112,10 +163,12 @@ export function Sales() {
 
   const handleResetFilters = () => {
     setSearchTerm('');
-    setSelectedCustomer('all');
+    setSelectedCustomer('__all__');
+    setSelectedEntity('__all__');
+    setQuarterFilter('__all__');
     setDateRange({ start: '', end: '' });
-    setCustomerTypeFilter('all');
-    setStatusFilter('all');
+    setCustomerTypeFilter('__all__');
+    setStatusFilter('__all__');
   };
 
   useEffect(() => {
@@ -125,9 +178,10 @@ export function Sales() {
   const loadData = async () => {
     try {
       console.log('[Sales] 开始加载数据...');
-      const [newSales, contactsData] = await Promise.all([
+      const [newSales, contactsData, entitiesData] = await Promise.all([
         SaleService.getSaleOrders(),
         SaleService.getContacts(),
+        SaleService.getPaymentEntities(),
       ]);
 
       console.log('[Sales] 原始销售数据:', newSales.length, '条');
@@ -161,6 +215,7 @@ export function Sales() {
       console.log('[Sales] 即将设置sales状态, saleItems:', saleItems);
       setSales(saleItems);
       setContacts(contactsData);
+      setEntities(entitiesData);
       console.log('[Sales] 已设置sales状态');
     } catch (error) {
       console.error('[Sales] 加载销售数据失败:', error);
@@ -179,9 +234,12 @@ export function Sales() {
       : true;
 
     const matchesCustomer = selectedCustomer === '__all__' || selectedCustomer === '' || sale.buyerId === selectedCustomer;
+    const matchesEntity = selectedEntity === '__all__' || selectedEntity === '' || sale.paymentEntityId === selectedEntity;
+
     const saleDate = new Date(sale.saleDate);
     const matchesDateStart = !dateRange.start || saleDate >= new Date(dateRange.start);
     const matchesDateEnd = !dateRange.end || saleDate <= new Date(dateRange.end + 'T23:59:59');
+    const matchesQuarter = isDateInQuarter(saleDate, quarterFilter);
 
     let matchesStatus = true;
     if (statusFilter === 'paid') matchesStatus = sale.paidAmount >= sale.totalAmount;
@@ -195,7 +253,7 @@ export function Sales() {
       matchesCustomerType = buyer?.contactType === customerTypeFilter;
     }
 
-    return matchesSearch && matchesCustomer && matchesDateStart && matchesDateEnd && matchesStatus && matchesCustomerType;
+    return matchesSearch && matchesCustomer && matchesEntity && matchesQuarter && matchesDateStart && matchesDateEnd && matchesStatus && matchesCustomerType;
   });
 
   const tableProps = useDataTable<SaleListItem>({ data: filteredSales, defaultPageSize: 20 });

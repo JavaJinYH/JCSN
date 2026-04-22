@@ -288,6 +288,10 @@ export const SaleService = {
     return db.contact.findMany({ orderBy: { name: 'asc' } });
   },
 
+  async getPaymentEntities() {
+    return db.entity.findMany({ orderBy: { name: 'asc' } });
+  },
+
   async getSaleOrderById(id: string) {
     return db.saleOrder.findUnique({
       where: { id },

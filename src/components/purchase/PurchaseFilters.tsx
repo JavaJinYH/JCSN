@@ -7,15 +7,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { Category } from '@/lib/types';
+import type { Supplier } from '@/lib/types';
 
 interface PurchaseFiltersProps {
-  categories: Category[];
-  selectedCategory: string;
+  suppliers: Supplier[];
+  selectedSupplier: string;
   searchTerm: string;
   dateRange: { start: string; end: string };
   statusFilter: string;
-  onCategoryChange: (value: string) => void;
+  onSupplierChange: (value: string) => void;
   onSearchChange: (value: string) => void;
   onDateRangeChange: (range: { start: string; end: string }) => void;
   onStatusChange: (value: string) => void;
@@ -23,12 +23,12 @@ interface PurchaseFiltersProps {
 }
 
 export function PurchaseFilters({
-  categories,
-  selectedCategory,
+  suppliers,
+  selectedSupplier,
   searchTerm,
   dateRange,
   statusFilter,
-  onCategoryChange,
+  onSupplierChange,
   onSearchChange,
   onDateRangeChange,
   onStatusChange,
@@ -53,16 +53,16 @@ export function PurchaseFilters({
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-sm text-slate-500">商品分类:</span>
-        <Select value={selectedCategory} onValueChange={onCategoryChange}>
+        <span className="text-sm text-slate-500">供应商:</span>
+        <Select value={selectedSupplier} onValueChange={onSupplierChange}>
           <SelectTrigger className="w-36 h-8">
-            <SelectValue placeholder="全部分类" />
+            <SelectValue placeholder="全部供应商" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部分类</SelectItem>
-            {categories.map((cat) => (
-              <SelectItem key={cat.id} value={cat.id}>
-                {cat.name}
+            <SelectItem value="all">全部供应商</SelectItem>
+            {suppliers.map((supplier) => (
+              <SelectItem key={supplier.id} value={supplier.id}>
+                {supplier.name}
               </SelectItem>
             ))}
           </SelectContent>

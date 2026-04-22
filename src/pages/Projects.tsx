@@ -258,6 +258,16 @@ export function Projects() {
     }
   };
 
+  const getOrderStatusDisplay = (order: SaleOrder) => {
+    if (order.paidAmount >= order.totalAmount) {
+      return { label: '已付款', variant: 'default' as const };
+    } else if (order.paidAmount > 0) {
+      return { label: '部分付款', variant: 'secondary' as const };
+    } else {
+      return { label: '未付款', variant: 'destructive' as const };
+    }
+  };
+
   const totalProjectAmount = filteredProjects.reduce((sum, p) => sum + (projectStats[p.id]?.total || 0), 0);
   const totalPaidAmount = filteredProjects.reduce((sum, p) => sum + (projectStats[p.id]?.paid || 0), 0);
 
@@ -609,9 +619,14 @@ export function Projects() {
                               {formatCurrency(order.paidAmount)}
                             </TableCell>
                             <TableCell>
-                              <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
-                                {order.status === 'completed' ? '已完成' : order.status}
-                              </Badge>
+                              {(() => {
+                                const statusDisplay = getOrderStatusDisplay(order);
+                                return (
+                                  <Badge variant={statusDisplay.variant}>
+                                    {statusDisplay.label}
+                                  </Badge>
+                                );
+                              })()}
                             </TableCell>
                             <TableCell>
                               <Button

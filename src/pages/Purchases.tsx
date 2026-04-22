@@ -77,7 +77,7 @@ export function Purchases() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedSupplier, setSelectedSupplier] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
   const [statusFilter, setStatusFilter] = useState<string>(initialStatus);
@@ -155,16 +155,26 @@ export function Purchases() {
   };
 
   const filteredOrders = purchaseOrders.filter((order) => {
+    // 供应商筛选
+    const matchesSupplier =
+      selectedSupplier === 'all' ||
+      order.supplier?.id === selectedSupplier ||
+      order.supplierId === selectedSupplier;
+
+    // 搜索筛选
     const matchesSearch =
       !searchTerm ||
       order.batchNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.supplier?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.supplierName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.items.some(item => item.product?.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    // 日期筛选
     const purchaseDate = new Date(order.purchaseDate);
     const matchesDateStart = !dateRange.start || purchaseDate >= new Date(dateRange.start);
     const matchesDateEnd = !dateRange.end || purchaseDate <= new Date(dateRange.end + 'T23:59:59');
-    return matchesSearch && matchesDateStart && matchesDateEnd;
+
+    return matchesSupplier && matchesSearch && matchesDateStart && matchesDateEnd;
   });
 
   const tableProps = useDataTable<PurchaseOrderWithItems>({
@@ -262,7 +272,7 @@ export function Purchases() {
 
   const handleResetFilters = () => {
     setSearchTerm('');
-    setSelectedCategory('all');
+    setSelectedSupplier('all');
     setDateRange({ start: '', end: '' });
     setStatusFilter('all');
   };
@@ -296,12 +306,12 @@ export function Purchases() {
       <Card>
         <CardHeader>
           <PurchaseFilters
-            categories={categories}
-            selectedCategory={selectedCategory}
+            suppliers={suppliers}
+            selectedSupplier={selectedSupplier}
             searchTerm={searchTerm}
             dateRange={dateRange}
             statusFilter={statusFilter}
-            onCategoryChange={setSelectedCategory}
+            onSupplierChange={setSelectedSupplier}
             onSearchChange={setSearchTerm}
             onDateRangeChange={setDateRange}
             onStatusChange={setStatusFilter}

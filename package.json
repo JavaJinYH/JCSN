@@ -10,13 +10,14 @@
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:3000 && electron .\"",
     "electron:build": "npm run build && electron-builder",
+    "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "db:seed": "scripts\\run-node.cmd prisma/seed.js",
-    "db:seed-refined": "scripts\\run-node.cmd prisma/seed-refined.js",
-    "db:cleanup-walkin": "scripts\\run-node.cmd prisma/cleanup-duplicate-walk-in.js",
-    "db:clear": "scripts\\run-node.cmd prisma/clear-data.js",
-    "db:seed-realistic": "scripts\\run-node.cmd prisma/seed-realistic.js"
+    "db:seed": "node prisma/seed.js",
+    "db:seed-refined": "node prisma/seed-refined.js",
+    "db:cleanup-walkin": "node prisma/cleanup-duplicate-walk-in.js",
+    "db:clear": "node prisma/clear-data.js",
+    "db:seed-realistic": "node prisma/seed-realistic.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

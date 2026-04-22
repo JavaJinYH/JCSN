@@ -37,23 +37,28 @@ export function ProductTable({
   onPageSizeChange,
   onDelete,
 }: ProductTableProps) {
-  const getSpecSummary = (specs?: ProductSpec[]) => {
-    if (!specs || specs.length === 0) return '-';
-    const brandGroups = new Map<string, string[]>();
-    specs.forEach(spec => {
-      const brandName = spec.brand?.name || '未知';
-      if (!brandGroups.has(brandName)) {
-        brandGroups.set(brandName, []);
-      }
-      brandGroups.get(brandName)!.push(spec.name);
-    });
-    const summary: string[] = [];
-    brandGroups.forEach((specNames, brandName) => {
-      summary.push(`${brandName}: ${specNames.join(', ')}`);
-    });
-    return summary.map((s, i) => (
-      <div key={i} className="text-xs">{s}</div>
-    ));
+  const getSpecSummary = (product: Product) => {
+    const hasSpec = product.specification && product.specification.trim() !== '';
+    const hasModel = product.model && product.model.trim() !== '';
+
+    if (!hasSpec && !hasModel) {
+      return '-';
+    }
+
+    return (
+      <div className="space-y-1">
+        {hasSpec && (
+          <div className="text-xs text-slate-600">
+            <span className="font-medium">规格:</span> {product.specification}
+          </div>
+        )}
+        {hasModel && (
+          <div className="text-xs text-slate-600">
+            <span className="font-medium">型号:</span> {product.model}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -94,7 +99,7 @@ export function ProductTable({
                   <Badge variant="secondary">{product.category.name}</Badge>
                 </TableCell>
                 <TableCell className="text-slate-500">
-                  {getSpecSummary(product.productSpecs)}
+                  {getSpecSummary(product)}
                 </TableCell>
                 <TableCell>{product.unit}</TableCell>
                 <TableCell className="text-right font-mono text-orange-600">

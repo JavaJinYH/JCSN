@@ -1,4 +1,3 @@
-require('../scripts/set-encoding');
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
@@ -17,6 +16,38 @@ function randomDate(start, end) {
 
 function randomChoice(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function insertRandomBetweenDigits(seq) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let result = '';
+  for (let i = 0; i < seq.length; i++) {
+    result += seq[i];
+    if (i < seq.length - 1) {
+      result += chars[Math.floor(Math.random() * chars.length)];
+    }
+  }
+  return result;
+}
+
+function generateRandomChars(length) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return result;
+}
+
+function generateInvoiceNo(seq) {
+  const now = new Date();
+  const year = now.getFullYear().toString().slice(-2);
+  const month = (now.getMonth() + 1).toString().padStart(2, '0');
+  const day = now.getDate().toString().padStart(2, '0');
+  const seqStr = seq.toString();
+  const withLetters = insertRandomBetweenDigits(seqStr);
+  const suffix = generateRandomChars(2);
+  return `XS${year}${month}${day}-${withLetters}${suffix}`;
 }
 
 async function clearDatabase() {
@@ -242,11 +273,14 @@ async function main() {
 
   console.log('\n9. 创建进货记录...');
   const purchases = [];
+  const purchaseDateMap = new Map();
   for (let i = 0; i < 20; i++) {
     const product = randomChoice(products);
     const supplier = randomChoice(suppliers);
     const quantity = randomInt(10, 100);
     const costPrice = randomFloat(10, 200);
+    const purchaseDate = randomDate(new Date(now.getFullYear(), now.getMonth() - 6, 1), now);
+    
     const purchase = await prisma.purchase.create({
       data: {
         productId: product.id,
@@ -255,7 +289,7 @@ async function main() {
         quantity: quantity,
         unitPrice: costPrice,
         totalAmount: parseFloat((quantity * costPrice).toFixed(2)),
-        purchaseDate: randomDate(new Date(now.getFullYear(), now.getMonth() - 6, 1), now),
+        purchaseDate: purchaseDate,
         remark: `批次${i + 1}`,
         status: 'completed',
       }
@@ -275,6 +309,8 @@ async function main() {
     const project = Math.random() > 0.4 ? randomChoice(projects) : null;
     const paymentEntity = randomChoice(entities);
     const saleDate = randomDate(new Date(now.getFullYear(), now.getMonth() - 5, 1), now);
+    
+    const invoiceNo = generateInvoiceNo(i + 1);
 
     const selectedProducts = [];
     let totalAmount = 0;
@@ -311,8 +347,9 @@ async function main() {
 
     const saleOrder = await prisma.saleOrder.create({
       data: {
+        invoiceNo: invoiceNo,
+        internalSeq: i + 1,
         buyerId: buyer.id,
-        payerId: payer?.id || null,
         introducerId: introducer?.id || null,
         projectId: project?.id || null,
         paymentEntityId: paymentEntity.id,
@@ -416,7 +453,7 @@ async function main() {
 
     await prisma.badDebtWriteOff.create({
       data: {
-        contactId: buyer.id,
+        entityId: sale.paymentEntityId,
         saleOrderId: sale.id,
         originalAmount: originalAmount,
         writtenOffAmount: writtenOffAmount,
@@ -472,39 +509,37 @@ async function main() {
   }
   console.log(`   创建了 ${returns.length} 条退货记录`);
 
-  console.log('\n14. 创建返点记录 (Rebate)...');
+  console.log('\n14. 创建业务佣金 (BusinessCommission)...');
   const plumbers = contacts.filter(c => c.contactType === 'plumber');
   for (let i = 0; i < 10; i++) {
     const sale = randomChoice(saleOrders);
     const plumber = randomChoice(plumbers);
-    const rebateAmount = parseFloat((sale.totalAmount * randomFloat(0.02, 0.06)).toFixed(2));
+    const commissionAmount = parseFloat((sale.totalAmount * randomFloat(0.02, 0.06)).toFixed(2));
 
-    await prisma.rebate.create({
+    await prisma.businessCommission.create({
       data: {
-        saleId: sale.id,
-        plumberId: plumber.id,
-        supplierName: '折柳建材店',
-        rebateAmount: rebateAmount,
-        rebateType: randomChoice(['cash', 'transfer', 'deduct']),
-        rebateRate: parseFloat((rebateAmount / sale.totalAmount * 100).toFixed(2)),
+        type: 'OUTGOING',
+        category: 'INTRODUCER',
+        saleOrderId: sale.id,
+        contactId: plumber.id,
+        amount: commissionAmount,
         recordedAt: randomDate(new Date(now.getFullYear(), now.getMonth() - 3, 1), now),
-        remark: '水电工介绍回扣',
+        remark: '水电工介绍佣金',
       }
     });
   }
-  console.log('   创建了 10 条返点记录');
+  console.log('   创建了 10 条业务佣金记录');
 
   console.log('\n15. 创建催账记录 (CollectionRecord)...');
   const overdueReceivables = receivables.filter(r => r.isOverdue);
   for (let i = 0; i < Math.min(overdueReceivables.length, 8); i++) {
     const rec = overdueReceivables[i];
     const order = saleOrders.find(s => s.id === rec.orderId);
-    const contact = contacts.find(c => c.id === order?.buyerId);
     
-    if (contact) {
+    if (order) {
       await prisma.collectionRecord.create({
         data: {
-          customerId: contact.id,
+          entityId: order.paymentEntityId,
           receivableId: rec.id,
           collectionDate: randomDate(new Date(rec.agreedPaymentDate.getTime() + 5 * 24 * 60 * 60 * 1000), now),
           collectionTime: randomChoice(['09:00', '10:30', '14:00', '16:00']),

@@ -66,18 +66,22 @@ export const SettingsService = {
   async backupData() {
     // 按正确的备份顺序（从无依赖到有依赖）
     const modelsToBackup = [
+      'dailyCounter',
       'category', 'brand', 'systemSetting', 'deliveryFee',
+      'contactCategory',
       'contact', 'supplier', 'supplierPayment', 'entity', 'bizProject',
       'contactPhone', 'contactEntityRole', 'contactProjectRole',
-      'product', 'productSpec', 'entityPrice',
+      'product', 'productSpec', 'entityPrice', 'contactPrice',
       'purchaseOrder', 'purchase', 'purchaseReturn', 'purchaseReturnItem', 'purchasePhoto',
       'saleOrder', 'orderItem', 'orderPayment', 'saleOrderPhoto',
       'saleReturn', 'saleReturnItem',
       'saleSlip', 'saleSlipItem',
+      'businessCommission',
+      'dailyExpense',
+      'serviceAppointment', 'serviceAppointmentItem',
       'rebate', 'deliveryRecord', 'paymentPlan',
       'receivable', 'receivableAuditLog', 'badDebtWriteOff',
       'collectionRecord', 'creditRecord',
-      'supplierPayment',
       'inventoryCheck', 'inventoryCheckItem',
       'legacyBill', 'auditLog'
     ];
@@ -109,26 +113,36 @@ export const SettingsService = {
       'creditRecord', 'collectionRecord',
       'badDebtWriteOff', 'receivableAuditLog', 'receivable',
       'paymentPlan', 'deliveryRecord', 'rebate',
+      'serviceAppointmentItem', 'serviceAppointment',
+      'dailyExpense',
+      'businessCommission',
       'saleSlipItem', 'saleSlip',
       'saleReturnItem', 'saleReturn',
       'saleOrderPhoto', 'orderPayment', 'orderItem', 'saleOrder',
       'purchasePhoto', 'purchaseReturnItem', 'purchaseReturn', 'purchase', 'purchaseOrder',
-      'entityPrice', 'productSpec', 'product',
+      'entityPrice', 'contactPrice', 'productSpec', 'product',
       'contactProjectRole', 'contactEntityRole', 'contactPhone',
       'bizProject', 'entity', 'supplier', 'supplierPayment', 'contact',
-      'deliveryFee', 'systemSetting', 'brand', 'category'
+      'contactCategory',
+      'deliveryFee', 'systemSetting', 'brand', 'category',
+      'dailyCounter'
     ];
 
     // 按正确的恢复顺序（从无依赖到有依赖）
     const createOrder = [
+      'dailyCounter',
       'category', 'brand', 'systemSetting', 'deliveryFee',
+      'contactCategory',
       'contact', 'supplier', 'supplierPayment', 'entity', 'bizProject',
       'contactPhone', 'contactEntityRole', 'contactProjectRole',
-      'product', 'productSpec', 'entityPrice',
+      'product', 'productSpec', 'entityPrice', 'contactPrice',
       'purchaseOrder', 'purchase', 'purchaseReturn', 'purchaseReturnItem', 'purchasePhoto',
       'saleOrder', 'orderItem', 'orderPayment', 'saleOrderPhoto',
       'saleReturn', 'saleReturnItem',
       'saleSlip', 'saleSlipItem',
+      'businessCommission',
+      'dailyExpense',
+      'serviceAppointment', 'serviceAppointmentItem',
       'rebate', 'deliveryRecord', 'paymentPlan',
       'receivable', 'receivableAuditLog', 'badDebtWriteOff',
       'collectionRecord', 'creditRecord',

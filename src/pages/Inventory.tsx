@@ -63,6 +63,16 @@ export function Inventory() {
     loadData();
   }, [selectedCategory, stockFilter]);
 
+  const getStockStatus = (product: Product) => {
+    if (product.stock <= 0) {
+      return { label: '缺货', variant: 'destructive' as const };
+    }
+    if (product.stock <= (product.minStock || 0)) {
+      return { label: '预警', variant: 'warning' as const };
+    }
+    return { label: '正常', variant: 'success' as const };
+  };
+
   const loadData = async () => {
     try {
       const [productsData, categoriesData] = await Promise.all([
@@ -140,6 +150,25 @@ export function Inventory() {
     return matchesSearch && matchesCategory;
   });
 
+  const filteredProducts = products.filter((p) => {
+    // 分类筛选
+    const matchesCategory =
+      selectedCategory === 'all' || p.categoryId === selectedCategory;
+
+    if (!matchesCategory) return false;
+
+    // 库存状态筛选
+    const status = getStockStatus(p);
+    if (stockFilter === 'low') {
+      return status.label === '预警';
+    } else if (stockFilter === 'out') {
+      return status.label === '缺货';
+    } else if (stockFilter === 'normal') {
+      return status.label === '正常';
+    }
+    return true;
+  });
+
   const isAlertMode = stockFilter === 'low' || stockFilter === 'out';
 
   const toggleProductSelection = (productId: string) => {
@@ -179,18 +208,6 @@ export function Inventory() {
     });
   };
 
-  const filteredProducts = products.filter((p) => {
-    const effectiveMinStock = p.minStock || 10;
-    if (stockFilter === 'low') {
-      return p.stock > 0 && p.stock <= effectiveMinStock && p.minStock > 0;
-    } else if (stockFilter === 'out') {
-      return p.stock === 0;
-    } else if (stockFilter === 'normal') {
-      return p.stock > effectiveMinStock || p.minStock === 0;
-    }
-    return true;
-  });
-
   const searchFilteredProducts = searchTerm
     ? filteredProducts.filter(
         (p) =>
@@ -204,16 +221,6 @@ export function Inventory() {
     data: searchFilteredProducts,
     defaultPageSize: 20,
   });
-
-  const getStockStatus = (product: Product) => {
-    if (product.stock === 0) {
-      return { label: '缺货', variant: 'destructive' as const };
-    }
-    if (product.stock <= (product.minStock || 0)) {
-      return { label: '预警', variant: 'warning' as const };
-    }
-    return { label: '正常', variant: 'success' as const };
-  };
 
   if (loading) {
     return (
@@ -380,19 +387,19 @@ export function Inventory() {
             </div>
             <div className="bg-green-50 p-4 rounded-lg">
               <div className="text-2xl font-bold text-green-600">
-                {products.filter((p) => p.stock > (p.minStock || 0)).length}
+                {products.filter((p) => getStockStatus(p).label === '正常').length}
               </div>
               <div className="text-sm text-slate-500">库存正常</div>
             </div>
             <div className="bg-yellow-50 p-4 rounded-lg">
               <div className="text-2xl font-bold text-yellow-600">
-                {products.filter((p) => p.stock <= (p.minStock || 0) && p.stock > 0).length}
+                {products.filter((p) => getStockStatus(p).label === '预警').length}
               </div>
               <div className="text-sm text-slate-500">库存预警</div>
             </div>
             <div className="bg-red-50 p-4 rounded-lg">
               <div className="text-2xl font-bold text-red-600">
-                {products.filter((p) => p.stock === 0).length}
+                {products.filter((p) => getStockStatus(p).label === '缺货').length}
               </div>
               <div className="text-sm text-slate-500">缺货商品</div>
             </div>

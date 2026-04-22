@@ -44,17 +44,28 @@ export function Products() {
   });
   const { categories: categoriesHook } = useCategories();
 
+  const getStockStatus = (p: Product) => {
+    if (p.stock <= 0) {
+      return { label: 'out' };
+    }
+    if (p.stock <= (p.minStock || 0)) {
+      return { label: 'low' };
+    }
+    return { label: 'normal' };
+  };
+
   const filteredProducts = allProducts.filter((p) => {
     const matchesSearch =
       !searchTerm ||
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.specification?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.model?.toLowerCase().includes(searchTerm.toLowerCase());
+    const status = getStockStatus(p);
     const matchesStock =
       stockFilter === 'all' ||
-      (stockFilter === 'low' && p.stock > 0 && p.stock <= (p.minStock || 10)) ||
-      (stockFilter === 'out' && p.stock === 0) ||
-      (stockFilter === 'normal' && p.stock > (p.minStock || 10));
+      (stockFilter === 'low' && status.label === 'low') ||
+      (stockFilter === 'out' && status.label === 'out') ||
+      (stockFilter === 'normal' && status.label === 'normal');
     return matchesSearch && matchesStock;
   });
 

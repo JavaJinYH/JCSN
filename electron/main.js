@@ -90,8 +90,9 @@ async function createWindow() {
 
 function registerDbHandlers() {
   const models = [
+    'dailyCounter',
     'category', 'product', 'brand', 'productSpec', 'entityPrice', 'contactPrice',
-    'customerCategory', 'systemSetting',
+    'contactCategory', 'systemSetting',
     'purchase', 'purchaseOrder', 'purchaseReturn', 'purchaseReturnItem',
     'deliveryFee', 'deliveryRecord',
     'paymentPlan', 'auditLog',
