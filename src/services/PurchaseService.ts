@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { generateBatchNo } from '@/lib/utils';
+import { CounterService } from './CounterService';
 
 export interface CreatePhotoDTO {
   file?: File;
@@ -20,6 +21,9 @@ export interface CreatePurchaseOrderDTO {
   driverPhone?: string | null;
   estimatedDeliveryDate?: Date | null;
   photos?: CreatePhotoDTO[];
+  paymentAmount?: number;
+  paymentMethod?: string;
+  paymentRemark?: string;
 }
 
 export interface CreatePurchaseItemDTO {
@@ -38,12 +42,14 @@ export interface PurchaseOrderFilters {
 
 export const PurchaseService = {
   async createPurchaseOrder(data: CreatePurchaseOrderDTO) {
-    const batchNo = data.commonBatchNo || generateBatchNo();
     const purchaseDate = data.purchaseDate || new Date();
+    const { seq: purchaseSeq } = await CounterService.getNextPurchaseSeq();
+    const batchNo = data.commonBatchNo || generateBatchNo(purchaseSeq);
 
     const order = await db.purchaseOrder.create({
       data: {
         batchNo,
+        internalSeq: purchaseSeq,
         supplierId: data.supplierId || null,
         supplierName: data.supplierName || null,
         purchaseDate,
@@ -100,7 +106,21 @@ export const PurchaseService = {
       }
     }
 
-    return { order, items: createdItems, photos: savedPhotos };
+    let payment = null;
+    if (data.supplierId && data.paymentAmount && data.paymentAmount > 0) {
+      payment = await db.supplierPayment.create({
+        data: {
+          supplierId: data.supplierId,
+          purchaseId: createdItems[0]?.id || null,
+          amount: data.paymentAmount,
+          paymentDate: purchaseDate,
+          paymentMethod: data.paymentMethod || null,
+          remark: data.paymentRemark || `进货付款（单号：${batchNo}）`,
+        },
+      });
+    }
+
+    return { order, items: createdItems, photos: savedPhotos, payment };
   },
 
   async getPurchaseOrders(filters?: PurchaseOrderFilters) {
@@ -197,13 +217,22 @@ export const PurchaseService = {
 
     if (!order) throw new Error('进货单不存在');
 
+    let hasShortage = false;
     for (const item of order.items) {
-      const actualQty = actualQuantities[item.id] ?? item.quantity;
+      const orderedQty = item.quantity;
+      const actualQty = actualQuantities[item.id] ?? orderedQty;
+      const shortageQty = Math.max(0, orderedQty - actualQty);
+
+      if (shortageQty > 0) {
+        hasShortage = true;
+      }
+
       await db.purchase.update({
         where: { id: item.id },
         data: {
           quantity: actualQty,
           totalAmount: actualQty * item.unitPrice,
+          shortageQty: shortageQty,
           status: 'delivered',
         },
       });
@@ -226,7 +255,7 @@ export const PurchaseService = {
       },
     });
 
-    return order;
+    return { ...order, hasShortage };
   },
 
   async createPurchaseReturn(purchaseId: string, quantity: number, type: 'return' | 'exchange', newPurchaseId?: string) {
@@ -264,6 +293,88 @@ export const PurchaseService = {
     }
 
     return returnRecord;
+  },
+
+  async markPendingReturn(purchaseId: string, returnQty: number, reason?: string) {
+    const purchase = await db.purchase.findUnique({
+      where: { id: purchaseId },
+      include: { product: true },
+    });
+
+    if (!purchase) throw new Error('进货记录不存在');
+
+    if (returnQty <= 0) throw new Error('退货数量必须大于0');
+    if (returnQty > purchase.quantity - purchase.pendingReturnQty) {
+      throw new Error(`可退货数量不足，剩余可退：${purchase.quantity - purchase.pendingReturnQty}`);
+    }
+
+    await db.purchase.update({
+      where: { id: purchaseId },
+      data: {
+        pendingReturnQty: { increment: returnQty },
+      },
+    });
+
+    return { success: true, message: `已标记待退货 ${returnQty} 件` };
+  },
+
+  async confirmReturn(purchaseId: string, orderId: string | null, returnQty: number, unitPrice: number, isPriceVolatile: boolean, isCompleted: boolean) {
+    const purchase = await db.purchase.findUnique({
+      where: { id: purchaseId },
+      include: { supplier: true },
+    });
+
+    if (!purchase) throw new Error('进货记录不存在');
+
+    if (returnQty <= 0) throw new Error('退货数量必须大于0');
+
+    const totalRefund = returnQty * unitPrice;
+
+    const returnRecord = await db.purchaseReturn.create({
+      data: {
+        purchaseId,
+        totalAmount: totalRefund,
+        remark: isPriceVolatile ? '价格波动商品，按市场价退货' : null,
+        items: {
+          create: {
+            productId: purchase.productId,
+            returnQuantity: returnQty,
+            unitPrice: unitPrice,
+            amount: totalRefund,
+            marketPrice: isPriceVolatile ? unitPrice : null,
+          },
+        },
+      },
+    });
+
+    if (isCompleted) {
+      await db.product.update({
+        where: { id: purchase.productId },
+        data: { stock: { decrement: returnQty } },
+      });
+
+      if (purchase.pendingReturnQty > 0) {
+        await db.purchase.update({
+          where: { id: purchaseId },
+          data: { pendingReturnQty: { decrement: returnQty } },
+        });
+      }
+
+      if (purchase.supplierId && totalRefund > 0) {
+        await db.supplierPayment.create({
+          data: {
+            supplierId: purchase.supplierId,
+            purchaseId: purchaseId,
+            amount: -totalRefund,
+            paymentDate: new Date(),
+            paymentMethod: null,
+            remark: `退货冲账：${purchase.product?.name} x${returnQty}`,
+          },
+        });
+      }
+    }
+
+    return { success: true, returnRecord, totalRefund };
   },
 
   async createPurchaseReturnWithItems(purchaseId: string, quantity: number, unitPrice: number, isPriceVolatile: boolean, exchangePurchaseId?: string) {

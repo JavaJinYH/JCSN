@@ -44,11 +44,13 @@ interface PurchaseItemRow {
 
 interface PurchaseForReturn {
   id: string;
+  orderId: string | null;
   productId: string;
   quantity: number;
   unitPrice: number;
   supplierId: string | null;
   supplierName: string | null;
+  pendingReturnQty: number;
   product: Product;
 }
 
@@ -93,12 +95,16 @@ export function Purchases() {
   const [driverPhone, setDriverPhone] = useState('');
   const [estimatedDate, setEstimatedDate] = useState('');
   const [photos, setPhotos] = useState<{ id: string; file?: File; preview: string; remark: string; type: string }[]>([]);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [paymentRemark, setPaymentRemark] = useState('');
 
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   const [showReturnDialog, setShowReturnDialog] = useState(false);
   const [returnPurchase, setReturnPurchase] = useState<PurchaseForReturn | null>(null);
+  const [returnOrderStatus, setReturnOrderStatus] = useState<string>('draft');
 
   const [showPriceHistoryDialog, setShowPriceHistoryDialog] = useState(false);
   const [priceHistoryProduct, setPriceHistoryProduct] = useState<Product | null>(null);
@@ -202,6 +208,9 @@ export function Purchases() {
         driverPhone: driverPhone || null,
         estimatedDeliveryDate: needDelivery && estimatedDate ? new Date(estimatedDate) : null,
         photos: photos,
+        paymentAmount: paymentAmount ? parseFloat(paymentAmount) : undefined,
+        paymentMethod: paymentMethod || undefined,
+        paymentRemark: paymentRemark || undefined,
       });
 
       setShowAddDialog(false);
@@ -214,6 +223,9 @@ export function Purchases() {
       setDriverPhone('');
       setEstimatedDate('');
       setPhotos([]);
+      setPaymentAmount('');
+      setPaymentMethod('');
+      setPaymentRemark('');
       loadData();
       toast(`成功添加进货单，包含 ${validItems.length} 种商品！`, 'success');
     } catch (error) {
@@ -232,16 +244,19 @@ export function Purchases() {
     setShowPriceHistoryDialog(true);
   };
 
-  const handleOpenReturn = (purchase: any) => {
+  const handleOpenReturn = (purchase: any, orderStatus: string) => {
     setReturnPurchase({
       id: purchase.id,
+      orderId: purchase.orderId || null,
       productId: purchase.productId,
       quantity: purchase.quantity,
       unitPrice: purchase.unitPrice,
       supplierId: purchase.supplierId || null,
       supplierName: purchase.supplier?.name || purchase.supplierName || null,
+      pendingReturnQty: purchase.pendingReturnQty || 0,
       product: purchase.product,
     });
+    setReturnOrderStatus(orderStatus);
     setShowReturnDialog(true);
   };
 
@@ -521,6 +536,55 @@ export function Purchases() {
             </div>
 
             <div className="border-t pt-4">
+              <div className="text-sm font-medium mb-3 flex items-center gap-2">
+                <span>💰 付款信息</span>
+                <span className="text-slate-400 font-normal">(可选，不填则全额挂账)</span>
+              </div>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">本次付款金额</label>
+                    <Input
+                      type="number"
+                      value={paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value)}
+                      placeholder="0"
+                      min="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">付款方式</label>
+                    <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择方式（可选）" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">现金</SelectItem>
+                        <SelectItem value="wechat">微信</SelectItem>
+                        <SelectItem value="alipay">支付宝</SelectItem>
+                        <SelectItem value="transfer">银行转账</SelectItem>
+                        <SelectItem value="other">其他</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {paymentAmount && commonSupplierId && commonSupplierId !== '__none__' && (
+                  <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-700">
+                    付款后，仍欠供应商：<span className="font-bold">{formatCurrency(purchaseItems.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0), 0) - parseFloat(paymentAmount))}</span> 元
+                  </div>
+                )}
+                <div>
+                  <label className="text-sm font-medium mb-2 block">付款备注</label>
+                  <Input
+                    value={paymentRemark}
+                    onChange={(e) => setPaymentRemark(e.target.value)}
+                    placeholder="可选，如：预付定金"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
               <div className="flex items-center gap-3 mb-4">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -607,6 +671,7 @@ export function Purchases() {
           </DialogHeader>
           <PurchaseReturn
             purchase={returnPurchase}
+            orderStatus={returnOrderStatus}
             open={showReturnDialog}
             onOpenChange={setShowReturnDialog}
             onSuccess={loadData}
@@ -643,7 +708,7 @@ function OrderDetail({
   orderId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onOpenReturn: (purchase: any) => void;
+  onOpenReturn: (purchase: any, orderStatus: string) => void;
   onViewPriceHistory: (product: Product) => void;
   onStatusChange: () => void;
 }) {
@@ -658,6 +723,8 @@ function OrderDetail({
   const [showPhotoViewer, setShowPhotoViewer] = useState(false);
   const [photoViewerIndex, setPhotoViewerIndex] = useState(0);
   const [printDialogOpen, setPrintDialogOpen] = useState(false);
+  const [showDeliveryConfirmDialog, setShowDeliveryConfirmDialog] = useState(false);
+  const [actualQuantities, setActualQuantities] = useState<{ [itemId: string]: string }>({});
 
   useEffect(() => {
     if (open && orderId) {
@@ -912,7 +979,14 @@ function OrderDetail({
         )}
         {order.status === 'sent' && (
           <Button
-            onClick={handleConfirmDelivery}
+            onClick={() => {
+              const initial: { [key: string]: string } = {};
+              order.items.forEach(item => {
+                initial[item.id] = item.quantity.toString();
+              });
+              setActualQuantities(initial);
+              setShowDeliveryConfirmDialog(true);
+            }}
             disabled={saving}
             className="bg-green-500 hover:bg-green-600"
           >
@@ -1009,11 +1083,11 @@ function OrderDetail({
                           </Button>
                         </>
                       )}
-                      {(order.status === 'sent' || order.status === 'delivered') && (
+                      {(order.status === 'sent' || order.status === 'delivered' || order.status === 'completed') && (
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => onOpenReturn(item)}
+                          onClick={() => onOpenReturn(item, order.status)}
                         >
                           退货/换货
                         </Button>
@@ -1099,6 +1173,95 @@ function OrderDetail({
                 className="bg-orange-500 hover:bg-orange-600"
               >
                 {saving ? '上传中...' : '上传照片'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 确认到货对话框 */}
+      <Dialog open={showDeliveryConfirmDialog} onOpenChange={setShowDeliveryConfirmDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>确认到货</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg text-sm">
+              <p className="text-yellow-700">
+                <strong>提示：</strong>请核对实际到货数量。如有缺货，请修改为实际数量。
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {order.items.map((item) => {
+                const orderedQty = item.quantity;
+                const actualQty = actualQuantities[item.id] || orderedQty.toString();
+                const shortage = orderedQty - parseInt(actualQty || '0');
+                return (
+                  <div key={item.id} className="border rounded-lg p-3">
+                    <div className="font-medium mb-2">{item.product?.name}</div>
+                    <div className="grid grid-cols-3 gap-2 items-center">
+                      <div>
+                        <div className="text-xs text-slate-500">订购数量</div>
+                        <div className="font-bold">{orderedQty}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-500">实际到货</div>
+                        <Input
+                          type="number"
+                          value={actualQty}
+                          onChange={(e) => setActualQuantities(prev => ({
+                            ...prev,
+                            [item.id]: e.target.value
+                          }))}
+                          className="h-8"
+                          min="0"
+                          max={orderedQty}
+                        />
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-500">缺货</div>
+                        <div className={`font-bold ${shortage > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                          {shortage > 0 ? shortage : '无'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowDeliveryConfirmDialog(false)}>
+                取消
+              </Button>
+              <Button
+                onClick={async () => {
+                  setSaving(true);
+                  try {
+                    const quantities: { [key: string]: number } = {};
+                    order.items.forEach(item => {
+                      quantities[item.id] = parseInt(actualQuantities[item.id] || '0');
+                    });
+                    await PurchaseService.confirmPurchaseDelivery(order.id, quantities);
+                    setShowDeliveryConfirmDialog(false);
+                    loadOrder();
+                    onStatusChange();
+                    toast('已确认到货', 'success');
+                    setTimeout(() => {
+                      setShowPhotoUploadDialog(true);
+                    }, 500);
+                  } catch (error) {
+                    console.error('[OrderDetail] 确认到货失败:', error);
+                    toast('操作失败', 'error');
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+                disabled={saving}
+                className="bg-green-500 hover:bg-green-600"
+              >
+                确认入库
               </Button>
             </div>
           </div>

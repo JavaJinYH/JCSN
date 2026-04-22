@@ -8,6 +8,14 @@ datasource db {
   url      = "file:./dev.db"
 }
 
+model DailyCounter {
+  id        String   @id @default(cuid())
+  date      String   @unique
+  saleCount Int      @default(0)
+  purchaseCount Int  @default(0)
+  createdAt DateTime @default(now())
+}
+
 model Category {
   id          String    @id @default(cuid())
   name        String
@@ -103,6 +111,7 @@ model ContactPrice {
 
 model PurchaseOrder {
   id           String     @id @default(cuid())
+  internalSeq  Int?
   batchNo      String?    @unique
   supplierId   String?
   supplier     Supplier?  @relation(fields: [supplierId], references: [id], onDelete: SetNull)
@@ -152,6 +161,9 @@ model Purchase {
   driverName   String?
   driverPhone  String?
   estimatedDeliveryDate DateTime?
+
+  pendingReturnQty Int         @default(0)
+  shortageQty     Int         @default(0)
 
   photos       PurchasePhoto[]
   createdAt    DateTime        @default(now())
@@ -607,6 +619,7 @@ model ContactProjectRole {
 
 model SaleOrder {
   id               String   @id @default(cuid())
+  internalSeq      Int?
   invoiceNo        String?
   writtenInvoiceNo String?
   saleDate         DateTime @default(now())

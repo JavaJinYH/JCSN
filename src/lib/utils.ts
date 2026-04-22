@@ -33,22 +33,47 @@ export function formatDateTime(date: Date | string): string {
   });
 }
 
-export function generateInvoiceNo(): string {
-  const now = new Date();
-  const year = now.getFullYear().toString().slice(-2);
-  const month = (now.getMonth() + 1).toString().padStart(2, '0');
-  const day = now.getDate().toString().padStart(2, '0');
-  const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-  return `XS${year}${month}${day}${random}`;
+function insertRandomBetweenDigits(seq: string): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let result = '';
+  for (let i = 0; i < seq.length; i++) {
+    result += seq[i];
+    if (i < seq.length - 1) {
+      result += chars[Math.floor(Math.random() * chars.length)];
+    }
+  }
+  return result;
 }
 
-export function generateBatchNo(): string {
+function generateRandomChars(length: number): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return result;
+}
+
+export function generateInvoiceNo(todaySeq: number): string {
   const now = new Date();
   const year = now.getFullYear().toString().slice(-2);
   const month = (now.getMonth() + 1).toString().padStart(2, '0');
   const day = now.getDate().toString().padStart(2, '0');
-  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-  return `JH${year}${month}${day}${random}`;
+  const seqStr = todaySeq.toString();
+  const withLetters = insertRandomBetweenDigits(seqStr);
+  const suffix = generateRandomChars(2);
+  return `XS${year}${month}${day}-${withLetters}${suffix}`;
+}
+
+export function generateBatchNo(todaySeq: number): string {
+  const now = new Date();
+  const year = now.getFullYear().toString().slice(-2);
+  const month = (now.getMonth() + 1).toString().padStart(2, '0');
+  const day = now.getDate().toString().padStart(2, '0');
+  const seqStr = todaySeq.toString();
+  const withLetters = insertRandomBetweenDigits(seqStr);
+  const suffix = generateRandomChars(2);
+  return `JH${year}${month}${day}-${withLetters}${suffix}`;
 }
 
 export function calculateProfit(

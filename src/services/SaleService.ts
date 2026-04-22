@@ -5,6 +5,7 @@ import { ContactService } from './ContactService';
 import { EntityService } from './EntityService';
 import { ProductService } from './ProductService';
 import { ReceivableService } from './ReceivableService';
+import { CounterService } from './CounterService';
 
 export interface CreatePaymentDTO {
   method: string;
@@ -108,9 +109,12 @@ export const SaleService = {
       throw new Error(`商品不存在: ${missingIds.join(', ')}`);
     }
 
+    const { seq: saleSeq } = await CounterService.getNextSaleSeq();
+
     const sale = await db.saleOrder.create({
       data: {
-        invoiceNo: generateInvoiceNo(),
+        invoiceNo: generateInvoiceNo(saleSeq),
+        internalSeq: saleSeq,
         buyerId,
         introducerId: data.introducerId === '__none__' ? null : data.introducerId || null,
         pickerId: data.pickerId === '__none__' ? null : data.pickerId || null,
@@ -485,9 +489,12 @@ export const SaleService = {
       entityId = cashEntity?.id || '';
     }
 
+    const { seq: saleSeq } = await CounterService.getNextSaleSeq();
+
     const sale = await db.saleOrder.create({
       data: {
-        invoiceNo: generateInvoiceNo(),
+        invoiceNo: generateInvoiceNo(saleSeq),
+        internalSeq: saleSeq,
         buyerId: slip.buyerId || '',
         introducerId: slip.introducerId,
         pickerId: slip.pickerId,
