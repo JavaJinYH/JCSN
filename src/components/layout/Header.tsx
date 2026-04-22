@@ -72,7 +72,7 @@ export function Header() {
           title={showMoney ? '隐藏金额' : '显示金额'}
           className="p-2 rounded-lg transition-all text-slate-500 hover:text-slate-700 hover:bg-slate-100"
         >
-          {showMoney ? '🙈' : '👁️'}
+          {showMoney ? '💰' : '💰ₓ'}
         </button>
         {isElectron && (
           <button
