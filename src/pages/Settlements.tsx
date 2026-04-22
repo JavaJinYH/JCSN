@@ -58,8 +58,9 @@ const filters = [
   ]},
   { key: 'entityType', label: '主体类型', type: 'select' as const, options: [
     { value: 'all', label: '全部' },
-    { value: 'personal', label: '个人' },
-    { value: 'company', label: '公司' },
+    { value: 'company', label: '装修/建材公司' },
+    { value: 'contractor', label: '包工头/水电工' },
+    { value: 'personal', label: '个人/业主' },
   ]},
   { key: 'search', label: '关键词', type: 'text' as const, placeholder: '主体名称/联系人电话...' },
 ];
@@ -305,12 +306,43 @@ export function Settlements() {
 
   const getEntityTypeBadge = (type: string) => {
     switch (type) {
-      case 'personal':
-        return <Badge className="bg-blue-500">个人</Badge>;
       case 'company':
-        return <Badge className="bg-purple-500">公司</Badge>;
+        return <Badge className="bg-purple-500">装修/建材公司</Badge>;
+      case 'contractor':
+        return <Badge className="bg-orange-500">包工头/水电工</Badge>;
+      case 'personal':
+        return <Badge className="bg-blue-500">个人/业主</Badge>;
+      case 'government':
+        return <Badge className="bg-green-500">政府/单位</Badge>;
       default:
         return <Badge variant="secondary">{type}</Badge>;
+    }
+  };
+
+  const getCreditLevelLabel = (level: string | null | undefined) => {
+    if (!level) return null;
+    switch (level) {
+      case 'AAA': return 'AAA-优质';
+      case 'AA': return 'AA-良好';
+      case 'A': return 'A-一般';
+      case 'BBB': return 'BBB-尚可';
+      case 'BB': return 'BB-欠佳';
+      case 'B': return 'B-较差';
+      case 'excellent': return '优秀';
+      case 'good': return '良好';
+      case 'average': return '一般';
+      case 'poor': return '较差';
+      default: return level;
+    }
+  };
+
+  const getRiskLevelLabel = (level: string | null | undefined) => {
+    if (!level) return null;
+    switch (level) {
+      case 'low': return '低风险';
+      case 'medium': return '中风险';
+      case 'high': return '高风险';
+      default: return level;
     }
   };
 
@@ -699,10 +731,10 @@ export function Settlements() {
                         <TableCell>
                           {entity.creditLevel ? (
                             <Badge variant={
-                              entity.creditLevel === 'AAA' || entity.creditLevel === 'AA' ? 'default' :
-                              entity.creditLevel === 'A' || entity.creditLevel === 'BBB' ? 'secondary' : 'destructive'
+                              entity.creditLevel === 'excellent' || entity.creditLevel === 'AAA' || entity.creditLevel === 'AA' ? 'default' :
+                              entity.creditLevel === 'good' || entity.creditLevel === 'A' || entity.creditLevel === 'BBB' ? 'secondary' : 'destructive'
                             }>
-                              {entity.creditLevel}
+                              {getCreditLevelLabel(entity.creditLevel)}
                             </Badge>
                           ) : (
                             <span className="text-slate-400">-</span>
@@ -711,10 +743,10 @@ export function Settlements() {
                         <TableCell>
                           {entity.riskLevel ? (
                             <Badge variant={
-                              entity.riskLevel === '低' ? 'default' :
-                              entity.riskLevel === '中' ? 'secondary' : 'destructive'
+                              entity.riskLevel === 'low' ? 'default' :
+                              entity.riskLevel === 'medium' ? 'secondary' : 'destructive'
                             }>
-                              {entity.riskLevel}
+                              {getRiskLevelLabel(entity.riskLevel)}
                             </Badge>
                           ) : (
                             <span className="text-slate-400">-</span>
@@ -890,10 +922,10 @@ export function Settlements() {
                       <span className="text-slate-500">信用等级:</span>
                       {selectedEntity.creditLevel ? (
                         <Badge variant={
-                          selectedEntity.creditLevel === 'AAA' || selectedEntity.creditLevel === 'AA' ? 'default' :
-                          selectedEntity.creditLevel === 'A' || selectedEntity.creditLevel === 'BBB' ? 'secondary' : 'destructive'
+                          selectedEntity.creditLevel === 'excellent' || selectedEntity.creditLevel === 'AAA' || selectedEntity.creditLevel === 'AA' ? 'default' :
+                          selectedEntity.creditLevel === 'good' || selectedEntity.creditLevel === 'A' || selectedEntity.creditLevel === 'BBB' ? 'secondary' : 'destructive'
                         }>
-                          {selectedEntity.creditLevel}
+                          {getCreditLevelLabel(selectedEntity.creditLevel)}
                         </Badge>
                       ) : <span className="text-slate-400">-</span>}
                     </div>
@@ -901,10 +933,10 @@ export function Settlements() {
                       <span className="text-slate-500">风险等级:</span>
                       {selectedEntity.riskLevel ? (
                         <Badge variant={
-                          selectedEntity.riskLevel === '低' ? 'default' :
-                          selectedEntity.riskLevel === '中' ? 'secondary' : 'destructive'
+                          selectedEntity.riskLevel === 'low' ? 'default' :
+                          selectedEntity.riskLevel === 'medium' ? 'secondary' : 'destructive'
                         }>
-                          {selectedEntity.riskLevel}
+                          {getRiskLevelLabel(selectedEntity.riskLevel)}
                         </Badge>
                       ) : <span className="text-slate-400">-</span>}
                     </div>

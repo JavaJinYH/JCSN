@@ -66,8 +66,8 @@ export const SettingsService = {
   async backupData() {
     // 按正确的备份顺序（从无依赖到有依赖）
     const modelsToBackup = [
-      'category', 'customerCategory', 'brand', 'systemSetting', 'deliveryFee',
-      'contact', 'supplier', 'entity', 'bizProject',
+      'category', 'brand', 'systemSetting', 'deliveryFee',
+      'contact', 'supplier', 'supplierPayment', 'entity', 'bizProject',
       'contactPhone', 'contactEntityRole', 'contactProjectRole',
       'product', 'productSpec', 'entityPrice',
       'purchaseOrder', 'purchase', 'purchaseReturn', 'purchaseReturnItem', 'purchasePhoto',
@@ -77,6 +77,7 @@ export const SettingsService = {
       'rebate', 'deliveryRecord', 'paymentPlan',
       'receivable', 'receivableAuditLog', 'badDebtWriteOff',
       'collectionRecord', 'creditRecord',
+      'supplierPayment',
       'inventoryCheck', 'inventoryCheckItem',
       'legacyBill', 'auditLog'
     ];
@@ -114,14 +115,14 @@ export const SettingsService = {
       'purchasePhoto', 'purchaseReturnItem', 'purchaseReturn', 'purchase', 'purchaseOrder',
       'entityPrice', 'productSpec', 'product',
       'contactProjectRole', 'contactEntityRole', 'contactPhone',
-      'bizProject', 'entity', 'supplier', 'contact',
-      'deliveryFee', 'systemSetting', 'brand', 'customerCategory', 'category'
+      'bizProject', 'entity', 'supplier', 'supplierPayment', 'contact',
+      'deliveryFee', 'systemSetting', 'brand', 'category'
     ];
 
     // 按正确的恢复顺序（从无依赖到有依赖）
     const createOrder = [
-      'category', 'customerCategory', 'brand', 'systemSetting', 'deliveryFee',
-      'contact', 'supplier', 'entity', 'bizProject',
+      'category', 'brand', 'systemSetting', 'deliveryFee',
+      'contact', 'supplier', 'supplierPayment', 'entity', 'bizProject',
       'contactPhone', 'contactEntityRole', 'contactProjectRole',
       'product', 'productSpec', 'entityPrice',
       'purchaseOrder', 'purchase', 'purchaseReturn', 'purchaseReturnItem', 'purchasePhoto',

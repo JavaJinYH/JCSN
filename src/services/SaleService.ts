@@ -114,8 +114,6 @@ export const SaleService = {
         buyerId,
         introducerId: data.introducerId === '__none__' ? null : data.introducerId || null,
         pickerId: data.pickerId === '__none__' ? null : data.pickerId || null,
-        pickerName: data.pickerName || null,
-        pickerPhone: data.pickerPhone || null,
         projectId: data.projectId === '__none__' ? null : data.projectId || null,
         paymentEntityId: entityId,
         totalAmount: data.totalAmount,
@@ -199,28 +197,6 @@ export const SaleService = {
           },
           create: {
             entityId: data.paymentEntityId,
-            productId: item.productId,
-            lastPrice: item.unitPrice,
-            transactionCount: 1,
-          },
-          update: {
-            lastPrice: item.unitPrice,
-            transactionCount: { increment: 1 },
-          },
-        });
-      }
-
-      // 更新联系人的历史价格
-      if (buyerId) {
-        await db.customerPrice.upsert({
-          where: {
-            customerId_productId: {
-              customerId: buyerId,
-              productId: item.productId,
-            },
-          },
-          create: {
-            customerId: buyerId,
             productId: item.productId,
             lastPrice: item.unitPrice,
             transactionCount: 1,

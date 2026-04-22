@@ -665,8 +665,10 @@ export function Statements() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">全部类型</SelectItem>
-                    <SelectItem value="company">公司/单位</SelectItem>
-                    <SelectItem value="personal">个人</SelectItem>
+                    <SelectItem value="company">装修/建材公司</SelectItem>
+                    <SelectItem value="contractor">包工头/水电工</SelectItem>
+                    <SelectItem value="personal">个人/业主</SelectItem>
+                    <SelectItem value="government">政府/单位</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -862,7 +864,7 @@ export function Statements() {
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-medium text-slate-800">{entity.entityName}</span>
                                   <Badge variant="outline">
-                                    {entity.entityType === 'company' ? '公司' : entity.entityType === 'government' ? '政府' : '个人'}
+                                    {entity.entityType === 'company' ? '公司' : entity.entityType === 'contractor' ? '包工头' : entity.entityType === 'government' ? '政府' : '个人'}
                                   </Badge>
                                   {entity.contactName && (
                                     <span className="text-sm text-slate-500">联系人: {entity.contactName}</span>

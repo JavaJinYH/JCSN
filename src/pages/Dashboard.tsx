@@ -31,18 +31,15 @@ interface FlowStats {
   totalExpense: number;
   netIncome: number;
   orderCount: number;
-  // 收入明细
   salesIncome: number;
   collectionIncome: number;
   purchaseReturnIncome: number;
   supplierCommissionIncome: number;
-  // 支出明细
   purchaseExpense: number;
   saleReturnExpense: number;
   dailyExpenseTotal: number;
   introducerCommissionExpense: number;
   installationFeeTotal: number;
-  // 按支付方式统计
   cashAmount: number;
   wechatAmount: number;
   alipayAmount: number;
@@ -75,7 +72,7 @@ interface Sale {
   paidAmount: number;
   totalAmount: number;
   saleDate: Date;
-  customer: { name: string } | null;
+  buyer: { name: string } | null;
 }
 
 type FlowPeriod = 'today' | 'week' | 'month';
@@ -102,6 +99,13 @@ interface ReminderAppointment {
   status: string;
 }
 
+interface ReceivableStats {
+  totalRemaining: number;
+  pendingCount: number;
+  overdueCount: number;
+  overdueAmount: number;
+}
+
 export function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     todaySales: 0,
@@ -109,9 +113,14 @@ export function Dashboard() {
     lowStockCount: 0,
     totalProducts: 0,
   });
+  const [receivableStats, setReceivableStats] = useState<ReceivableStats>({
+    totalRemaining: 0,
+    pendingCount: 0,
+    overdueCount: 0,
+    overdueAmount: 0,
+  });
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
-  const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
   const [recentSales, setRecentSales] = useState<Sale[]>([]);
   const [reminderOrders, setReminderOrders] = useState<ReminderOrder[]>([]);
   const [reminderAppointments, setReminderAppointments] = useState<ReminderAppointment[]>([]);
@@ -162,6 +171,7 @@ export function Dashboard() {
         newOrderItems,
         deliveringOrders,
         upcomingAppointments,
+        receivable,
       ] = await Promise.all([
         DashboardService.getAllProducts(),
         DashboardService.getTodayNewOrders(today),
@@ -170,35 +180,28 @@ export function Dashboard() {
         DashboardService.getNewOrderItemsInPeriod(weekAgo),
         DashboardService.getDeliveringOrders(),
         DashboardService.getUpcomingAppointments(),
+        DashboardService.getReceivableStats(),
       ]);
 
       setReminderOrders(deliveringOrders);
       setReminderAppointments(upcomingAppointments);
+      setReceivableStats(receivable);
 
       const lowStock = allProducts.filter(p => p.stock <= p.minStock && p.minStock > 0);
       const todayNewOrdersTotal = todayNewOrders.reduce((sum, o) => sum + o.paidAmount, 0);
-      const todaySales = todayNewOrdersTotal;
-      const todayOrders = todayNewOrders.length;
 
       setStats({
-        todaySales,
-        todayOrders,
+        todaySales: todayNewOrdersTotal,
+        todayOrders: todayNewOrders.length,
         lowStockCount: lowStock.length,
         totalProducts: allProducts.length,
       });
-      setLowStockProducts(lowStock.slice(0, 5).map(p => ({
-        id: p.id,
-        name: p.name,
-        stock: p.stock,
-        minStock: p.minStock,
-        unit: p.unit,
-      })));
 
       const recentAll = recentNewOrders.map(o => ({
         id: o.id,
         paidAmount: o.paidAmount,
         saleDate: o.saleDate,
-        customer: o.buyer,
+        buyer: o.buyer,
       })).sort((a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime()).slice(0, 10);
       setRecentSales(recentAll as any);
 
@@ -308,25 +311,38 @@ export function Dashboard() {
           <Link to="/purchases">
             <Button variant="outline">+ 进货入库</Button>
           </Link>
-          <Link to="/products/new">
-            <Button variant="outline">+ 添加商品</Button>
-          </Link>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
+        <Card className="border-orange-200">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-slate-500">今日销售额</CardTitle>
             <span className="text-2xl">💰</span>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-900">{formatCurrency(stats.todaySales)}</div>
-            <p className="text-xs text-slate-500 mt-1">今日订单 {stats.todayOrders} 笔</p>
+            <div className="text-2xl font-bold text-orange-600">{formatCurrency(stats.todaySales)}</div>
+            <p className="text-xs text-slate-500 mt-1">{stats.todayOrders} 笔订单</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-blue-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">应收账款</CardTitle>
+            <span className="text-2xl">📋</span>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">{formatCurrency(receivableStats.totalRemaining)}</div>
+            <p className="text-xs text-slate-500 mt-1">
+              {receivableStats.overdueCount > 0 && (
+                <span className="text-red-500 mr-1">逾期 {receivableStats.overdueCount} 笔</span>
+              )}
+              共 {receivableStats.pendingCount} 笔待收
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-yellow-200">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-slate-500">库存预警</CardTitle>
             <span className="text-2xl">⚠️</span>
@@ -337,18 +353,16 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-purple-200">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-slate-500">商品总数</CardTitle>
             <span className="text-2xl">📦</span>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-900">{stats.totalProducts}</div>
+            <div className="text-2xl font-bold text-purple-600">{stats.totalProducts}</div>
             <p className="text-xs text-slate-500 mt-1">种商品在库</p>
           </CardContent>
         </Card>
-
-      <QuickActions />
       </div>
 
       {(reminderOrders.length > 0 || reminderAppointments.length > 0) && (
@@ -362,7 +376,7 @@ export function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {reminderOrders.map((order) => (
+                  {reminderOrders.slice(0, 3).map((order) => (
                     <div key={order.id} className="flex items-center justify-between p-2 bg-white rounded border border-orange-100">
                       <div>
                         <div className="font-medium text-slate-800 text-sm">
@@ -398,7 +412,7 @@ export function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {reminderAppointments.map((appt) => {
+                  {reminderAppointments.slice(0, 3).map((appt) => {
                     const getInstallerDisplay = () => {
                       if (appt.installerType === '水电工' && appt.installerContact) {
                         return ` - 水电工: ${appt.installerContact.name}`;
@@ -443,8 +457,129 @@ export function Dashboard() {
         </div>
       )}
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>近7天销售趋势</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="date" stroke="#64748b" fontSize={12} />
+                  <YAxis stroke="#64748b" fontSize={12} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#fff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                    }}
+                    formatter={(value: number) => formatCurrency(value)}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="sales"
+                    stroke="#f97316"
+                    fill="#fed7aa"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>热销商品 TOP5</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={topProducts} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis type="number" stroke="#64748b" fontSize={12} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    stroke="#64748b"
+                    fontSize={12}
+                    width={100}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#fff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                    }}
+                    formatter={(value: number) => formatCurrency(value)}
+                  />
+                  <Bar dataKey="amount" fill="#f97316" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>最近销售</CardTitle>
+            <Link to="/sales">
+              <Button variant="ghost" size="sm">查看全部</Button>
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {recentSales.length === 0 ? (
+              <div className="text-center py-8 text-slate-500">
+                暂无销售记录
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recentSales.slice(0, 5).map((sale) => (
+                  <div
+                    key={sale.id}
+                    className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
+                  >
+                    <div>
+                      <div className="font-medium text-slate-800">
+                        {sale.buyer?.name || '散客'}
+                      </div>
+                      <div className="text-sm text-slate-500">
+                        {new Date(sale.saleDate).toLocaleString('zh-CN', {
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-orange-600">
+                        {formatCurrency(sale.paidAmount)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm">快捷操作</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <QuickActions />
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
-        <CardHeader 
+        <CardHeader
           className="flex flex-row items-center justify-between cursor-pointer"
           onClick={() => setFlowCollapsed(!flowCollapsed)}
         >
@@ -597,151 +732,6 @@ export function Dashboard() {
           </CardContent>
         )}
       </Card>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>近7天销售趋势</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="date" stroke="#64748b" fontSize={12} />
-                  <YAxis stroke="#64748b" fontSize={12} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                    }}
-                    formatter={(value: number) => formatCurrency(value)}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="sales"
-                    stroke="#f97316"
-                    fill="#fed7aa"
-                    strokeWidth={2}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>热销商品 TOP5</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={topProducts} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis type="number" stroke="#64748b" fontSize={12} />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    stroke="#64748b"
-                    fontSize={12}
-                    width={100}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                    }}
-                    formatter={(value: number) => formatCurrency(value)}
-                  />
-                  <Bar dataKey="amount" fill="#f97316" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>库存预警提醒</CardTitle>
-            <Link to="/inventory?filter=low">
-              <Button variant="ghost" size="sm">查看全部</Button>
-            </Link>
-          </CardHeader>
-          <CardContent>
-            {lowStockProducts.length === 0 ? (
-              <div className="text-center py-8 text-slate-500">
-                🎉 所有商品库存充足
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {lowStockProducts.map((product) => (
-                  <div
-                    key={product.id}
-                    className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border border-yellow-100"
-                  >
-                    <div>
-                      <div className="font-medium text-slate-800">{product.name}</div>
-                      <div className="text-sm text-slate-500">
-                        当前库存: {product.stock} {product.unit}
-                      </div>
-                    </div>
-                    <Badge variant="warning">库存不足</Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>最近销售</CardTitle>
-            <Link to="/sales">
-              <Button variant="ghost" size="sm">查看全部</Button>
-            </Link>
-          </CardHeader>
-          <CardContent>
-            {recentSales.length === 0 ? (
-              <div className="text-center py-8 text-slate-500">
-                暂无销售记录
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {recentSales.slice(0, 5).map((sale) => (
-                  <div
-                    key={sale.id}
-                    className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
-                  >
-                    <div>
-                      <div className="font-medium text-slate-800">
-                        {sale.customer?.name || '散客'}
-                      </div>
-                      <div className="text-sm text-slate-500">
-                        {new Date(sale.saleDate).toLocaleString('zh-CN', {
-                          month: '2-digit',
-                          day: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold text-orange-600">
-                        {formatCurrency(sale.paidAmount)}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }

@@ -44,10 +44,10 @@ export function Sales() {
   const [contacts, setContacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCustomer, setSelectedCustomer] = useState<string>('all');
+  const [selectedCustomer, setSelectedCustomer] = useState<string>('');
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
-  const [customerTypeFilter, setCustomerTypeFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [customerTypeFilter, setCustomerTypeFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('');
 
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedSale, setSelectedSale] = useState<{ id: string } | null>(null);
@@ -62,10 +62,11 @@ export function Sales() {
       label: '客户类型',
       type: 'select' as const,
       options: [
-        { value: 'all', label: '全部类型' },
-        { value: '普通客户', label: '普通客户' },
-        { value: '水电工', label: '水电工' },
-        { value: '批发商', label: '批发商' },
+        { value: '__all__', label: '全部' },
+        { value: 'customer', label: '普通客户' },
+        { value: 'plumber', label: '水电工' },
+        { value: 'company', label: '公司联系人' },
+        { value: 'wholesaler', label: '批发商' },
       ],
     },
     {
@@ -73,7 +74,7 @@ export function Sales() {
       label: '客户',
       type: 'select' as const,
       options: [
-        { value: 'all', label: '全部客户' },
+        { value: '__all__', label: '全部' },
         ...contacts.map((c) => ({ value: c.id, label: c.name })),
       ],
     },
@@ -83,7 +84,7 @@ export function Sales() {
       label: '状态',
       type: 'select' as const,
       options: [
-        { value: 'all', label: '全部状态' },
+        { value: '__all__', label: '全部' },
         { value: 'paid', label: '已付款' },
         { value: 'partial', label: '部分付款' },
         { value: 'unpaid', label: '未付款' },
@@ -123,10 +124,14 @@ export function Sales() {
 
   const loadData = async () => {
     try {
+      console.log('[Sales] 开始加载数据...');
       const [newSales, contactsData] = await Promise.all([
         SaleService.getSaleOrders(),
         SaleService.getContacts(),
       ]);
+
+      console.log('[Sales] 原始销售数据:', newSales.length, '条');
+      console.log('[Sales] 销售数据详情:', newSales);
 
       const saleItems: SaleListItem[] = newSales.map((s) => ({
         id: s.id,
@@ -153,8 +158,10 @@ export function Sales() {
         _count: { items: s.items?.length || 0 },
       }));
 
+      console.log('[Sales] 即将设置sales状态, saleItems:', saleItems);
       setSales(saleItems);
       setContacts(contactsData);
+      console.log('[Sales] 已设置sales状态');
     } catch (error) {
       console.error('[Sales] 加载销售数据失败:', error);
       toast('加载销售数据失败，请刷新页面重试', 'error');
@@ -171,7 +178,7 @@ export function Sales() {
         sale.entityName?.toLowerCase().includes(searchTerm.toLowerCase())
       : true;
 
-    const matchesCustomer = selectedCustomer === 'all' || sale.buyerId === selectedCustomer;
+    const matchesCustomer = selectedCustomer === '__all__' || selectedCustomer === '' || sale.buyerId === selectedCustomer;
     const saleDate = new Date(sale.saleDate);
     const matchesDateStart = !dateRange.start || saleDate >= new Date(dateRange.start);
     const matchesDateEnd = !dateRange.end || saleDate <= new Date(dateRange.end + 'T23:59:59');
@@ -180,8 +187,15 @@ export function Sales() {
     if (statusFilter === 'paid') matchesStatus = sale.paidAmount >= sale.totalAmount;
     else if (statusFilter === 'partial') matchesStatus = sale.paidAmount > 0 && sale.paidAmount < sale.totalAmount;
     else if (statusFilter === 'unpaid') matchesStatus = sale.paidAmount === 0;
+    else matchesStatus = true;
 
-    return matchesSearch && matchesCustomer && matchesDateStart && matchesDateEnd && matchesStatus;
+    let matchesCustomerType = true;
+    if (customerTypeFilter !== '__all__' && customerTypeFilter) {
+      const buyer = contacts.find(c => c.id === sale.buyerId);
+      matchesCustomerType = buyer?.contactType === customerTypeFilter;
+    }
+
+    return matchesSearch && matchesCustomer && matchesDateStart && matchesDateEnd && matchesStatus && matchesCustomerType;
   });
 
   const tableProps = useDataTable<SaleListItem>({ data: filteredSales, defaultPageSize: 20 });

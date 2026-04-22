@@ -90,25 +90,25 @@ async function createWindow() {
 
 function registerDbHandlers() {
   const models = [
-    'category', 'product', 'customerCategory', 'systemSetting', 'purchase',
+    'category', 'product', 'brand', 'productSpec', 'entityPrice', 'contactPrice',
+    'customerCategory', 'systemSetting',
+    'purchase', 'purchaseOrder', 'purchaseReturn', 'purchaseReturnItem',
     'deliveryFee', 'deliveryRecord',
     'paymentPlan', 'auditLog',
-    'purchasePhoto', 'collectionRecord',
+    'purchasePhoto', 'saleOrderPhoto', 'collectionRecord',
     'inventoryCheck', 'inventoryCheckItem',
     'contact', 'contactPhone', 'entity', 'bizProject',
     'contactEntityRole', 'contactProjectRole',
     'saleOrder', 'orderItem', 'orderPayment', 'receivable',
-    'saleOrderPhoto', 'saleSlip', 'saleSlipItem',
-    'brand', 'productSpec', 'customerPrice',
+    'saleSlip', 'saleSlipItem',
     'saleReturn', 'saleReturnItem', 'badDebtWriteOff',
-    'supplier',
-    'purchaseReturn', 'purchaseReturnItem',
-    'purchaseOrder',
+    'supplier', 'supplierPayment',
     'receivableAuditLog',
     'legacyBill',
     'businessCommission',
     'dailyExpense',
-    'serviceAppointment',
+    'serviceAppointment', 'serviceAppointmentItem',
+    'creditRecord',
   ];
 
   const toPascalCase = (str) => str.charAt(0).toUpperCase() + str.slice(1);

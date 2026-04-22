@@ -311,25 +311,6 @@ export interface AccountReceivable {
   updatedAt: Date;
 }
 
-export interface SettlementAdjustment {
-  id: string;
-  saleId: string;
-  sale?: Sale;
-  customerId: string;
-  customer?: Contact;
-  adjustType: string;
-  adjustMethod: string;
-  adjustValue: number;
-  adjustAmount: number;
-  reason: string;
-  approvedBy: string | null;
-  approvedAt: Date | null;
-  status: string;
-  remark: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 export interface PaymentPlan {
   id: string;
   contactId: string;
@@ -397,18 +378,6 @@ export interface CollectionRecord {
   createdAt: Date;
 }
 
-export interface CustomerPhone {
-  id: string;
-  customerId: string;
-  customer?: Contact;
-  phone: string;
-  phoneType: string;
-  isPrimary: boolean;
-  remark: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 export interface SaleSlip {
   id: string;
   customerId: string | null;
@@ -445,17 +414,6 @@ export interface SaleSlipItem {
   unitPrice: number;
   subtotal: number;
   createdAt: Date;
-}
-
-export interface CustomerFavoriteProduct {
-  id: string;
-  customerId: string;
-  productId: string;
-  quantity: number;
-  unitPrice: number | null;
-  remark: string | null;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
 export interface InventoryCheck {

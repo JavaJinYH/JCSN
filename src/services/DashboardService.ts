@@ -136,4 +136,30 @@ export const DashboardService = {
       orderBy: { appointmentDate: 'asc' },
     });
   },
+
+  async getReceivableStats() {
+    const [allReceivables, pendingReceivables, overdueReceivables] = await Promise.all([
+      db.receivable.findMany({
+        where: { status: { not: 'settled' } },
+      }),
+      db.receivable.findMany({
+        where: { status: 'pending' },
+      }),
+      db.receivable.findMany({
+        where: { isOverdue: true },
+      }),
+    ]);
+
+    const totalRemaining = allReceivables.reduce((sum, r) => sum + r.remainingAmount, 0);
+    const pendingCount = pendingReceivables.length;
+    const overdueCount = overdueReceivables.length;
+    const overdueAmount = overdueReceivables.reduce((sum, r) => sum + r.remainingAmount, 0);
+
+    return {
+      totalRemaining,
+      pendingCount,
+      overdueCount,
+      overdueAmount,
+    };
+  },
 };

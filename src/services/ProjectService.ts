@@ -16,13 +16,6 @@ export const ProjectService = {
     });
   },
 
-  async getProjectsByCustomer(customerId: string) {
-    return db.bizProject.findMany({
-      where: { customerId, status: '进行中' },
-      orderBy: { createdAt: 'desc' },
-    });
-  },
-
   async getProjectById(id: string) {
     return db.bizProject.findUnique({
       where: { id },

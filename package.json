@@ -15,7 +15,8 @@
     "db:seed": "scripts\\run-node.cmd prisma/seed.js",
     "db:seed-refined": "scripts\\run-node.cmd prisma/seed-refined.js",
     "db:cleanup-walkin": "scripts\\run-node.cmd prisma/cleanup-duplicate-walk-in.js",
-    "db:clear": "scripts\\run-node.cmd prisma/clear-data.js"
+    "db:clear": "scripts\\run-node.cmd prisma/clear-data.js",
+    "db:seed-realistic": "scripts\\run-node.cmd prisma/seed-realistic.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

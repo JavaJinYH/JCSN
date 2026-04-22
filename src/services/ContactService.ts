@@ -179,7 +179,7 @@ export const ContactService = {
     for (const order of orders) {
       for (const item of order.items) {
         if (!priceMap[item.productId]) {
-          priceMap[item.productId] = item.price;
+          priceMap[item.productId] = item.sellingPriceSnapshot;
         }
       }
     }

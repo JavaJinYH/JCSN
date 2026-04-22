@@ -79,7 +79,7 @@ export const EntityService = {
         buyer: true,
         paymentEntity: true,
         project: true,
-        items: true,
+        items: { include: { product: true } },
       },
       orderBy: { saleDate: 'desc' },
     });
@@ -207,7 +207,7 @@ export const EntityService = {
     for (const order of orders) {
       for (const item of order.items) {
         if (!priceMap[item.productId]) {
-          priceMap[item.productId] = item.price;
+          priceMap[item.productId] = item.sellingPriceSnapshot;
         }
       }
     }
