@@ -146,6 +146,25 @@ export function Dashboard() {
   const [flowPeriod, setFlowPeriod] = useState<FlowPeriod>('today');
   const [flowCollapsed, setFlowCollapsed] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [showMoney, setShowMoney] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('dashboard_showMoney');
+    if (saved === 'true') setShowMoney(true);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      setShowMoney(e.detail);
+    };
+    window.addEventListener('showMoneyChanged', handler as EventListener);
+    return () => window.removeEventListener('showMoneyChanged', handler as EventListener);
+  }, []);
+
+  const maskCurrency = (value: number): string => {
+    if (showMoney) return formatCurrency(value);
+    return '¥***';
+  };
 
   useEffect(() => {
     loadDashboardData();
@@ -321,7 +340,7 @@ export function Dashboard() {
             <span className="text-2xl">💰</span>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{formatCurrency(stats.todaySales)}</div>
+            <div className="text-2xl font-bold text-orange-600">{maskCurrency(stats.todaySales)}</div>
             <p className="text-xs text-slate-500 mt-1">{stats.todayOrders} 笔订单</p>
           </CardContent>
         </Card>
@@ -332,7 +351,7 @@ export function Dashboard() {
             <span className="text-2xl">📋</span>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{formatCurrency(receivableStats.totalRemaining)}</div>
+            <div className="text-2xl font-bold text-blue-600">{maskCurrency(receivableStats.totalRemaining)}</div>
             <p className="text-xs text-slate-500 mt-1">
               {receivableStats.overdueCount > 0 && (
                 <span className="text-red-500 mr-1">逾期 {receivableStats.overdueCount} 笔</span>
@@ -393,7 +412,7 @@ export function Dashboard() {
                           待处理
                         </Badge>
                         <div className="text-xs text-slate-500 mt-1">
-                          ¥{(order.totalFee || 0).toFixed(0)}
+                          {maskCurrency(order.totalFee || 0)}
                         </div>
                       </div>
                     </div>
@@ -558,7 +577,7 @@ export function Dashboard() {
                     </div>
                     <div className="text-right">
                       <div className="font-bold text-orange-600">
-                        {formatCurrency(sale.paidAmount)}
+                        {maskCurrency(sale.paidAmount)}
                       </div>
                     </div>
                   </div>
@@ -631,15 +650,15 @@ export function Dashboard() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
                 <div className="text-sm text-green-600">📈 总收入</div>
-                <div className="text-2xl font-bold text-green-700">{formatCurrency(flowStats.totalIncome)}</div>
+                <div className="text-2xl font-bold text-green-700">{maskCurrency(flowStats.totalIncome)}</div>
               </div>
               <div className="text-center p-4 bg-red-50 rounded-lg border border-red-200">
                 <div className="text-sm text-red-600">📉 总支出</div>
-                <div className="text-2xl font-bold text-red-700">{formatCurrency(flowStats.totalExpense)}</div>
+                <div className="text-2xl font-bold text-red-700">{maskCurrency(flowStats.totalExpense)}</div>
               </div>
               <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <div className="text-sm text-blue-600">💰 净收入</div>
-                <div className="text-2xl font-bold text-blue-700">{formatCurrency(flowStats.netIncome)}</div>
+                <div className="text-2xl font-bold text-blue-700">{maskCurrency(flowStats.netIncome)}</div>
                 <div className="text-xs text-blue-500">{flowStats.orderCount} 笔订单</div>
               </div>
             </div>
@@ -652,20 +671,20 @@ export function Dashboard() {
                 <div className="grid grid-cols-1 gap-2">
                   <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
                     <span>销售收款</span>
-                    <span className="font-bold text-slate-800">{formatCurrency(flowStats.salesIncome)}</span>
+                    <span className="font-bold text-slate-800">{maskCurrency(flowStats.salesIncome)}</span>
                   </div>
                   <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
                     <span>客户回款</span>
-                    <span className="font-bold text-slate-800">{formatCurrency(flowStats.collectionIncome)}</span>
+                    <span className="font-bold text-slate-800">{maskCurrency(flowStats.collectionIncome)}</span>
                   </div>
                   <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
                     <span>进货退款</span>
-                    <span className="font-bold text-slate-800">{formatCurrency(flowStats.purchaseReturnIncome)}</span>
+                    <span className="font-bold text-slate-800">{maskCurrency(flowStats.purchaseReturnIncome)}</span>
                   </div>
                   {flowStats.supplierCommissionIncome > 0 && (
                     <div className="flex justify-between p-3 bg-green-50 rounded-lg">
                       <span>供应商返点</span>
-                      <span className="font-bold text-green-800">{formatCurrency(flowStats.supplierCommissionIncome)}</span>
+                      <span className="font-bold text-green-800">{maskCurrency(flowStats.supplierCommissionIncome)}</span>
                     </div>
                   )}
                 </div>
@@ -678,28 +697,28 @@ export function Dashboard() {
                 <div className="grid grid-cols-1 gap-2">
                   <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
                     <span>进货付款</span>
-                    <span className="font-bold text-slate-800">{formatCurrency(flowStats.purchaseExpense)}</span>
+                    <span className="font-bold text-slate-800">{maskCurrency(flowStats.purchaseExpense)}</span>
                   </div>
                   <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
                     <span>销售退款</span>
-                    <span className="font-bold text-slate-800">{formatCurrency(flowStats.saleReturnExpense)}</span>
+                    <span className="font-bold text-slate-800">{maskCurrency(flowStats.saleReturnExpense)}</span>
                   </div>
                   {flowStats.dailyExpenseTotal > 0 && (
                     <div className="flex justify-between p-3 bg-orange-50 rounded-lg">
                       <span>日常支出</span>
-                      <span className="font-bold text-orange-800">{formatCurrency(flowStats.dailyExpenseTotal)}</span>
+                      <span className="font-bold text-orange-800">{maskCurrency(flowStats.dailyExpenseTotal)}</span>
                     </div>
                   )}
                   {flowStats.introducerCommissionExpense > 0 && (
                     <div className="flex justify-between p-3 bg-orange-50 rounded-lg">
                       <span>介绍人返点</span>
-                      <span className="font-bold text-orange-800">{formatCurrency(flowStats.introducerCommissionExpense)}</span>
+                      <span className="font-bold text-orange-800">{maskCurrency(flowStats.introducerCommissionExpense)}</span>
                     </div>
                   )}
                   {flowStats.installationFeeTotal > 0 && (
                     <div className="flex justify-between p-3 bg-orange-50 rounded-lg">
                       <span>安装费</span>
-                      <span className="font-bold text-orange-800">{formatCurrency(flowStats.installationFeeTotal)}</span>
+                      <span className="font-bold text-orange-800">{maskCurrency(flowStats.installationFeeTotal)}</span>
                     </div>
                   )}
                 </div>
@@ -713,19 +732,19 @@ export function Dashboard() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center p-3 bg-green-50 rounded-lg">
                   <div className="text-sm text-green-600">💵 现金</div>
-                  <div className="text-xl font-bold text-green-700">{formatCurrency(flowStats.cashAmount)}</div>
+                  <div className="text-xl font-bold text-green-700">{maskCurrency(flowStats.cashAmount)}</div>
                 </div>
                 <div className="text-center p-3 bg-green-50 rounded-lg">
                   <div className="text-sm text-green-600">💚 微信</div>
-                  <div className="text-xl font-bold text-green-700">{formatCurrency(flowStats.wechatAmount)}</div>
+                  <div className="text-xl font-bold text-green-700">{maskCurrency(flowStats.wechatAmount)}</div>
                 </div>
                 <div className="text-center p-3 bg-blue-50 rounded-lg">
                   <div className="text-sm text-blue-600">💙 支付宝</div>
-                  <div className="text-xl font-bold text-blue-700">{formatCurrency(flowStats.alipayAmount)}</div>
+                  <div className="text-xl font-bold text-blue-700">{maskCurrency(flowStats.alipayAmount)}</div>
                 </div>
                 <div className="text-center p-3 bg-purple-50 rounded-lg">
                   <div className="text-sm text-purple-600">💜 转账</div>
-                  <div className="text-xl font-bold text-purple-700">{formatCurrency(flowStats.transferAmount)}</div>
+                  <div className="text-xl font-bold text-purple-700">{maskCurrency(flowStats.transferAmount)}</div>
                 </div>
               </div>
             </div>

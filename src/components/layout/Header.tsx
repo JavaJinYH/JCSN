@@ -19,6 +19,19 @@ export function Header() {
   const location = useLocation();
   const title = pageTitles[location.pathname] || '折柳建材管理系统';
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(false);
+  const [showMoney, setShowMoney] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('dashboard_showMoney');
+    if (saved === 'true') setShowMoney(true);
+  }, []);
+
+  const toggleShowMoney = () => {
+    const newValue = !showMoney;
+    setShowMoney(newValue);
+    localStorage.setItem('dashboard_showMoney', String(newValue));
+    window.dispatchEvent(new CustomEvent('showMoneyChanged', { detail: newValue }));
+  };
 
   // 检查是否是 Electron 环境（通过 electronAPI 是否存在）
   const isElectron = typeof window !== 'undefined' && window.electronAPI;
@@ -54,6 +67,13 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4">
+        <button
+          onClick={toggleShowMoney}
+          title={showMoney ? '隐藏金额' : '显示金额'}
+          className="p-2 rounded-lg transition-all text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+        >
+          {showMoney ? '🙈' : '👁️'}
+        </button>
         {isElectron && (
           <button
             onClick={toggleAlwaysOnTop}
