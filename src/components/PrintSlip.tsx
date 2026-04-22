@@ -372,9 +372,9 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
     const frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document;
     if (!frameDoc) return;
 
-    let htmlContent = '';
+    const slipsHtml: string[] = [];
     for (let i = 0; i < printCount; i++) {
-      htmlContent += generateSlipHtml(i);
+      slipsHtml.push(generateSlipHtml(i));
     }
 
     frameDoc.open();
@@ -406,9 +406,11 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
             max-width: ${paperSize.maxWidth};
             margin: 0 auto;
           }
-          .slip + .slip {
-            page-break-before: always;
-            margin-top: 20px;
+          .copy-group {
+            page-break-after: always;
+          }
+          .copy-group:last-child {
+            page-break-after: auto;
           }
           .slip-header {
             text-align: center;
@@ -508,7 +510,7 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
         </style>
       </head>
       <body>
-        ${htmlContent}
+        ${slipsHtml.map(slip => `<div class="copy-group">${slip}</div>`).join('')}
       </body>
       </html>
     `);
