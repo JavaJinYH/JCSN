@@ -21,6 +21,7 @@ export interface CreatePhotoDTO {
 }
 
 export interface CreateSaleOrderDTO {
+  saleDate?: Date;
   buyerId: string;
   introducerId?: string | null;
   pickerId?: string | null;
@@ -115,6 +116,7 @@ export const SaleService = {
       data: {
         invoiceNo: generateInvoiceNo(saleSeq),
         internalSeq: saleSeq,
+        saleDate: data.saleDate || new Date(),
         buyerId,
         introducerId: data.introducerId === '__none__' ? null : data.introducerId || null,
         pickerId: data.pickerId === '__none__' ? null : data.pickerId || null,

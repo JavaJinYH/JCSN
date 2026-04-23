@@ -43,7 +43,7 @@ interface PrintSlipProps {
   data: SaleSlipData | PurchaseSlipData;
 }
 
-type PaperType = 'A4' | '80mm' | '58mm';
+type PaperType = 'A4' | '80mm' | '58mm' | '190mm';
 
 interface ShopSettings {
   shopName: string;
@@ -168,6 +168,8 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
         return { width: '80mm', maxWidth: '80mm', padding: '3mm' };
       case '58mm':
         return { width: '58mm', maxWidth: '58mm', padding: '2mm' };
+      case '190mm':
+        return { width: '190mm', maxWidth: '190mm', padding: '5mm' };
       default:
         return { width: '190mm', maxWidth: '190mm', padding: '0' };
     }
@@ -175,7 +177,33 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
 
   const paperSize = getPaperSize();
 
-  const generateSlipHtml = (copyIndex: number) => {
+  const ITEMS_PER_PAGE_190MM = 12;
+
+  const generatePageHtml = (pageIndex: number, pageItems: typeof data.items, totalPages: number) => {
+    const pageItemsHtml = pageItems.map(item => `
+      <tr>
+        ${paperType === 'A4' ? `
+        <td>${item.product?.name || '-'}</td>
+        <td>${item.quantity}</td>
+        <td>${formatCurrency(item.unitPrice)}</td>
+        <td>${formatCurrency(item.subtotal || (item.quantity * item.unitPrice))}</td>
+        ` : paperType === '190mm' ? `
+        <td>${item.product?.name || '-'}</td>
+        <td>${item.product?.unit || '-'}</td>
+        <td>${item.quantity}</td>
+        <td>${formatCurrency(item.unitPrice)}</td>
+        <td>${formatCurrency(item.subtotal || (item.quantity * item.unitPrice))}</td>
+        ` : `
+        <td class="${paperType === '58mm' ? 'compact' : ''}">${item.product?.name || '-'}</td>
+        <td>${formatCurrency(item.unitPrice)}</td>
+        <td>${item.quantity}</td>
+        <td>${formatCurrency(item.subtotal || (item.quantity * item.unitPrice))}</td>
+        `}
+      </tr>
+    `).join('');
+
+    const pageTotal = pageItems.reduce((sum, item) => sum + (item.subtotal || (item.quantity * item.unitPrice)), 0);
+
     const infoSection = isSale && saleData ? `
       ${paperType === 'A4' ? `
       <div class="slip-info-row">
@@ -190,18 +218,6 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
         <span class="slip-info-value">${saleData.buyer.name}${saleData.buyer.primaryPhone ? ' ' + saleData.buyer.primaryPhone : ''}</span>
       </div>
       ` : ''}
-      ${saleData.paymentEntity ? `
-      <div class="slip-info-row">
-        <span class="slip-info-label">挂靠主体:</span>
-        <span class="slip-info-value">${saleData.paymentEntity.name}</span>
-      </div>
-      ` : ''}
-      ${saleData.project ? `
-      <div class="slip-info-row">
-        <span class="slip-info-label">项目:</span>
-        <span class="slip-info-value">${saleData.project.name}</span>
-      </div>
-      ` : ''}
       ` : `
       <div class="slip-info-row">
         <span>${saleData.invoiceNo || '-'}</span>
@@ -210,11 +226,6 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
       ${saleData.buyer ? `
       <div class="slip-info-row">
         <span>${saleData.buyer.name}</span>
-      </div>
-      ` : ''}
-      ${saleData.paymentEntity ? `
-      <div class="slip-info-row">
-        <span>${saleData.paymentEntity.name}</span>
       </div>
       ` : ''}
       `}
@@ -244,31 +255,6 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
       ` : ''}
       `}
     `;
-
-    const tableColumns = paperType === 'A4' ? `
-      <th style="width: 50%">商品名称</th>
-      <th style="width: 15%">数量</th>
-      <th style="width: 17%">单价</th>
-      <th style="width: 18%">小计</th>
-    ` : `
-      <th>商品</th>
-      <th style="width: 30%">数量×单价</th>
-      <th style="width: 25%">小计</th>
-    `;
-
-    const itemsHtml = data.items.map(item => `
-      <tr>
-        <td class="${paperType === '58mm' ? 'compact' : ''}">${item.product?.name || '-'}</td>
-        ${paperType === 'A4' ? `
-        <td>${item.quantity}</td>
-        <td>${formatCurrency(item.unitPrice)}</td>
-        <td>${formatCurrency(item.subtotal || (item.quantity * item.unitPrice))}</td>
-        ` : `
-        <td>${item.quantity}×${formatCurrency(item.unitPrice)}</td>
-        <td>${formatCurrency(item.subtotal || (item.quantity * item.unitPrice))}</td>
-        `}
-      </tr>
-    `).join('');
 
     const totalSection = isSale && saleData ? `
       <div class="slip-total-row">
@@ -332,37 +318,123 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
 
     return `
       <div class="slip">
+        ${paperType === '190mm' ? `
+        <div style="position: relative; text-align: center; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 6px;">
+          <div style="font-weight: bold; font-size: 16px; margin-bottom: 2px;">${shopSettings.shopName}</div>
+          <div style="font-weight: bold; font-size: 16px;">销货清单</div>
+          <div style="position: absolute; top: 0; right: 0; color: red;">No：${isSale ? (saleData?.invoiceNo || '-') : (purchaseData?.batchNo || '-')}</div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+          <span>${formatDate(isSale ? saleData?.saleDate : purchaseData?.purchaseDate)}</span>
+          <span>收货单位：${isSale ? (saleData?.buyer?.name || '-') : (purchaseData?.supplier?.name || '-')}</span>
+        </div>
+        ` : `
         <div class="slip-header">
           ${isSale ? `${shopSettings.shopName} 销售单` : `${shopSettings.shopName} 进货单`}
-          ${printCount > 1 ? `<span style="font-size: ${parseInt(fontSizes.body) - 2}px; margin-left: 10px;">(第${copyIndex + 1}/${printCount}份)</span>` : ''}
+          ${printCount > 1 ? `<span style="font-size: ${parseInt(fontSizes.body) - 2}px; margin-left: 10px;">(第${pageIndex + 1}/${printCount}份)</span>` : ''}
         </div>
-
-        <div class="slip-info">
-          ${infoSection}
-        </div>
+        `}
 
         <table class="slip-table">
           <thead>
             <tr>
-              ${tableColumns}
+              ${paperType === 'A4' ? `
+              <th style="width: 50%">商品名称</th>
+              <th style="width: 15%">数量</th>
+              <th style="width: 17%">单价</th>
+              <th style="width: 18%">小计</th>
+              ` : paperType === '190mm' ? `
+              <th style="width: 35%">名称及规格</th>
+              <th style="width: 10%">单位</th>
+              <th style="width: 15%">数量</th>
+              <th style="width: 18%">单价</th>
+              <th style="width: 22%">金额</th>
+              ` : `
+              <th>商品</th>
+              <th style="width: 25%">单价</th>
+              <th style="width: 15%">数量</th>
+              <th style="width: 25%">小计</th>
+              `}
             </tr>
           </thead>
           <tbody>
-            ${itemsHtml}
+            ${pageItemsHtml}
           </tbody>
         </table>
 
         <div class="slip-total">
+          ${paperType === '190mm' ? `
+          <div class="slip-total-row">
+            <span>商品合计：</span>
+            <span>${formatCurrency(isSale ? (saleData?.totalAmount || 0) : (purchaseData?.totalAmount || 0))}</span>
+          </div>
+          ${isSale && saleData?.deliveryFee && saleData?.deliveryFee > 0 ? `
+          <div class="slip-total-row">
+            <span>配送费：</span>
+            <span>${formatCurrency(saleData.deliveryFee)}</span>
+          </div>
+          ` : ''}
+          <div class="slip-total-row">
+            <span>总计金额（大写）：</span>
+            <span>${toChineseCurrency((isSale ? (saleData?.totalAmount || 0) : (purchaseData?.totalAmount || 0)) + (isSale ? (saleData?.deliveryFee || 0) : 0))}</span>
+          </div>
+          <div class="slip-total-row">
+            <span>总计金额：</span>
+            <span>${formatCurrency((isSale ? (saleData?.totalAmount || 0) : (purchaseData?.totalAmount || 0)) + (isSale ? (saleData?.deliveryFee || 0) : 0))}</span>
+          </div>
+          <div class="slip-total-row grand">
+            <span>已付金额（大写）：</span>
+            <span>${toChineseCurrency(isSale ? (saleData?.paidAmount || 0) : (purchaseData?.totalAmount || 0))}</span>
+          </div>
+          ` : `
           ${totalSection}
+          `}
         </div>
 
+        ${paperType === '190mm' ? `
+        <div style="margin-top: 15px; display: flex; justify-content: flex-end;">
+          <div style="text-align: right;">
+            ${totalPages > 1 ? `
+            <div style="margin-bottom: 5px;">客户签字：________________</div>
+            <div style="font-size: 12px; color: #666;">（本页金额：${formatCurrency(pageTotal)}）</div>
+            <div style="font-size: 12px; color: #666;">（第${pageIndex + 1}页，共${totalPages}页）</div>
+            ` : `
+            <div>客户签字：________________</div>
+            `}
+          </div>
+        </div>
+        ${showAddress || showPhone ? `
+        <div class="slip-footer" style="margin-top: 6px; text-align: left;">
+          ${showAddress ? `<div>地址：${shopSettings.address}</div>` : ''}
+          ${showPhone ? `<div>电话：${shopSettings.phone}</div>` : ''}
+        </div>
+        ` : ''}
+        ` : `
         ${remarkSection}
-
         ${signatureSection}
-
         ${footerSection}
+        `}
       </div>
     `;
+  };
+
+  const generateSlipHtml = (copyIndex: number) => {
+    if (paperType !== '190mm') {
+      return generatePageHtml(0, data.items, 1);
+    }
+
+    const totalPages = Math.ceil(data.items.length / ITEMS_PER_PAGE_190MM);
+    let html = '';
+    for (let page = 0; page < totalPages; page++) {
+      const startIdx = page * ITEMS_PER_PAGE_190MM;
+      const endIdx = Math.min(startIdx + ITEMS_PER_PAGE_190MM, data.items.length);
+      const pageItems = data.items.slice(startIdx, endIdx);
+      html += generatePageHtml(page, pageItems, totalPages);
+      if (page < totalPages - 1) {
+        html += '<div style="page-break-after: always;"></div>';
+      }
+    }
+    return html;
   };
 
   const handlePrint = () => {
@@ -386,7 +458,7 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
         <title>${isSale ? '销售单' : '进货单'}</title>
         <style>
           @page {
-            size: ${paperType === '80mm' ? '80mm 200mm' : paperType === '58mm' ? '58mm 200mm' : 'A4'};
+            size: ${paperType === '80mm' ? '80mm 200mm' : paperType === '58mm' ? '58mm 200mm' : paperType === '190mm' ? '130mm 190mm' : 'A4'};
             margin: 3mm;
             ${paperType === 'A4' ? 'sides: duplex;' : ''}
           }
@@ -415,17 +487,17 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
           .slip-header {
             text-align: center;
             font-weight: bold;
-            padding: ${paperType === '58mm' ? '2px 0' : paperType === '80mm' ? '4px 0' : '10px 0'};
+            padding: ${paperType === '58mm' ? '2px 0' : paperType === '80mm' ? '4px 0' : paperType === '190mm' ? '4px 0' : '10px 0'};
             border-bottom: ${paperType === 'A4' ? '2px' : '1px'} solid #333;
-            margin-bottom: ${paperType === '58mm' ? '4px' : paperType === '80mm' ? '6px' : '15px'};
-            font-size: ${paperType === '58mm' ? '12px' : paperType === '80mm' ? '14px' : '22px'};
+            margin-bottom: ${paperType === '58mm' ? '4px' : paperType === '80mm' ? '6px' : paperType === '190mm' ? '6px' : '15px'};
+            font-size: ${paperType === '58mm' ? '12px' : paperType === '80mm' ? '14px' : paperType === '190mm' ? '14px' : '22px'};
           }
           .slip-info {
-            margin-bottom: ${paperType === '58mm' ? '4px' : paperType === '80mm' ? '6px' : '15px'};
+            margin-bottom: ${paperType === '58mm' ? '4px' : paperType === '80mm' ? '6px' : paperType === '190mm' ? '6px' : '15px'};
           }
           .slip-info-row {
             display: flex;
-            margin: ${paperType === '58mm' ? '1px 0' : paperType === '80mm' ? '2px 0' : '5px 0'};
+            margin: ${paperType === '58mm' ? '1px 0' : paperType === '80mm' ? '2px 0' : paperType === '190mm' ? '2px 0' : '5px 0'};
             font-size: ${fontSizes.table};
           }
           .slip-info-label {
@@ -438,13 +510,13 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
           .slip-table {
             width: 100%;
             border-collapse: collapse;
-            margin: ${paperType === '58mm' ? '4px 0' : paperType === '80mm' ? '6px 0' : '10px 0'};
+            margin: ${paperType === '58mm' ? '4px 0' : paperType === '80mm' ? '6px 0' : paperType === '190mm' ? '6px 0' : '10px 0'};
             font-size: ${fontSizes.table};
           }
           .slip-table th,
           .slip-table td {
             border: 1px solid #333;
-            padding: ${paperType === '58mm' ? '2px' : paperType === '80mm' ? '3px' : '8px'};
+            padding: ${paperType === '58mm' ? '2px' : paperType === '80mm' ? '3px' : paperType === '190mm' ? '3px' : '8px'};
             text-align: left;
           }
           .slip-table th {
@@ -460,29 +532,29 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
             padding: 1px 2px;
           }
           .slip-total {
-            margin-top: ${paperType === '58mm' ? '4px' : paperType === '80mm' ? '6px' : '15px'};
+            margin-top: ${paperType === '58mm' ? '4px' : paperType === '80mm' ? '6px' : paperType === '190mm' ? '6px' : '15px'};
             border-top: 1px dashed #333;
-            padding-top: ${paperType === '58mm' ? '4px' : paperType === '80mm' ? '6px' : '10px'};
+            padding-top: ${paperType === '58mm' ? '4px' : paperType === '80mm' ? '6px' : paperType === '190mm' ? '5px' : '10px'};
           }
           .slip-total-row {
             display: flex;
             justify-content: space-between;
-            margin: ${paperType === '58mm' ? '1px 0' : paperType === '80mm' ? '2px 0' : '5px 0'};
+            margin: ${paperType === '58mm' ? '1px 0' : paperType === '80mm' ? '2px 0' : paperType === '190mm' ? '2px 0' : '5px 0'};
             font-size: ${fontSizes.table};
           }
           .slip-total-row.grand {
-            font-size: ${paperType === '58mm' ? '10px' : paperType === '80mm' ? '12px' : '18px'};
+            font-size: ${paperType === '58mm' ? '10px' : paperType === '80mm' ? '12px' : paperType === '190mm' ? '13px' : '18px'};
             font-weight: bold;
             border-top: ${paperType === 'A4' ? '2px' : '1px'} solid #333;
-            padding-top: ${paperType === '58mm' ? '2px' : paperType === '80mm' ? '3px' : '8px'};
-            margin-top: ${paperType === '58mm' ? '2px' : paperType === '80mm' ? '3px' : '8px'};
+            padding-top: ${paperType === '58mm' ? '2px' : paperType === '80mm' ? '3px' : paperType === '190mm' ? '3px' : '8px'};
+            margin-top: ${paperType === '58mm' ? '2px' : paperType === '80mm' ? '3px' : paperType === '190mm' ? '3px' : '8px'};
           }
           .slip-remark {
-            margin-top: ${paperType === '58mm' ? '4px' : paperType === '80mm' ? '6px' : '15px'};
+            margin-top: ${paperType === '58mm' ? '4px' : paperType === '80mm' ? '6px' : paperType === '190mm' ? '6px' : '15px'};
             font-size: ${fontSizes.table};
           }
           .slip-signature {
-            margin-top: ${paperType === '58mm' ? '8px' : paperType === '80mm' ? '15px' : '40px'};
+            margin-top: ${paperType === '58mm' ? '8px' : paperType === '80mm' ? '15px' : paperType === '190mm' ? '15px' : '40px'};
             display: flex;
             justify-content: space-between;
           }
@@ -495,15 +567,15 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
             font-size: ${fontSizes.table};
           }
           .slip-signature-line {
-            margin-top: ${paperType === '58mm' ? '15px' : paperType === '80mm' ? '25px' : '50px'};
+            margin-top: ${paperType === '58mm' ? '15px' : paperType === '80mm' ? '25px' : paperType === '190mm' ? '25px' : '50px'};
             border-top: 1px solid #333;
             padding-top: 5px;
             font-size: ${fontSizes.table};
           }
           .slip-footer {
-            margin-top: ${paperType === '58mm' ? '8px' : paperType === '80mm' ? '15px' : '30px'};
+            margin-top: ${paperType === '58mm' ? '8px' : paperType === '80mm' ? '15px' : paperType === '190mm' ? '15px' : '30px'};
             text-align: center;
-            font-size: ${paperType === '58mm' ? '7px' : paperType === '80mm' ? '9px' : '12px'};
+            font-size: ${paperType === '58mm' ? '7px' : paperType === '80mm' ? '9px' : paperType === '190mm' ? '9px' : '12px'};
             color: #666;
             line-height: 1.6;
           }
@@ -575,6 +647,20 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
               }}
             >
               📋 58mm
+            </button>
+            <button
+              onClick={() => setPaperType('190mm')}
+              style={{
+                padding: '8px 12px',
+                background: paperType === '190mm' ? '#f97316' : '#e5e5e5',
+                color: paperType === '190mm' ? 'white' : '#333',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+              }}
+            >
+              📄 190mm二联纸
             </button>
           </div>
         </div>
@@ -664,7 +750,7 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
 
       <div style={{ marginTop: '16px', border: '1px solid #ddd', background: 'white' }}>
         <div style={{ padding: '10px', background: '#f5f5f5', borderBottom: '1px solid #ddd', fontSize: '12px', color: '#666' }}>
-          {paperType === 'A4' ? 'A4 纸（自动双面）' : paperType === '80mm' ? '80mm 小票纸' : '58mm 复写纸'}
+          {paperType === 'A4' ? 'A4 纸（自动双面）' : paperType === '80mm' ? '80mm 小票纸' : paperType === '190mm' ? '190mm 二联纸' : '58mm 复写纸'}
           {printCount > 1 ? ` × ${printCount}份` : ''}
         </div>
         <iframe

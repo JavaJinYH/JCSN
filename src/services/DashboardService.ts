@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { LegacyBillService } from './LegacyBillService';
 
 export const DashboardService = {
   async getAllProducts() {
@@ -138,7 +139,7 @@ export const DashboardService = {
   },
 
   async getReceivableStats() {
-    const [allReceivables, pendingReceivables, overdueReceivables] = await Promise.all([
+    const [allReceivables, pendingReceivables, overdueReceivables, legacyBills] = await Promise.all([
       db.receivable.findMany({
         where: { status: { not: 'settled' } },
       }),
@@ -148,10 +149,15 @@ export const DashboardService = {
       db.receivable.findMany({
         where: { isOverdue: true },
       }),
+      LegacyBillService.getLegacyBills(),
     ]);
 
-    const totalRemaining = allReceivables.reduce((sum, r) => sum + r.remainingAmount, 0);
-    const pendingCount = pendingReceivables.length;
+    const legacyPending = legacyBills
+      .filter(b => b.status !== 'settled')
+      .reduce((sum, b) => sum + b.remainingAmount, 0);
+
+    const totalRemaining = allReceivables.reduce((sum, r) => sum + r.remainingAmount, 0) + legacyPending;
+    const pendingCount = pendingReceivables.length + legacyBills.filter(b => b.status !== 'settled').length;
     const overdueCount = overdueReceivables.length;
     const overdueAmount = overdueReceivables.reduce((sum, r) => sum + r.remainingAmount, 0);
 
@@ -160,6 +166,7 @@ export const DashboardService = {
       pendingCount,
       overdueCount,
       overdueAmount,
+      legacyPending,
     };
   },
 };

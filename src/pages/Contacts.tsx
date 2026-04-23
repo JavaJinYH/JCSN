@@ -26,6 +26,13 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { DataTablePagination, useDataTable } from '@/components/DataTable';
 import { ContactService } from '@/services/ContactService';
 import { formatCurrency } from '@/lib/utils';
@@ -71,6 +78,8 @@ export function Contacts() {
   const [blacklistReason, setBlacklistReason] = useState('');
   const [showBlacklistDialog, setShowBlacklistDialog] = useState(false);
   const [selectedContactForBlacklist, setSelectedContactForBlacklist] = useState<PersonInfo | null>(null);
+  const [showRecalculateConfirm, setShowRecalculateConfirm] = useState(false);
+  const [selectedContactForRecalculate, setSelectedContactForRecalculate] = useState<PersonInfo | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -133,10 +142,16 @@ export function Contacts() {
     }
   };
 
-  const handleRecalculateScore = async (contact: PersonInfo) => {
+  const handleRecalculateScore = (contact: PersonInfo) => {
+    setSelectedContactForRecalculate(contact);
+    setShowRecalculateConfirm(true);
+  };
+
+  const confirmRecalculateScore = async () => {
+    if (!selectedContactForRecalculate) return;
     try {
       setLoading(true);
-      await ContactService.updateCustomerScore(contact.id);
+      await ContactService.updateCustomerScore(selectedContactForRecalculate.id);
       toast('客户评分已更新', 'success');
       await loadData();
     } catch (error) {
@@ -144,6 +159,8 @@ export function Contacts() {
       toast('更新评分失败', 'error');
     } finally {
       setLoading(false);
+      setShowRecalculateConfirm(false);
+      setSelectedContactForRecalculate(null);
     }
   };
 
@@ -169,6 +186,10 @@ export function Contacts() {
 
   const handleConfirmBlacklist = async () => {
     if (!selectedContactForBlacklist) return;
+    if (!selectedContactForBlacklist.blacklist && !blacklistReason.trim()) {
+      toast('请输入加入黑名单的原因', 'warning');
+      return;
+    }
     try {
       await ContactService.setBlacklist(
         selectedContactForBlacklist.id,
@@ -573,21 +594,25 @@ export function Contacts() {
                         >
                           编辑
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRecalculateScore(person)}
-                          title="重新计算评分"
-                        >
-                          🔄
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleToggleBlacklist(person)}
-                        >
-                          {person.blacklist ? '移出黑名单' : '加入黑名单'}
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              更多
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleRecalculateScore(person)}>
+                              🔄 重新计算评分
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleToggleBlacklist(person)}
+                              className={person.blacklist ? 'text-green-600' : 'text-red-600'}
+                            >
+                              {person.blacklist ? '移出黑名单' : '加入黑名单'}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1040,48 +1065,83 @@ export function Contacts() {
         </DialogContent>
       </Dialog>
 
+      {/* 重新计算评分确认对话框 */}
+      <Dialog open={showRecalculateConfirm} onOpenChange={setShowRecalculateConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>重新计算评分</DialogTitle>
+            <DialogDescription>
+              确认要为联系人「{selectedContactForRecalculate?.name}」重新计算评分吗？
+            </DialogDescription>
+          </DialogHeader>
+          <div className="p-3 bg-yellow-50 rounded-lg">
+            <p className="text-sm text-yellow-700">
+              ⚠️ 系统将根据该联系人近一年的订单数据重新计算评分，包括销售额、利润、付款速度、逾期率等指标。
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRecalculateConfirm(false)}>
+              取消
+            </Button>
+            <Button onClick={confirmRecalculateScore}>
+              确认重新计算
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* 黑名单对话框 */}
       <Dialog open={showBlacklistDialog} onOpenChange={setShowBlacklistDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-            {selectedContactForBlacklist?.blacklist 
-              ? '移出黑名单' 
-              : '加入黑名单'} - {selectedContactForBlacklist?.name}
-          </DialogTitle>
-          <DialogDescription>
+            <DialogTitle className={selectedContactForBlacklist?.blacklist ? 'text-green-600' : 'text-red-600'}>
             {selectedContactForBlacklist?.blacklist
-              ? '确认要将该联系人从黑名单中移除吗？'
-              : '请提供加入黑名单的原因，点击确认将该联系人加入黑名单。'}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          {!selectedContactForBlacklist?.blacklist && (
-            <div>
-              <label className="text-sm font-medium mb-1 block">
-                原因
-              </label>
-              <Input
-                value={blacklistReason}
-                onChange={(e) => setBlacklistReason(e.target.value)}
-                placeholder="请输入原因"
-              />
-            </div>
-          )}
-          {selectedContactForBlacklist?.blacklist && selectedContactForBlacklist?.blacklistReason && (
-            <div className="bg-slate-50 p-3 rounded-lg">
-              <p className="text-sm text-slate-500">当前原因: {selectedContactForBlacklist.blacklistReason}</p>
-            </div>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setShowBlacklistDialog(false)}>
-            取消
-          </Button>
-          <Button onClick={handleConfirmBlacklist}>
-            确认
-          </Button>
-        </DialogFooter>
+              ? '移出黑名单'
+              : '加入黑名单'} - {selectedContactForBlacklist?.name}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedContactForBlacklist?.blacklist
+                ? '确认要将该联系人从黑名单中移除吗？'
+                : '请提供加入黑名单的原因，点击确认将该联系人加入黑名单。'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {!selectedContactForBlacklist?.blacklist && (
+              <>
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-700">
+                    ⚠️ 警告：加入黑名单是一个严厉的操作。该联系人将无法再进行新的挂账交易。
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">
+                    原因 <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    value={blacklistReason}
+                    onChange={(e) => setBlacklistReason(e.target.value)}
+                    placeholder="请输入加入黑名单的原因"
+                  />
+                </div>
+              </>
+            )}
+            {selectedContactForBlacklist?.blacklist && selectedContactForBlacklist?.blacklistReason && (
+              <div className="bg-slate-50 p-3 rounded-lg">
+                <p className="text-sm text-slate-500">当前原因: {selectedContactForBlacklist.blacklistReason}</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBlacklistDialog(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={handleConfirmBlacklist}
+              className={selectedContactForBlacklist?.blacklist ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
+            >
+              确认
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

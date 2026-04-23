@@ -71,6 +71,7 @@ export function Settlements() {
   const [activeTab, setActiveTab] = useState<'receivables' | 'credits'>('receivables');
   const [filterValues, setFilterValues] = useState<Record<string, any>>({});
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [showPaymentConfirmDialog, setShowPaymentConfirmDialog] = useState(false);
   const [showNegotiatedDialog, setShowNegotiatedDialog] = useState(false);
   const [showBadDebtDialog, setShowBadDebtDialog] = useState(false);
   const [showEntityDetailDialog, setShowEntityDetailDialog] = useState(false);
@@ -244,7 +245,7 @@ export function Settlements() {
     setShowPaymentDialog(true);
   };
 
-  const handleRecordPayment = async () => {
+  const handleRecordPayment = () => {
     if (!selectedOrder) return;
 
     const amount = parseFloat(paymentFormData.amount);
@@ -253,11 +254,18 @@ export function Settlements() {
       return;
     }
 
-    try {
-      const newPaidAmount = selectedOrder.paidAmount + amount;
-      const newRemaining = calculateOrderBalance(selectedOrder) - amount;
-      const newStatus = newRemaining <= 0 ? 'completed' : 'partial';
+    setShowPaymentConfirmDialog(true);
+  };
 
+  const confirmPayment = async () => {
+    if (!selectedOrder) return;
+
+    const amount = parseFloat(paymentFormData.amount);
+    const newPaidAmount = selectedOrder.paidAmount + amount;
+    const newRemaining = calculateOrderBalance(selectedOrder) - amount;
+    const newStatus = newRemaining <= 0 ? 'completed' : 'partial';
+
+    try {
       await SettlementService.updateOrderPayment(selectedOrder.id, {
         paidAmount: newPaidAmount,
         status: newStatus,
@@ -280,6 +288,7 @@ export function Settlements() {
       }
 
       setShowPaymentDialog(false);
+      setShowPaymentConfirmDialog(false);
       loadData();
       toast('还款记录成功', 'success');
     } catch (error) {
@@ -850,6 +859,37 @@ export function Settlements() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowPaymentDialog(false)}>取消</Button>
             <Button onClick={handleRecordPayment} className="bg-orange-500 hover:bg-orange-600">确认还款</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 还款二次确认对话框 */}
+      <Dialog open={showPaymentConfirmDialog} onOpenChange={setShowPaymentConfirmDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>确认还款信息</DialogTitle>
+          </DialogHeader>
+          {selectedOrder && (
+            <div className="space-y-4 py-4">
+              <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                <p className="text-sm text-orange-700 font-medium mb-2">⚠️ 请确认以下还款信息</p>
+                <div className="space-y-1 text-sm">
+                  <div>销售单号: <span className="font-mono">{selectedOrder.invoiceNo || selectedOrder.id.substring(0, 8)}</span></div>
+                  <div>还款金额: <span className="font-bold text-red-600">{formatCurrency(parseFloat(paymentFormData.amount))}</span></div>
+                  <div>支付方式: {paymentFormData.method}</div>
+                  {paymentFormData.remark && <div>备注: {paymentFormData.remark}</div>}
+                </div>
+              </div>
+              <p className="text-sm text-slate-500">确认后此还款记录将无法单独修改或删除。如需调整，请联系管理员。</p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPaymentConfirmDialog(false)}>
+              返回修改
+            </Button>
+            <Button onClick={confirmPayment} className="bg-orange-500 hover:bg-orange-600">
+              确认提交
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1454,6 +1494,16 @@ export function Settlements() {
         onOpenChange={setPhotoViewerOpen}
         initialIndex={photoViewerIndex}
       />
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 className="font-medium text-blue-800 mb-2">数据说明</h3>
+        <div className="text-sm text-blue-700 space-y-1">
+          <p>• 结算管理用于查看各结账主体的应收款情况，支持按主体筛选查看详细订单和付款记录</p>
+          <p>• 点击「收款」可为选中订单登记付款，支持部分付款，自动计算待收金额</p>
+          <p>• 协商减免用于对某些无法全额收回的订单进行减免，需填写减免原因</p>
+          <p>• 坏账处理用于将长期无法收回的订单标记为坏账，坏账订单不影响利润统计</p>
+        </div>
+      </div>
     </div>
   );
 }

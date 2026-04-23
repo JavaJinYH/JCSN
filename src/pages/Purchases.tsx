@@ -8,7 +8,7 @@ import { DataTablePagination, useDataTable } from '@/components/DataTable';
 import { sortByFrequency } from '@/lib/frequency';
 import { generateBatchNo, formatCurrency, formatDateTime } from '@/lib/utils';
 import type { PurchaseOrder, Purchase, Product, Category, Supplier } from '@/lib/types';
-import { PurchaseService } from '@/services';
+import { PurchaseService, ProductService } from '@/services';
 import { toast } from '@/components/Toast';
 import {
   Dialog,
@@ -105,6 +105,7 @@ export function Purchases() {
   const [showReturnDialog, setShowReturnDialog] = useState(false);
   const [returnPurchase, setReturnPurchase] = useState<PurchaseForReturn | null>(null);
   const [returnOrderStatus, setReturnOrderStatus] = useState<string>('draft');
+  const [productSalesCache, setProductSalesCache] = useState<Map<string, 'hot' | 'normal' | 'slow'>>(new Map()); // 新增：商品销售状态缓存
 
   const [showPriceHistoryDialog, setShowPriceHistoryDialog] = useState(false);
   const [priceHistoryProduct, setPriceHistoryProduct] = useState<Product | null>(null);
@@ -146,6 +147,18 @@ export function Purchases() {
       setCategories(categoriesData);
       setProducts(productsData);
       setSuppliers(sortByFrequency(suppliersData, 'supplier'));
+
+      // 预加载商品的销售状态
+      const cache = new Map<string, 'hot' | 'normal' | 'slow'>();
+      for (const p of productsData) {
+        try {
+          const status = await ProductService.getProductSalesStatus(p.id);
+          cache.set(p.id, status);
+        } catch {
+          cache.set(p.id, 'normal');
+        }
+      }
+      setProductSalesCache(cache);
     } catch (error) {
       console.error('Failed to load purchases:', error);
       toast('加载进货记录失败，请刷新页面重试', 'error');
@@ -385,6 +398,16 @@ export function Purchases() {
         </CardContent>
       </Card>
 
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 className="font-medium text-blue-800 mb-2">数据说明</h3>
+        <div className="text-sm text-blue-700 space-y-1">
+          <p>• 进货管理用于记录从供应商采购商品的进货单据，支持草稿、已发送、已到货、已完成等状态</p>
+          <p>• 点击进货单可查看详情，支持编辑商品、确认到货、上传签收单、打印等操作</p>
+          <p>• 状态说明：草稿→已发送（发给供应商）→已到货（供应商配送）→已完成（确认入库）</p>
+          <p>• 支持添加多行商品一次性完成多种商品的进货记录，可关联供应商和付款信息</p>
+        </div>
+      </div>
+
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -429,15 +452,23 @@ export function Purchases() {
                           <Combobox
                             value={item.productId}
                             onValueChange={(v) => {
+                              const product = products.find(p => p.id === v);
                               const newItems = purchaseItems.map(i =>
-                                i.id === item.id ? { ...i, productId: v } : i
+                                i.id === item.id ? { ...i, productId: v, unitPrice: product ? String(product.lastPurchasePrice || '') : '' } : i
                               );
                               setPurchaseItems(newItems);
                             }}
-                            options={products.map((p) => ({
-                              value: p.id,
-                              label: `${p.name}${p.specification ? ` (${p.specification})` : ''}`,
-                            }))}
+                            options={products.map((p) => {
+                              let label = p.name;
+                              if (p.specification) label += ` (${p.specification})`;
+                              const status = productSalesCache.get(p.id);
+                              if (status === 'hot') label = `🟢 畅销 | ${label}`;
+                              else if (status === 'slow') label = `🔴 滞销 | ${label}`;
+                              return {
+                                value: p.id,
+                                label: label,
+                              };
+                            })}
                             placeholder="搜索商品..."
                             emptyText="没有找到商品"
                           />

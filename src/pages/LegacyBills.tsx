@@ -45,6 +45,7 @@ export function LegacyBills() {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeMode, setActiveMode] = useState<'simple' | 'order'>('simple');
   const [expandedEntityId, setExpandedEntityId] = useState<string | null>(null);
+  const [pendingConversion, setPendingConversion] = useState<{entityId: string; billDate: string} | null>(null);
 
   const [formData, setFormData] = useState({
     entityId: '',
@@ -182,8 +183,12 @@ export function LegacyBills() {
     setShowAddDialog(true);
   };
 
-  const goToNewSale = () => {
-    navigate('/sales/new?isHistorical=true');
+  const goToNewSale = (entityId: string, billDate?: string) => {
+    if (billDate) {
+      navigate(`/sales/new?isHistorical=true&entityId=${entityId}&billDate=${billDate}`);
+    } else {
+      navigate('/sales/new?isHistorical=true');
+    }
   };
 
   const formatCurrencyFn = (amount: number) => {
@@ -353,7 +358,7 @@ export function LegacyBills() {
                 <p className="text-sm text-slate-400 mb-6">
                   可以正常计算利润，所有功能都能用
                 </p>
-                <Button size="lg" onClick={goToNewSale}>
+                <Button size="lg" onClick={() => goToNewSale(formData.entityId, formData.billDate)}>
                   去新增销售单 →
                 </Button>
               </div>

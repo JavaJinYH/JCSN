@@ -389,6 +389,16 @@ export function Products() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 className="font-medium text-blue-800 mb-2">数据说明</h3>
+        <div className="text-sm text-blue-700 space-y-1">
+          <p>• 商品管理用于维护商品信息，包括名称、分类、规格型号、库存上下限等核心数据</p>
+          <p>• 商品的参考销售价用于销售单自动填充，进货价用于记录最近一次进货价格</p>
+          <p>• 点击「添加商品」可新增商品，商品分类便于筛选和统计同类商品</p>
+          <p>• 商品列表支持按分类、库存状态筛选，可搜索商品名称、规格、型号</p>
+        </div>
+      </div>
     </div>
   );
 }

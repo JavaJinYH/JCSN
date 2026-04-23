@@ -49,6 +49,8 @@ export function Inventory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<string>(initialFilter);
+  const [salesStatusFilter, setSalesStatusFilter] = useState<string>('all'); // 新增：销售状态筛选
+  const [productStatsCache, setProductStatsCache] = useState<Map<string, any>>(new Map()); // 新增：缓存商品销售状态
   const [loading, setLoading] = useState(true);
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
 
@@ -73,6 +75,25 @@ export function Inventory() {
     return { label: '正常', variant: 'success' as const };
   };
 
+  // 新增：获取销售状态标签
+  const getSalesStatusBadge = (status: string) => {
+    switch (status) {
+      case 'hot':
+        return <Badge variant="success">🟢 畅销</Badge>;
+      case 'slow':
+        return <Badge variant="destructive">🔴 滞销</Badge>;
+      default:
+        return <Badge variant="outline">正常</Badge>;
+    }
+  };
+
+  // 新增：格式化日期差
+  const formatDaysSince = (date: Date | null) => {
+    if (!date) return '-';
+    const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+    return `${days}天`;
+  };
+
   const loadData = async () => {
     try {
       const [productsData, categoriesData] = await Promise.all([
@@ -82,6 +103,20 @@ export function Inventory() {
 
       setProducts(productsData);
       setCategories(categoriesData);
+
+      // 加载每个商品的销售状态并缓存
+      const cache = new Map<string, any>();
+      for (const product of productsData) {
+        try {
+          const status = await ProductService.getProductSalesStatus(product.id);
+          const stats = await ProductService.getProductSalesStats(product.id);
+          cache.set(product.id, { status, stats });
+        } catch {
+          // 如果加载失败，默认正常
+          cache.set(product.id, { status: 'normal' as const, stats: null });
+        }
+      }
+      setProductStatsCache(cache);
     } catch (error) {
       console.error('Failed to load inventory data:', error);
     } finally {
@@ -166,6 +201,14 @@ export function Inventory() {
     } else if (stockFilter === 'normal') {
       return status.label === '正常';
     }
+
+    // 销售状态筛选
+    const cached = productStatsCache.get(p.id);
+    const salesStatus = cached?.status || 'normal';
+    if (salesStatusFilter === 'hot' || salesStatusFilter === 'slow' || salesStatusFilter === 'normal') {
+      if (salesStatus !== salesStatusFilter) return false;
+    }
+
     return true;
   });
 
@@ -284,6 +327,21 @@ export function Inventory() {
               </Select>
             </div>
 
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-500">销售状态:</span>
+              <Select value={salesStatusFilter} onValueChange={setSalesStatusFilter}>
+                <SelectTrigger className="w-28 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部</SelectItem>
+                  <SelectItem value="hot">畅销</SelectItem>
+                  <SelectItem value="normal">正常</SelectItem>
+                  <SelectItem value="slow">滞销</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <Input
               placeholder="搜索商品名称、规格、型号..."
               value={searchTerm}
@@ -317,19 +375,25 @@ export function Inventory() {
                 <TableHead className="text-right">库存量</TableHead>
                 <TableHead className="text-right">成本价</TableHead>
                 <TableHead className="text-right">销售价</TableHead>
-                <TableHead>状态</TableHead>
+                <TableHead>库存状态</TableHead>
+                <TableHead>销售状态</TableHead>
+                <TableHead>入库天数</TableHead>
+                <TableHead>最后销售</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {tableProps.total === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={isAlertMode ? 8 : 7} className="text-center py-8 text-slate-500">
+                  <TableCell colSpan={isAlertMode ? 11 : 10} className="text-center py-8 text-slate-500">
                     暂无商品数据
                   </TableCell>
                 </TableRow>
               ) : (
                 tableProps.data.map((product) => {
                   const status = getStockStatus(product);
+                  const cached = productStatsCache.get(product.id);
+                  const salesStatus = cached?.status || 'normal';
+                  const stats = cached?.stats;
                   return (
                     <TableRow key={product.id}>
                       {isAlertMode && (
@@ -356,6 +420,15 @@ export function Inventory() {
                       </TableCell>
                       <TableCell>
                         <Badge variant={status.variant}>{status.label}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {getSalesStatusBadge(salesStatus)}
+                      </TableCell>
+                      <TableCell className="text-slate-500 text-sm">
+                        {formatDaysSince(stats?.firstPurchaseDate)}
+                      </TableCell>
+                      <TableCell className="text-slate-500 text-sm">
+                        {formatDaysSince(stats?.lastSaleDate)}
                       </TableCell>
                     </TableRow>
                   );
@@ -512,6 +585,16 @@ export function Inventory() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 className="font-medium text-blue-800 mb-2">数据说明</h3>
+        <div className="text-sm text-blue-700 space-y-1">
+          <p>• 库存管理显示所有商品的当前库存数量、成本价和销售参考价，支持按分类和库存状态筛选</p>
+          <p>• 库存状态说明：正常（库存充足）、预警（库存低于最低库存）、缺货（库存为0）</p>
+          <p>• 销售状态说明：畅销（近30天销售量高）、正常、滞销（近30天无销售）</p>
+          <p>• 点击「批量盘点/录入库存」可批量修改商品库存数量，直接输入会覆盖原有库存</p>
+        </div>
+      </div>
     </div>
   );
 }

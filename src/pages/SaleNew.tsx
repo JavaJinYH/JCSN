@@ -58,6 +58,7 @@ export function SaleNew() {
   const [selectedIntroducer, setSelectedIntroducer] = useState<string>('__none__');
   const [pickerName, setPickerName] = useState('');
   const [pickerPhone, setPickerPhone] = useState('');
+  const [saleDate, setSaleDate] = useState<Date>(new Date());
 
   const [needsDelivery, setNeedsDelivery] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState('');
@@ -92,12 +93,26 @@ export function SaleNew() {
 
   const [searchParams] = useSearchParams();
   const draftIdFromUrl = searchParams.get('draftId');
+  const isHistoricalFromUrl = searchParams.get('isHistorical') === 'true';
+  const historicalBillDate = searchParams.get('billDate');
+  const historicalEntityId = searchParams.get('entityId');
 
   useEffect(() => {
     if (draftIdFromUrl && dataLoaded && products.length > 0) {
       loadDraft(draftIdFromUrl);
     }
   }, [draftIdFromUrl, dataLoaded]);
+
+  useEffect(() => {
+    if (isHistoricalFromUrl && dataLoaded) {
+      if (historicalBillDate) {
+        setSaleDate(new Date(historicalBillDate));
+      }
+      if (historicalEntityId) {
+        setSelectedEntity(historicalEntityId);
+      }
+    }
+  }, [isHistoricalFromUrl, historicalBillDate, historicalEntityId, dataLoaded]);
 
   const loadDraft = async (id: string, productsData?: Product[]) => {
     try {
@@ -404,6 +419,7 @@ export function SaleNew() {
     setLoading(true);
     try {
       const result = await SaleService.createSaleOrder({
+        saleDate,
         buyerId: selectedBuyer,
         introducerId: selectedIntroducer,
         pickerName: pickerName || null,

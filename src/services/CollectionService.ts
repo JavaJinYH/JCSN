@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { EntityCreditService } from './EntityCreditService';
+import { LegacyBillService } from './LegacyBillService';
 
 export const CollectionService = {
   async getCollectionRecords() {
@@ -21,9 +22,14 @@ export const CollectionService = {
     });
   },
 
+  async getLegacyBills(entityId?: string) {
+    return LegacyBillService.getLegacyBills(entityId);
+  },
+
   async createCollectionRecord(data: {
     entityId: string;
     receivableId?: string;
+    legacyBillId?: string;
     collectionDate: Date;
     collectionTime?: string;
     collectionMethod?: string;
@@ -56,6 +62,10 @@ export const CollectionService = {
 
     if (data.receivableId && data.collectionAmount && data.collectionAmount > 0) {
       await this.updateReceivableAfterCollection(data.receivableId, data.collectionAmount);
+    }
+
+    if (data.legacyBillId && data.collectionAmount && data.collectionAmount > 0) {
+      await LegacyBillService.recordPayment(data.legacyBillId, data.collectionAmount);
     }
 
     if (data.entityId) {

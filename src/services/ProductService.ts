@@ -241,4 +241,89 @@ export const ProductService = {
 
     return `${prefix}${String(sequence).padStart(4, '0')}`;
   },
+
+  // 新增：获取商品销售统计
+  async getProductSalesStats(productId: string, days: number = 90): Promise<{
+    totalPurchased: number;
+    totalSold: number;
+    recentSold: number;
+    lastSaleDate: Date | null;
+    firstPurchaseDate: Date | null;
+    turnoverRate: number;
+  }> {
+    const now = new Date();
+    const cutoffDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+    // 累计采购量
+    const purchases = await db.purchase.findMany({
+      where: { productId },
+    });
+    const totalPurchased = purchases.reduce((sum, p) => sum + p.quantity, 0);
+    const firstPurchaseDate = purchases.length > 0
+      ? new Date(Math.min(...purchases.map(p => p.createdAt.getTime())))
+      : null;
+
+    // 近N天销售
+    const recentOrderItems = await db.orderItem.findMany({
+      where: {
+        productId,
+        order: { saleDate: { gte: cutoffDate } },
+      },
+    });
+    const recentSold = recentOrderItems.reduce((sum, item) => sum + item.quantity, 0);
+
+    // 累计销售
+    const allOrderItems = await db.orderItem.findMany({
+      where: { productId },
+      include: { order: true },
+    });
+    const totalSold = allOrderItems.reduce((sum, item) => sum + item.quantity, 0);
+
+    // 最后销售日期
+    const lastSaleOrderItem = allOrderItems.length > 0
+      ? allOrderItems.sort((a, b) => b.order.saleDate.getTime() - a.order.saleDate.getTime())[0]
+      : null;
+    const lastSaleDate = lastSaleOrderItem ? lastSaleOrderItem.order.saleDate : null;
+
+    // 周转率
+    const turnoverRate = totalPurchased > 0 ? (totalSold / totalPurchased) * 100 : 0;
+
+    return {
+      totalPurchased,
+      totalSold,
+      recentSold,
+      lastSaleDate,
+      firstPurchaseDate,
+      turnoverRate,
+    };
+  },
+
+  // 新增：获取商品销售状态
+  async getProductSalesStatus(productId: string): Promise<'hot' | 'normal' | 'slow'> {
+    const product = await db.product.findUnique({ where: { id: productId } });
+    if (!product) return 'normal';
+
+    // 手动标记优先
+    if (product.isManualSlowMoving) return 'slow';
+    if (product.isManualHot) return 'hot';
+
+    const stats = await this.getProductSalesStats(productId);
+
+    // 畅销判断：近30天有销售 且 周转率 >=30%
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const isRecentSold = stats.lastSaleDate && stats.lastSaleDate >= thirtyDaysAgo;
+    if (isRecentSold && stats.turnoverRate >= 30) {
+      return 'hot';
+    }
+
+    // 滞销判断：入库 >90天 且 周转率 <15%
+    if (stats.firstPurchaseDate) {
+      const daysSinceFirstPurchase = (Date.now() - stats.firstPurchaseDate.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceFirstPurchase > 90 && stats.turnoverRate < 15) {
+        return 'slow';
+      }
+    }
+
+    return 'normal';
+  },
 };

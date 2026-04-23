@@ -45,6 +45,11 @@ model Product {
   minStock         Float                     @default(0)
   imagePath        String?
   imageUrl         String?
+
+  // 新增：滞销/畅销标记
+  isManualSlowMoving Boolean                   @default(false) // 手动标记为滞销
+  isManualHot        Boolean                   @default(false) // 手动标记为畅销
+
   purchases          Purchase[]
   orderItems         OrderItem[]
   productSpecs       ProductSpec[]

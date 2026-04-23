@@ -28,7 +28,6 @@ export interface CustomerScoreResult {
     profitMarginScore: number;
     paymentSpeedScore: number;
     overdueRateScore: number;
-    rebateRatioScore: number;
   };
 }
 
@@ -293,7 +292,6 @@ export const ContactService = {
       include: {
         items: true,
         receivables: true,
-        rebates: true,
       },
     });
 
@@ -302,7 +300,6 @@ export const ContactService = {
     let totalReceivables = 0;
     let overdueReceivables = 0;
     let totalDaysOverdue = 0;
-    let totalRebates = 0;
 
     orders.forEach((order) => {
       const orderNet = order.totalAmount - (order.discount || 0);
@@ -319,16 +316,11 @@ export const ContactService = {
           totalDaysOverdue += rec.overdueDays;
         }
       });
-
-      order.rebates.forEach((rebate) => {
-        totalRebates += rebate.rebateAmount;
-      });
     });
 
     const avgDaysOverdue = totalReceivables > 0 ? totalDaysOverdue / totalReceivables : 0;
     const overdueRate = totalReceivables > 0 ? overdueReceivables / totalReceivables : 0;
     const avgProfitMargin = totalSales > 0 ? totalProfit / totalSales : 0;
-    const rebateRatio = totalSales > 0 ? totalRebates / totalSales : 0;
 
     const targetSales = 100000;
     const targetProfitMargin = 0.3;
@@ -337,9 +329,8 @@ export const ContactService = {
     const profitMarginScore = Math.min(100, (avgProfitMargin / targetProfitMargin) * 25);
     const paymentSpeedScore = Math.max(0, Math.min(100, ((30 - avgDaysOverdue) / 30) * 20));
     const overdueRateScore = Math.max(0, Math.min(100, (1 - overdueRate) * 15));
-    const rebateRatioScore = Math.max(0, Math.min(100, (1 - rebateRatio) * 10));
 
-    const totalScore = annualSalesScore + profitMarginScore + paymentSpeedScore + overdueRateScore + rebateRatioScore;
+    const totalScore = annualSalesScore + profitMarginScore + paymentSpeedScore + overdueRateScore;
     const normalizedScore = Math.round(totalScore / 10);
 
     let autoTag = 'cross';
@@ -375,7 +366,6 @@ export const ContactService = {
         profitMarginScore: Math.round(profitMarginScore),
         paymentSpeedScore: Math.round(paymentSpeedScore),
         overdueRateScore: Math.round(overdueRateScore),
-        rebateRatioScore: Math.round(rebateRatioScore),
       },
     };
   },

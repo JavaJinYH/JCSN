@@ -317,6 +317,16 @@ export function Sales() {
         </CardContent>
       </Card>
 
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 className="font-medium text-blue-800 mb-2">数据说明</h3>
+        <div className="text-sm text-blue-700 space-y-1">
+          <p>• 销售记录用于管理所有销售订单，包含订单金额、付款情况等核心数据</p>
+          <p>• 点击「详情」查看销售单完整信息，包括商品明细、付款记录、关联项目等</p>
+          <p>• 新增销售单请使用「+ 新增销售」按钮，跳转到新建销售单页面</p>
+          <p>• 支持按客户类型、结账主体、日期范围、单据状态等条件筛选</p>
+        </div>
+      </div>
+
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>

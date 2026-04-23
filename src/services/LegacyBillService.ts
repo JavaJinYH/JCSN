@@ -91,6 +91,30 @@ export const LegacyBillService = {
     });
   },
 
+  async recordPayment(id: string, amount: number): Promise<LegacyBill> {
+    const existing = await db.LegacyBill.findUnique({ where: { id } });
+    if (!existing) {
+      throw new Error('历史账单不存在');
+    }
+
+    const newPaidAmount = existing.paidAmount + amount;
+    const newRemainingAmount = Math.max(0, existing.originalAmount - newPaidAmount);
+    const newStatus = newRemainingAmount > 0 ? 'pending' : 'settled';
+
+    return db.LegacyBill.update({
+      where: { id },
+      data: {
+        paidAmount: newPaidAmount,
+        remainingAmount: newRemainingAmount,
+        status: newStatus,
+      },
+      include: {
+        entity: true,
+        project: true,
+      },
+    });
+  },
+
   async deleteLegacyBill(id: string): Promise<void> {
     await db.LegacyBill.delete({ where: { id } });
   },

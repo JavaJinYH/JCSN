@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { LegacyBillService } from './LegacyBillService';
 
 export const SettlementService = {
   async getEntitiesWithContact() {
@@ -99,6 +100,95 @@ export const SettlementService = {
       include: { order: true },
       orderBy: { createdAt: 'desc' },
     });
+  },
+
+  async getEntityReceivableSummary(entityId: string) {
+    const orders = await db.saleOrder.findMany({
+      where: { paymentEntityId: entityId },
+      include: {
+        payments: true,
+        returns: true,
+        badDebtWriteOffs: true,
+      },
+    });
+
+    const legacyBills = await LegacyBillService.getLegacyBillsByEntity(entityId);
+
+    let totalReceivable = 0;
+    let totalPending = 0;
+
+    for (const order of orders) {
+      const orderTotal = order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0);
+      let orderPaid = order.paidAmount;
+      for (const ret of order.returns) {
+        orderPaid -= ret.totalAmount;
+      }
+      for (const writeOff of order.badDebtWriteOffs) {
+        orderPaid -= writeOff.writtenOffAmount;
+      }
+      totalReceivable += orderTotal;
+      totalPending += Math.max(0, orderTotal - orderPaid);
+    }
+
+    for (const bill of legacyBills) {
+      totalReceivable += bill.originalAmount;
+      totalPending += bill.remainingAmount;
+    }
+
+    return { totalReceivable, totalPending };
+  },
+
+  async getEntityReceivableWithLegacy(entityId: string) {
+    const [orders, legacyBills] = await Promise.all([
+      db.saleOrder.findMany({
+        where: { paymentEntityId: entityId },
+        include: {
+          buyer: true,
+          project: true,
+          payments: true,
+          items: true,
+          returns: true,
+          badDebtWriteOffs: true,
+          photos: true,
+        },
+        orderBy: { saleDate: 'desc' },
+      }),
+      LegacyBillService.getLegacyBillsByEntity(entityId),
+    ]);
+
+    const legacyFormatted = legacyBills.map(bill => ({
+      id: `legacy-${bill.id}`,
+      type: 'legacy' as const,
+      invoiceNo: `历史-${bill.id.slice(0, 8)}`,
+      saleDate: bill.billDate,
+      buyer: { name: bill.entity?.name || '' },
+      project: bill.project,
+      totalAmount: bill.originalAmount,
+      paidAmount: bill.paidAmount,
+      remainingAmount: bill.remainingAmount,
+      status: bill.status,
+      remark: bill.remark,
+      isHistorical: true,
+    }));
+
+    const ordersFormatted = orders.map(order => ({
+      id: order.id,
+      type: 'order' as const,
+      invoiceNo: order.invoiceNo,
+      saleDate: order.saleDate,
+      buyer: order.buyer,
+      project: order.project,
+      totalAmount: order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0),
+      paidAmount: order.paidAmount,
+      remainingAmount: order.remainingAmount,
+      status: order.status,
+      remark: order.remark || '',
+      isHistorical: false,
+    }));
+
+    return [...ordersFormatted, ...legacyFormatted].sort(
+      (a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime()
+    );
   },
 
   async calculateOrderBalance(orderId: string) {
