@@ -365,77 +365,149 @@ export function Inventory() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {isAlertMode && <TableHead className="w-10"></TableHead>}
-                <TableHead>商品名称</TableHead>
-                <TableHead>分类</TableHead>
-                <TableHead>规格型号</TableHead>
-                <TableHead className="text-right">库存量</TableHead>
-                <TableHead className="text-right">成本价</TableHead>
-                <TableHead className="text-right">销售价</TableHead>
-                <TableHead>库存状态</TableHead>
-                <TableHead>销售状态</TableHead>
-                <TableHead>入库天数</TableHead>
-                <TableHead>最后销售</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {tableProps.total === 0 ? (
+          {/* 桌面端表格布局 */}
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={isAlertMode ? 11 : 10} className="text-center py-8 text-slate-500">
-                    暂无商品数据
-                  </TableCell>
+                  {isAlertMode && <TableHead className="w-10"></TableHead>}
+                  <TableHead>商品名称</TableHead>
+                  <TableHead>分类</TableHead>
+                  <TableHead>规格型号</TableHead>
+                  <TableHead className="text-right">库存量</TableHead>
+                  <TableHead className="text-right">成本价</TableHead>
+                  <TableHead className="text-right">销售价</TableHead>
+                  <TableHead>库存状态</TableHead>
+                  <TableHead>销售状态</TableHead>
+                  <TableHead>入库天数</TableHead>
+                  <TableHead>最后销售</TableHead>
                 </TableRow>
-              ) : (
-                tableProps.data.map((product) => {
-                  const status = getStockStatus(product);
-                  const cached = productStatsCache.get(product.id);
-                  const salesStatus = cached?.status || 'normal';
-                  const stats = cached?.stats;
-                  return (
-                    <TableRow key={product.id}>
-                      {isAlertMode && (
+              </TableHeader>
+              <TableBody>
+                {tableProps.total === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={isAlertMode ? 11 : 10} className="text-center py-8 text-slate-500">
+                      暂无商品数据
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  tableProps.data.map((product) => {
+                    const status = getStockStatus(product);
+                    const cached = productStatsCache.get(product.id);
+                    const salesStatus = cached?.status || 'normal';
+                    const stats = cached?.stats;
+                    return (
+                      <TableRow key={product.id}>
+                        {isAlertMode && (
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedProducts.has(product.id)}
+                              onCheckedChange={() => toggleProductSelection(product.id)}
+                            />
+                          </TableCell>
+                        )}
+                        <TableCell className="font-medium">{product.name}</TableCell>
+                        <TableCell>{product.category.name}</TableCell>
+                        <TableCell className="text-slate-500">
+                          {product.specification || '-'} {product.model || ''}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {product.stock} {product.unit}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatCurrency(product.lastPurchasePrice)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-orange-600">
+                          {formatCurrency(product.referencePrice)}
+                        </TableCell>
                         <TableCell>
+                          <Badge variant={status.variant}>{status.label}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {getSalesStatusBadge(salesStatus)}
+                        </TableCell>
+                        <TableCell className="text-slate-500 text-sm">
+                          {formatDaysSince(stats?.firstPurchaseDate)}
+                        </TableCell>
+                        <TableCell className="text-slate-500 text-sm">
+                          {formatDaysSince(stats?.lastSaleDate)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* 移动端卡片布局 */}
+          <div className="md:hidden space-y-3">
+            {tableProps.total === 0 ? (
+              <div className="text-center py-8 text-slate-500">
+                暂无商品数据
+              </div>
+            ) : (
+              tableProps.data.map((product) => {
+                const status = getStockStatus(product);
+                const cached = productStatsCache.get(product.id);
+                const salesStatus = cached?.status || 'normal';
+                const stats = cached?.stats;
+                return (
+                  <Card key={product.id} className="overflow-hidden">
+                    <CardContent className="p-4">
+                      {isAlertMode && (
+                        <div className="mb-2 flex items-center gap-2">
                           <Checkbox
                             checked={selectedProducts.has(product.id)}
                             onCheckedChange={() => toggleProductSelection(product.id)}
                           />
-                        </TableCell>
+                          <span className="text-sm text-slate-600">选中此商品</span>
+                        </div>
                       )}
-                      <TableCell className="font-medium">{product.name}</TableCell>
-                      <TableCell>{product.category.name}</TableCell>
-                      <TableCell className="text-slate-500">
-                        {product.specification || '-'} {product.model || ''}
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {product.stock} {product.unit}
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {formatCurrency(product.lastPurchasePrice)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-orange-600">
-                        {formatCurrency(product.referencePrice)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={status.variant}>{status.label}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        {getSalesStatusBadge(salesStatus)}
-                      </TableCell>
-                      <TableCell className="text-slate-500 text-sm">
-                        {formatDaysSince(stats?.firstPurchaseDate)}
-                      </TableCell>
-                      <TableCell className="text-slate-500 text-sm">
-                        {formatDaysSince(stats?.lastSaleDate)}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="font-medium text-slate-800">{product.name}</div>
+                          <div className="text-sm text-slate-500">
+                            {product.category.name}
+                          </div>
+                          {(product.specification || product.model) && (
+                            <div className="text-xs text-slate-400 mt-1">
+                              {product.specification || '-'} {product.model || ''}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={status.variant}>{status.label}</Badge>
+                          {getSalesStatusBadge(salesStatus)}
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">库存</span>
+                          <span className="font-mono font-medium">{product.stock} {product.unit}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">成本</span>
+                          <span className="font-mono">{formatCurrency(product.lastPurchasePrice)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">售价</span>
+                          <span className="font-mono font-medium text-orange-600">{formatCurrency(product.referencePrice)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">入库天数</span>
+                          <span className="text-slate-700">{formatDaysSince(stats?.firstPurchaseDate)}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+          </div>
+
           <DataTablePagination
             pagination={{
               page: tableProps.page,

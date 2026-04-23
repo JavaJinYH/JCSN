@@ -1,12 +1,29 @@
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { MobileBottomNav } from './MobileBottomNav';
 import { useState, useEffect, useCallback } from 'react';
 import { ScreenLockOverlay } from '@/components/ScreenLock';
 import { SettingsService } from '@/services/SettingsService';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return isMobile;
+}
+
 export function AppLayout() {
+  const isMobile = useIsMobile();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [idleTimeoutMinutes, setIdleTimeoutMinutes] = useState(0);
@@ -64,17 +81,29 @@ export function AppLayout() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
-      <div
-        className={`transition-all duration-300 ${
-          sidebarCollapsed ? 'ml-16' : 'ml-56'
-        }`}
-      >
-        <Header />
-        <main className="p-6">
-          <Outlet />
-        </main>
-      </div>
+      {!isMobile ? (
+        <>
+          <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+          <div
+            className={`transition-all duration-300 ${
+              sidebarCollapsed ? 'ml-16' : 'ml-56'
+            }`}
+          >
+            <Header />
+            <main className="p-6">
+              <Outlet />
+            </main>
+          </div>
+        </>
+      ) : (
+        <div className="pb-16">
+          <Header />
+          <main className="p-4">
+            <Outlet />
+          </main>
+          <MobileBottomNav />
+        </div>
+      )}
       <ScreenLockOverlay
         isLocked={isLocked}
         idleTimeoutMinutes={idleTimeoutMinutes}

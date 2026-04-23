@@ -29,6 +29,9 @@ import { ToastContainer } from './components/Toast';
 import { Suppliers } from './pages/Suppliers';
 import { DailyExpenses } from './pages/DailyExpenses';
 import { ServiceAppointments } from './pages/ServiceAppointments';
+// 移动端页面
+import { MobilePendingDocuments } from './pages/mobile/MobilePendingDocuments';
+import { MobileDocumentDetail } from './pages/mobile/MobileDocumentDetail';
 
 function App() {
   return (
@@ -69,6 +72,9 @@ function App() {
           <Route path="legacy-bills" element={<LegacyBills />} />
           <Route path="inventory/check" element={<InventoryCheckPage />} />
           <Route path="photos" element={<PhotoManagement />} />
+          {/* 移动端页面 */}
+          <Route path="mobile/pending-documents" element={<MobilePendingDocuments />} />
+          <Route path="mobile/document/:id" element={<MobileDocumentDetail />} />
         </Route>
       </Routes>
     </BrowserRouter>

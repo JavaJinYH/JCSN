@@ -200,87 +200,162 @@ export function DataTablePagination({
   };
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-white">
-      <div className="flex items-center gap-4">
-        <span className="text-sm text-slate-500">
-          显示 {startItem}-{endItem} 条，共 {total} 条
-        </span>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-500">每页</span>
-          <Select
-            value={String(pageSize)}
-            onValueChange={(value) => onPageSizeChange(Number(value))}
+    <div className="px-4 py-3 border-t border-slate-200 bg-white">
+      {/* 桌面端布局 */}
+      <div className="hidden md:flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-slate-500">
+            显示 {startItem}-{endItem} 条，共 {total} 条
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-500">每页</span>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(value) => onPageSizeChange(Number(value))}
+            >
+              <SelectTrigger className="w-20 h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {pageSizeOptions.map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size} 条
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(1)}
+            disabled={page === 1}
+            className="h-8 w-16"
           >
-            <SelectTrigger className="w-20 h-8">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {pageSizeOptions.map((size) => (
-                <SelectItem key={size} value={String(size)}>
-                  {size} 条
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            首页
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(page - 1)}
+            disabled={page === 1}
+            className="h-8 w-16"
+          >
+            上一页
+          </Button>
+
+          {getPageNumbers().map((p, idx) =>
+            p === 'ellipsis' ? (
+              <span key={`ellipsis-${idx}`} className="px-2 text-slate-400">
+                ...
+              </span>
+            ) : (
+              <Button
+                key={p}
+                variant={p === page ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => onPageChange(p)}
+                className={`h-8 w-10 ${p === page ? 'bg-orange-500 hover:bg-orange-600' : ''}`}
+              >
+                {p}
+              </Button>
+            )
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(page + 1)}
+            disabled={page === totalPages || totalPages === 0}
+            className="h-8 w-16"
+          >
+            下一页
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(totalPages)}
+            disabled={page === totalPages || totalPages === 0}
+            className="h-8 w-16"
+          >
+            末页
+          </Button>
         </div>
       </div>
 
-      <div className="flex items-center gap-1">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onPageChange(1)}
-          disabled={page === 1}
-          className="h-8 w-16"
-        >
-          首页
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onPageChange(page - 1)}
-          disabled={page === 1}
-          className="h-8 w-16"
-        >
-          上一页
-        </Button>
+      {/* 移动端布局 */}
+      <div className="md:hidden space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-slate-500">
+            显示 {startItem}-{endItem} 条，共 {total} 条
+          </span>
+        </div>
 
-        {getPageNumbers().map((p, idx) =>
-          p === 'ellipsis' ? (
-            <span key={`ellipsis-${idx}`} className="px-2 text-slate-400">
-              ...
-            </span>
-          ) : (
-            <Button
-              key={p}
-              variant={p === page ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => onPageChange(p)}
-              className={`h-8 w-10 ${p === page ? 'bg-orange-500 hover:bg-orange-600' : ''}`}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-500">每页</span>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(value) => onPageSizeChange(Number(value))}
             >
-              {p}
-            </Button>
-          )
-        )}
+              <SelectTrigger className="w-20 h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {pageSizeOptions.map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size} 条
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onPageChange(page + 1)}
-          disabled={page === totalPages || totalPages === 0}
-          className="h-8 w-16"
-        >
-          下一页
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onPageChange(totalPages)}
-          disabled={page === totalPages || totalPages === 0}
-          className="h-8 w-16"
-        >
-          末页
-        </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(1)}
+              disabled={page === 1}
+              className="h-8 w-10 text-xs"
+            >
+              首页
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(page - 1)}
+              disabled={page === 1}
+              className="h-8 w-10 text-xs"
+            >
+              上一页
+            </Button>
+            <span className="text-sm text-slate-600 font-medium w-10 text-center">
+              {page} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(page + 1)}
+              disabled={page === totalPages || totalPages === 0}
+              className="h-8 w-10 text-xs"
+            >
+              下一页
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(totalPages)}
+              disabled={page === totalPages || totalPages === 0}
+              className="h-8 w-10 text-xs"
+            >
+              末页
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

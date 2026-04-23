@@ -1,8 +1,11 @@
 const { app, BrowserWindow, ipcMain, dialog, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const log = require('electron-log');
 const { PrismaClient } = require('@prisma/client');
+const express = require('express');
+const cors = require('cors');
 
 log.initialize();
 log.transports.file.level = 'info';
@@ -10,7 +13,275 @@ log.info('Application starting...');
 
 let mainWindow;
 let prisma;
+let expressServer;
+let localApiUrl;
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+const API_PORT = 3456;
+
+// 获取本机局域网 IP 地址
+const getLocalIP = () => {
+  const interfaces = os.networkInterfaces();
+  for (const iface of Object.values(interfaces)) {
+    for (const alias of iface || []) {
+      if (alias.family === 'IPv4' && !alias.internal) {
+        return alias.address;
+      }
+    }
+  }
+  return '127.0.0.1';
+};
+
+// 启动局域网 API 服务
+const startApiServer = () => {
+  const apiApp = express();
+  apiApp.use(cors());
+  apiApp.use(express.json({ limit: '50mb' }));
+  apiApp.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+  // 健康检查
+  apiApp.get('/api/health', (req, res) => {
+    res.json({ success: true, message: 'API server is running', timestamp: new Date().toISOString() });
+  });
+
+  // 获取待拍照单据列表
+  apiApp.get('/api/pending-documents', async (req, res) => {
+    try {
+      // 获取没有照片的销售单和进货单
+      const [saleOrders, purchases] = await Promise.all([
+        prisma.saleOrder.findMany({
+          include: { buyer: true },
+          orderBy: { saleDate: 'desc' },
+        }),
+        prisma.purchase.findMany({
+          include: { supplier: true },
+          orderBy: { purchaseDate: 'desc' },
+        }),
+      ]);
+
+      // 获取已有关联照片的单据 ID
+      const [salePhotoOrders, purchasePhotoOrders] = await Promise.all([
+        prisma.saleOrderPhoto.findMany({ select: { saleOrderId: true } }),
+        prisma.purchasePhoto.findMany({ select: { purchaseId: true } }),
+      ]);
+
+      const saleWithPhotos = new Set(salePhotoOrders.map(p => p.saleOrderId));
+      const purchaseWithPhotos = new Set(purchasePhotoOrders.map(p => p.purchaseId));
+
+      const documents = [
+        ...saleOrders.map(order => ({
+          id: order.id,
+          type: 'sale',
+          invoiceNo: order.invoiceNo,
+          date: order.saleDate,
+          partyName: order.buyer?.name || '散客',
+          amount: order.totalAmount,
+          hasPhotos: saleWithPhotos.has(order.id),
+          photoCount: saleWithPhotos.has(order.id) ? 1 : 0,
+        })),
+        ...purchases.map(p => ({
+          id: p.id,
+          type: 'purchase',
+          invoiceNo: p.invoiceNo,
+          date: p.purchaseDate,
+          partyName: p.supplier?.name || '供应商',
+          amount: p.totalAmount,
+          hasPhotos: purchaseWithPhotos.has(p.id),
+          photoCount: purchaseWithPhotos.has(p.id) ? 1 : 0,
+        })),
+      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      res.json({ success: true, data: documents });
+    } catch (error) {
+      log.error('[API] pending-documents error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 获取单据详情
+  apiApp.get('/api/document/:id', async (req, res) => {
+    try {
+      const id = req.params.id;
+
+      // 先尝试找销售单
+      let document = await prisma.saleOrder.findUnique({
+        where: { id },
+        include: { buyer: true, orderItems: { include: { product: true } } },
+      });
+
+      if (document) {
+        res.json({
+          success: true,
+          data: {
+            id: document.id,
+            type: 'sale',
+            invoiceNo: document.invoiceNo,
+            date: document.saleDate,
+            partyName: document.buyer?.name || '散客',
+            amount: document.totalAmount,
+            items: document.orderItems.map(item => ({
+              productName: item.product?.name || '商品',
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              subtotal: item.subtotal,
+            })),
+          },
+        });
+        return;
+      }
+
+      // 再尝试找进货单
+      document = await prisma.purchase.findUnique({
+        where: { id },
+        include: { supplier: true, items: { include: { product: true } } },
+      });
+
+      if (document) {
+        res.json({
+          success: true,
+          data: {
+            id: document.id,
+            type: 'purchase',
+            invoiceNo: document.invoiceNo,
+            date: document.purchaseDate,
+            partyName: document.supplier?.name || '供应商',
+            amount: document.totalAmount,
+            items: document.items.map(item => ({
+              productName: item.product?.name || '商品',
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              subtotal: item.subtotal,
+            })),
+          },
+        });
+        return;
+      }
+
+      res.status(404).json({ success: false, error: '单据不存在' });
+    } catch (error) {
+      log.error('[API] document detail error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 上传照片并关联单据
+  apiApp.post('/api/document/:id/upload-photo', async (req, res) => {
+    try {
+      const id = req.params.id;
+      const { dataUrl, photoType, remark } = req.body;
+
+      // 尝试找销售单
+      const saleOrder = await prisma.saleOrder.findUnique({ where: { id } });
+      if (saleOrder) {
+        // 保存照片文件
+        const fileName = `sale_${id}_${Date.now()}.jpg`;
+        const subDir = 'sales';
+        const targetDir = subDir ? path.join(getPhotosDir(), subDir) : getPhotosDir();
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+        const filePath = path.join(targetDir, fileName);
+        const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+        fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+        const relativePath = subDir ? `${subDir}/${fileName}` : fileName;
+
+        // 保存数据库记录
+        await prisma.saleOrderPhoto.create({
+          data: {
+            saleOrderId: id,
+            photoPath: relativePath,
+            photoType: photoType || 'receipt',
+            photoRemark: remark,
+          },
+        });
+
+        log.info('[API] Photo uploaded for sale order:', id);
+        res.json({ success: true, data: { photoPath: relativePath } });
+        return;
+      }
+
+      // 尝试找进货单
+      const purchase = await prisma.purchase.findUnique({ where: { id } });
+      if (purchase) {
+        // 保存照片文件
+        const fileName = `purchase_${id}_${Date.now()}.jpg`;
+        const subDir = 'purchases';
+        const targetDir = subDir ? path.join(getPhotosDir(), subDir) : getPhotosDir();
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+        const filePath = path.join(targetDir, fileName);
+        const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+        fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+        const relativePath = subDir ? `${subDir}/${fileName}` : fileName;
+
+        // 保存数据库记录
+        await prisma.purchasePhoto.create({
+          data: {
+            purchaseId: id,
+            photoPath: relativePath,
+            photoType: photoType || 'receipt',
+            photoRemark: remark,
+          },
+        });
+
+        log.info('[API] Photo uploaded for purchase:', id);
+        res.json({ success: true, data: { photoPath: relativePath } });
+        return;
+      }
+
+      res.status(404).json({ success: false, error: '单据不存在' });
+    } catch (error) {
+      log.error('[API] upload photo error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 获取库存列表（只读）
+  apiApp.get('/api/inventory', async (req, res) => {
+    try {
+      const products = await prisma.product.findMany({
+        include: { category: true, brand: true },
+        orderBy: { name: 'asc' },
+      });
+
+      res.json({ success: true, data: products });
+    } catch (error) {
+      log.error('[API] inventory error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 获取销售单列表（只读）
+  apiApp.get('/api/sales', async (req, res) => {
+    try {
+      const sales = await prisma.saleOrder.findMany({
+        include: { buyer: true },
+        orderBy: { saleDate: 'desc' },
+        take: 100,
+      });
+
+      res.json({ success: true, data: sales });
+    } catch (error) {
+      log.error('[API] sales error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  expressServer = apiApp.listen(API_PORT, '0.0.0.0', () => {
+    const ip = getLocalIP();
+    localApiUrl = `http://${ip}:${API_PORT}`;
+    log.info('API server started:', localApiUrl);
+  });
+};
+
+// 停止 API 服务
+const stopApiServer = () => {
+  if (expressServer) {
+    expressServer.close(() => {
+      log.info('API server stopped');
+    });
+  }
+};
 
 // 照片存储根目录 - 使用项目根目录
 const getPhotosDir = () => {
@@ -48,11 +319,19 @@ async function createWindow() {
     log.error('Database connection failed:', err.message);
   }
 
+  // 启动局域网 API 服务
+  try {
+    startApiServer();
+    log.info('API server started successfully');
+  } catch (err) {
+    log.error('Failed to start API server:', err.message);
+  }
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
-    minWidth: 1200,
-    minHeight: 700,
+    minWidth: 320,
+    minHeight: 480,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -335,8 +614,14 @@ function registerPhotoHandlers() {
 
 // 应用重启功能
 function registerAppHandlers() {
+  // 获取局域网 API URL
+  ipcMain.handle('api-getUrl', async () => {
+    return { success: true, data: { url: localApiUrl } };
+  });
+
   ipcMain.handle('app-restart', async () => {
     log.info('App restart requested via IPC');
+    stopApiServer();
     if (prisma) {
       await prisma.$disconnect();
     }
@@ -353,6 +638,7 @@ function registerAppHandlers() {
 
   ipcMain.handle('app-close', async () => {
     log.info('App close requested via IPC');
+    stopApiServer();
     if (prisma) {
       await prisma.$disconnect();
     }
@@ -416,6 +702,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   log.info('All windows closed');
+  stopApiServer();
   if (prisma) {
     prisma.$disconnect().catch(() => {});
   }
