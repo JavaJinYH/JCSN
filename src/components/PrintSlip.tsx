@@ -326,7 +326,7 @@ export function PrintSlip({ type, data }: PrintSlipProps) {
         </div>
         <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
           <span>${formatDate(isSale ? saleData?.saleDate : purchaseData?.purchaseDate)}</span>
-          <span>收货单位：${isSale ? (saleData?.buyer?.name || '-') : (purchaseData?.supplier?.name || '-')}</span>
+          <span>收货单位：${isSale ? (saleData?.paymentEntity?.name || '-') : (purchaseData?.supplier?.name || '-')}</span>
         </div>
         ` : `
         <div class="slip-header">

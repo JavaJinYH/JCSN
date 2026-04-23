@@ -566,6 +566,19 @@ export function SaleNew() {
                 />
               </div>
 
+              {isHistoricalFromUrl && (
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">
+                    销售日期 <span className="text-orange-500">（来自历史账单）</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={saleDate.toISOString().split('T')[0]}
+                    onChange={(e) => setSaleDate(new Date(e.target.value))}
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="text-xs text-slate-500 mb-1 block">关联项目（可选）</label>
                 <Select
