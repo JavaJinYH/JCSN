@@ -5,11 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/Toast';
-
-// 从 localStorage 获取 API 基础 URL
-const getApiBaseUrl = () => {
-  return localStorage.getItem('mobile_api_base_url') || '';
-};
+import { MobileApiService, DocumentDetail } from '@/services/MobileApiService';
 
 interface DocumentPhoto {
   id: string;
@@ -17,23 +13,6 @@ interface DocumentPhoto {
   remark?: string;
   type: string;
   isUploaded: boolean;
-}
-
-interface DocumentItem {
-  productName: string;
-  quantity: number;
-  unitPrice: number;
-  subtotal: number;
-}
-
-interface DocumentDetail {
-  id: string;
-  type: 'sale' | 'purchase';
-  invoiceNo?: string | null;
-  date: string;
-  partyName: string;
-  amount: number;
-  items: DocumentItem[];
 }
 
 export function MobileDocumentDetail() {
@@ -44,11 +23,12 @@ export function MobileDocumentDetail() {
   const [loading, setLoading] = useState(true);
   const [photos, setPhotos] = useState<DocumentPhoto[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [apiUrl, setApiUrl] = useState(getApiBaseUrl());
+  const [apiUrl, setApiUrl] = useState(MobileApiService.getBaseUrl() || '');
   const [error, setError] = useState('');
   const [remark, setRemark] = useState('');
+  const [isCached, setIsCached] = useState(false);
 
-  const loadDocument = async () => {
+  const loadDocument = async (): Promise<void> => {
     if (!apiUrl || !id) {
       setError('请先设置 API 地址');
       setLoading(false);
@@ -57,10 +37,14 @@ export function MobileDocumentDetail() {
 
     try {
       setLoading(true);
-      const res = await fetch(`${apiUrl}/api/document/${id}`);
-      const data = await res.json();
+      const data = await MobileApiService.getDocument(id);
       if (data.success) {
-        setDoc(data.data);
+        setDoc(data.data || null);
+        setIsCached(data.isCached || false);
+        if (data.isCached) {
+          toast('显示缓存数据，请连接WiFi查看最新', 'info');
+        }
+        setError('');
       } else {
         setError(data.error || '加载失败');
       }
@@ -76,11 +60,11 @@ export function MobileDocumentDetail() {
     loadDocument();
   }, [apiUrl, id]);
 
-  const handleSelectPhoto = () => {
+  const handleSelectPhoto = (): void => {
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
@@ -97,11 +81,11 @@ export function MobileDocumentDetail() {
     setPhotos(prev => [...prev, ...newPhotos]);
   };
 
-  const handleRemovePhoto = (photoId: string) => {
+  const handleRemovePhoto = (photoId: string): void => {
     setPhotos(prev => prev.filter(p => p.id !== photoId));
   };
 
-  const handleUpload = async () => {
+  const handleUpload = async (): Promise<void> => {
     if (!apiUrl || !id) {
       toast('请先设置 API 地址', 'warning');
       return;
@@ -140,17 +124,7 @@ export function MobileDocumentDetail() {
         });
 
         // 上传
-        const res = await fetch(`${apiUrl}/api/document/${id}/upload-photo`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            dataUrl: base64Data,
-            photoType: 'receipt',
-            remark,
-          }),
-        });
-
-        const data = await res.json();
+        const data = await MobileApiService.uploadPhoto(id, base64Data, 'receipt', remark);
         if (data.success) {
           successCount++;
         } else {
@@ -169,6 +143,13 @@ export function MobileDocumentDetail() {
       setUploading(false);
     }
   };
+
+  const handleRefresh = (): void => {
+    loadDocument();
+  };
+
+  // 网络状态显示
+  const isOnline = MobileApiService.isOnline();
 
   if (loading) {
     return (
@@ -189,14 +170,31 @@ export function MobileDocumentDetail() {
   return (
     <div className="space-y-6 p-4">
       {/* 顶部导航 */}
-      <div className="flex items-center gap-2 mb-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-          ← 返回
-        </Button>
-        <h2 className="text-xl font-bold text-slate-800">单据详情</h2>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+            ← 返回
+          </Button>
+          <h2 className="text-xl font-bold text-slate-800">单据详情</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          {!isOnline && (
+            <Badge className="bg-amber-100 text-amber-700">📴 离线模式</Badge>
+          )}
+          {isCached && (
+            <Badge className="bg-blue-100 text-blue-700">💾 缓存数据</Badge>
+          )}
+        </div>
       </div>
 
       {error && <div className="text-red-500">{error}</div>}
+
+      {/* 刷新按钮 */}
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={handleRefresh}>
+          🔄 刷新
+        </Button>
+      </div>
 
       {/* 单据基本信息 */}
       <Card>
@@ -257,11 +255,7 @@ export function MobileDocumentDetail() {
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">照片</CardTitle>
-            <Button
-              size="sm"
-              className="gap-1"
-              onClick={handleSelectPhoto}
-            >
+            <Button size="sm" className="gap-1" onClick={handleSelectPhoto}>
               📷 添加照片
             </Button>
           </div>

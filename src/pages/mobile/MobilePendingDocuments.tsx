@@ -4,38 +4,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-
-// 检查是否在 Electron 环境
-const isElectron = () => {
-  return window.electronAPI !== undefined;
-};
-
-// 从 localStorage 获取 API 基础 URL
-const getApiBaseUrl = () => {
-  return localStorage.getItem('mobile_api_base_url') || '';
-};
-
-// 待拍照单据类型
-interface PendingDocument {
-  id: string;
-  type: 'sale' | 'purchase';
-  invoiceNo?: string | null;
-  date: string;
-  partyName: string;
-  amount: number;
-  hasPhotos: boolean;
-  photoCount: number;
-}
+import { toast } from '@/components/Toast';
+import { MobileApiService, PendingDocument } from '@/services/MobileApiService';
 
 export function MobilePendingDocuments() {
   const [documents, setDocuments] = useState<PendingDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'sale' | 'purchase'>('all');
-  const [apiUrl, setApiUrl] = useState(getApiBaseUrl());
+  const [apiUrl, setApiUrl] = useState(MobileApiService.getBaseUrl() || '');
   const [error, setError] = useState('');
+  const [isCached, setIsCached] = useState(false);
 
-  const loadDocuments = async () => {
+  const loadDocuments = async (): Promise<void> => {
     if (!apiUrl) {
       setError('请先设置 API 地址');
       setLoading(false);
@@ -44,10 +25,14 @@ export function MobilePendingDocuments() {
 
     try {
       setLoading(true);
-      const res = await fetch(`${apiUrl}/api/pending-documents`);
-      const data = await res.json();
+      const data = await MobileApiService.getPendingDocuments();
       if (data.success) {
-        setDocuments(data.data);
+        setDocuments(data.data || []);
+        setIsCached(data.isCached || false);
+        if (data.isCached) {
+          toast('显示缓存数据，请连接WiFi查看最新', 'info');
+        }
+        setError('');
       } else {
         setError(data.error || '加载失败');
       }
@@ -63,9 +48,13 @@ export function MobilePendingDocuments() {
     loadDocuments();
   }, [apiUrl]);
 
-  const handleSaveApiUrl = () => {
-    localStorage.setItem('mobile_api_base_url', apiUrl);
+  const handleSaveApiUrl = (): void => {
+    MobileApiService.setBaseUrl(apiUrl);
     setError('');
+    loadDocuments();
+  };
+
+  const handleRefresh = (): void => {
     loadDocuments();
   };
 
@@ -73,9 +62,12 @@ export function MobilePendingDocuments() {
     const matchesType = filterType === 'all' || doc.type === filterType;
     const matchesSearch = !searchTerm ||
       doc.partyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.invoiceNo?.toLowerCase().includes(searchTerm.toLowerCase());
+      (doc.invoiceNo?.toLowerCase().includes(searchTerm.toLowerCase()) || false);
     return matchesType && matchesSearch;
   });
+
+  // 网络状态显示
+  const isOnline = MobileApiService.isOnline();
 
   if (loading) {
     return (
@@ -107,9 +99,20 @@ export function MobilePendingDocuments() {
 
   return (
     <div className="space-y-6 p-4">
-      <div>
-        <h2 className="text-xl font-bold text-slate-800">待拍照单据</h2>
-        <p className="text-slate-500 text-sm mt-1">选择单据进行拍照上传</p>
+      {/* 顶部状态栏 */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800">待拍照单据</h2>
+          <p className="text-slate-500 text-sm mt-1">选择单据进行拍照上传</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {!isOnline && (
+            <Badge className="bg-amber-100 text-amber-700">📴 离线模式</Badge>
+          )}
+          {isCached && (
+            <Badge className="bg-blue-100 text-blue-700">💾 缓存数据</Badge>
+          )}
+        </div>
       </div>
 
       {/* API 地址管理 */}
@@ -126,7 +129,7 @@ export function MobilePendingDocuments() {
             />
             <div className="flex gap-2">
               <Button onClick={handleSaveApiUrl} size="sm">保存</Button>
-              <Button onClick={loadDocuments} variant="outline" size="sm">刷新</Button>
+              <Button onClick={handleRefresh} variant="outline" size="sm">🔄 刷新</Button>
             </div>
           </div>
         </CardContent>
@@ -169,9 +172,7 @@ export function MobilePendingDocuments() {
 
       {/* 单据列表 */}
       {filteredDocuments.length === 0 ? (
-        <div className="text-center py-12 text-slate-500">
-          暂无待拍照单据
-        </div>
+        <div className="text-center py-12 text-slate-500">暂无待拍照单据</div>
       ) : (
         <div className="space-y-3">
           {filteredDocuments.map(doc => (
@@ -188,11 +189,11 @@ export function MobilePendingDocuments() {
                       )}
                     </div>
                     {doc.hasPhotos ? (
-                      <Badge variant="outline" className="text-green-600 border-green-300">
+                      <Badge className="text-green-700 border-green-300 bg-green-100">
                         已拍照 ({doc.photoCount})
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-orange-600 border-orange-300">
+                      <Badge className="text-orange-700 border-orange-300 bg-orange-100">
                         待拍照
                       </Badge>
                     )}
@@ -201,17 +202,11 @@ export function MobilePendingDocuments() {
                 <CardContent>
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="font-medium text-slate-800">
-                        {doc.partyName}
-                      </div>
-                      <div className="text-xs text-slate-500 mt-1">
-                        {new Date(doc.date).toLocaleDateString('zh-CN')}
-                      </div>
+                      <div className="font-medium text-slate-800">{doc.partyName}</div>
+                      <div className="text-xs text-slate-500 mt-1">{new Date(doc.date).toLocaleDateString('zh-CN')}</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold text-orange-600">
-                        ¥{doc.amount.toLocaleString()}
-                      </div>
+                      <div className="font-bold text-orange-600">¥{doc.amount.toLocaleString()}</div>
                     </div>
                   </div>
                 </CardContent>
