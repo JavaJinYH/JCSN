@@ -345,7 +345,7 @@ export function Collections() {
         </Button>
       </div>
 
-      <Card>
+      <Card className="hidden md:block">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-4 flex-wrap">
             <DataTableFilters
@@ -459,35 +459,110 @@ export function Collections() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="md:hidden space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-slate-500">共 {filteredRecords.length} 条记录</span>
+          <Button variant="outline" size="sm" onClick={loadData}>
+            🔄 刷新
+          </Button>
+        </div>
+        {filteredRecords.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-slate-500">
+              暂无催账记录
+            </CardContent>
+          </Card>
+        ) : (
+          filteredRecords.map((record) => (
+            <Card key={record.id} className="overflow-hidden">
+              <CardContent className="pt-4">
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="font-medium text-lg">{record.entity?.name || '未知主体'}</div>
+                      <div className="text-sm text-slate-500 mt-1">
+                        {new Date(record.collectionDate).toLocaleDateString('zh-CN')}
+                        {record.collectionTime && ` ${record.collectionTime}`}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      {getResultBadge(record.collectionResult)}
+                      {record.collectionAmount && (
+                        <span className="text-orange-600 font-bold">{formatCurrency(record.collectionAmount)}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant="outline">{translateMethod(record.collectionMethod)}</Badge>
+                  </div>
+
+                  {record.communication && (
+                    <div className="bg-slate-50 p-3 rounded-lg">
+                      <div className="text-xs text-slate-500 mb-1">沟通内容</div>
+                      <div className="text-sm text-slate-700">{record.communication}</div>
+                    </div>
+                  )}
+
+                  {record.nextPlan && (
+                    <div className="bg-slate-50 p-3 rounded-lg">
+                      <div className="text-xs text-slate-500 mb-1">后续计划</div>
+                      <div className="text-sm text-slate-700">{record.nextPlan}</div>
+                    </div>
+                  )}
+
+                  {record.followUpDate && (
+                    <div className="text-sm text-slate-500">
+                      下次跟进: {new Date(record.followUpDate).toLocaleDateString('zh-CN')}
+                      {record.followUpTime && ` ${record.followUpTime}`}
+                    </div>
+                  )}
+
+                  {record.remark && (
+                    <div className="text-sm text-slate-500">
+                      备注: {record.remark}
+                    </div>
+                  )}
+
+                  <Button variant="outline" size="sm" className="w-full" onClick={() => handleViewDetail(record)}>
+                    查看详情
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-slate-800">{records.length}</div>
-            <div className="text-sm text-slate-500">催账记录总数</div>
+          <CardContent className="pt-4 md:pt-6">
+            <div className="text-xl md:text-2xl font-bold text-slate-800">{records.length}</div>
+            <div className="text-xs md:text-sm text-slate-500">催账记录总数</div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-green-600">
+          <CardContent className="pt-4 md:pt-6">
+            <div className="text-xl md:text-2xl font-bold text-green-600">
               {records.filter((r) => r.collectionResult === '已承诺付款').length}
             </div>
-            <div className="text-sm text-slate-500">已承诺付款</div>
+            <div className="text-xs md:text-sm text-slate-500">已承诺付款</div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-blue-600">
+          <CardContent className="pt-4 md:pt-6">
+            <div className="text-xl md:text-2xl font-bold text-blue-600">
               {records.filter((r) => r.collectionResult === '部分付款').length}
             </div>
-            <div className="text-sm text-slate-500">部分付款</div>
+            <div className="text-xs md:text-sm text-slate-500">部分付款</div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-red-600">
+          <CardContent className="pt-4 md:pt-6">
+            <div className="text-xl md:text-2xl font-bold text-red-600">
               {records.filter((r) => r.collectionResult === '无法联系').length}
             </div>
-            <div className="text-sm text-slate-500">无法联系</div>
+            <div className="text-xs md:text-sm text-slate-500">无法联系</div>
           </CardContent>
         </Card>
       </div>
@@ -516,7 +591,7 @@ export function Collections() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto mx-4 md:mx-0">
           <DialogHeader>
             <DialogTitle>添加催账记录</DialogTitle>
           </DialogHeader>
@@ -714,7 +789,7 @@ export function Collections() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto mx-4 md:mx-0">
           <DialogHeader>
             <DialogTitle>编辑催账记录</DialogTitle>
           </DialogHeader>
@@ -902,7 +977,7 @@ export function Collections() {
 
       {/* 详情对话框 */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl mx-4 md:mx-0">
           <DialogHeader>
             <DialogTitle>催账记录详情</DialogTitle>
           </DialogHeader>

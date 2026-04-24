@@ -22,6 +22,8 @@ import { PrintPreviewDialog } from '@/components/PrintPreviewDialog';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { SaleService } from '@/services/SaleService';
 import { toast } from '@/components/Toast';
+import { isElectron, electronAPI } from '@/lib/electronEnv';
+import { MobileApiService } from '@/services/MobileApiService';
 
 interface SaleDetailProps {
   saleId: string | null;
@@ -103,9 +105,21 @@ export function SaleDetail({
       for (const photo of sale.photos) {
         if (!loadedPhotos[photo.photoPath]) {
           try {
-            const result = await (window as any).electronAPI.photo.read(photo.photoPath);
-            if (result.success && result.data?.dataUrl) {
-              newLoadedPhotos[photo.photoPath] = result.data.dataUrl;
+            if (isElectron && electronAPI?.photo?.read) {
+              const result = await electronAPI.photo.read(photo.photoPath);
+              if (result.success && result.data?.dataUrl) {
+                newLoadedPhotos[photo.photoPath] = result.data.dataUrl;
+              }
+            } else {
+              const baseUrl = MobileApiService.getBaseUrl();
+              if (baseUrl) {
+                const response = await fetch(`${baseUrl}/api/photo/${photo.photoPath}`);
+                if (response.ok) {
+                  const blob = await response.blob();
+                  const url = URL.createObjectURL(blob);
+                  newLoadedPhotos[photo.photoPath] = url;
+                }
+              }
             }
           } catch (error) {
             console.error('[SaleDetail] 加载照片失败:', photo.photoPath, error);

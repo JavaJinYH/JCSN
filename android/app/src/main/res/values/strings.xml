@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">折柳建材</string>
+    <string name="title_activity_main">折柳建材</string>
+    <string name="package_name">com.zheliu.jiancai</string>
+    <string name="custom_url_scheme">com.zheliu.jiancai</string>
+</resources>

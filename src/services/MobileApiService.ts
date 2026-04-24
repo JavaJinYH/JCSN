@@ -36,6 +36,72 @@ export interface DocumentDetail {
   items: DocumentItem[];
 }
 
+// 催账记录类型
+export interface CollectionRecord {
+  id: string;
+  entityId: string;
+  entityName: string;
+  collectionDate: string;
+  collectionTime?: string;
+  collectionMethod: string;
+  collectionResult: string;
+  attitude?: string;
+  collectionAmount?: number;
+  communication?: string;
+  nextPlan?: string;
+  followUpDate?: string;
+  followUpTime?: string;
+  remark?: string;
+}
+
+// 挂账主体类型
+export interface SettlementEntity {
+  id: string;
+  name: string;
+  entityType: string;
+  contactName: string;
+  contactPhone: string;
+  totalReceivable: number;
+  totalPaid: number;
+  totalRemaining: number;
+  orderCount: number;
+  outstandingCount: number;
+}
+
+// 挂账主体详情类型
+export interface SettlementEntityDetail {
+  id: string;
+  name: string;
+  entityType: string;
+  contactName: string;
+  contactPhone: string;
+  address?: string;
+  totalReceivable: number;
+  totalPaid: number;
+  totalRemaining: number;
+  orders: SettlementOrder[];
+}
+
+export interface SettlementOrder {
+  id: string;
+  invoiceNo: string;
+  saleDate: string;
+  buyerName: string;
+  projectName?: string;
+  totalAmount: number;
+  deliveryFee?: number;
+  discount?: number;
+  paidAmount: number;
+  remaining: number;
+  status: string;
+  items: {
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+  }[];
+}
+
 export class MobileApiService {
   static getBaseUrl(): string | null {
     return localStorage.getItem(API_BASE_URL_KEY);
@@ -178,12 +244,40 @@ export class MobileApiService {
     }, false); // 上传照片不缓存
   }
 
+  static async getDashboard(useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean }> {
+    return this.request('/api/dashboard', {}, useCache);
+  }
+
   static async getInventory(useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean }> {
     return this.request('/api/inventory', {}, useCache);
   }
 
   static async getSales(useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean }> {
     return this.request('/api/sales', {}, useCache);
+  }
+
+  static async getSaleById(id: string, useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean }> {
+    return this.request(`/api/sale/${id}`, {}, useCache);
+  }
+
+  static async getPurchaseById(id: string, useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean }> {
+    return this.request(`/api/purchase/${id}`, {}, useCache);
+  }
+
+  static async getPurchases(useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean }> {
+    return this.request('/api/purchases', {}, useCache);
+  }
+
+  static async getCollections(useCache = true): Promise<{ success: boolean; data?: CollectionRecord[]; error?: string; isCached?: boolean }> {
+    return this.request<CollectionRecord[]>('/api/collections', {}, useCache);
+  }
+
+  static async getSettlements(useCache = true): Promise<{ success: boolean; data?: SettlementEntity[]; error?: string; isCached?: boolean }> {
+    return this.request<SettlementEntity[]>('/api/settlements', {}, useCache);
+  }
+
+  static async getSettlementEntityDetail(id: string, useCache = true): Promise<{ success: boolean; data?: SettlementEntityDetail; error?: string; isCached?: boolean }> {
+    return this.request<SettlementEntityDetail>(`/api/settlements/entity/${id}`, {}, useCache);
   }
 
   static async checkHealth(): Promise<{ success: boolean; data?: any; error?: string }> {

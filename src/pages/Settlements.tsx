@@ -517,37 +517,37 @@ export function Settlements() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">应收账款总额</CardTitle>
+            <CardTitle className="text-xs md:text-sm font-medium text-slate-500">应收账款总额</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-900">{formatCurrency(totalReceivable)}</div>
+            <div className="text-lg md:text-2xl font-bold text-slate-900">{formatCurrency(totalReceivable)}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">待回收金额</CardTitle>
+            <CardTitle className="text-xs md:text-sm font-medium text-slate-500">待回收金额</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{formatCurrency(totalRemaining)}</div>
+            <div className="text-lg md:text-2xl font-bold text-orange-600">{formatCurrency(totalRemaining)}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">逾期主体数</CardTitle>
+            <CardTitle className="text-xs md:text-sm font-medium text-slate-500">逾期主体数</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{overdueCount}</div>
+            <div className="text-lg md:text-2xl font-bold text-red-600">{overdueCount}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">主体总数</CardTitle>
+            <CardTitle className="text-xs md:text-sm font-medium text-slate-500">主体总数</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-900">{entities.length}</div>
+            <div className="text-lg md:text-2xl font-bold text-slate-900">{entities.length}</div>
           </CardContent>
         </Card>
       </div>
@@ -570,15 +570,118 @@ export function Settlements() {
       </div>
 
       {activeTab === 'receivables' && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-4 flex-wrap">
+        <>
+          <Card className="hidden md:block">
+            <CardHeader>
+              <div className="flex items-center gap-4 flex-wrap">
+                {filters.map((filter) => (
+                  <div key={filter.key} className="flex items-center gap-2">
+                    <span className="text-sm text-slate-600">{filter.label}:</span>
+                    {filter.type === 'select' ? (
+                      <Select value={filterValues[filter.key] || 'all'} onValueChange={(v) => handleFilterChange(filter.key, v)}>
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {filter.options.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        type="text"
+                        placeholder={filter.placeholder}
+                        value={filterValues[filter.key] || ''}
+                        onChange={(e) => handleFilterChange(filter.key, e.target.value)}
+                        className="w-48"
+                      />
+                    )}
+                  </div>
+                ))}
+                <Button variant="outline" onClick={handleResetFilters}>重置筛选</Button>
+                <Button variant="outline" onClick={loadData}>刷新数据</Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>主体名称</TableHead>
+                    <TableHead>类型</TableHead>
+                    <TableHead>联系人</TableHead>
+                    <TableHead className="text-right">应付总额</TableHead>
+                    <TableHead className="text-right">已付金额</TableHead>
+                    <TableHead className="text-right">待收金额</TableHead>
+                    <TableHead>欠款笔数</TableHead>
+                    <TableHead>操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tableProps.total === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8 text-slate-500">
+                        暂无应收账款数据
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    tableProps.data.map((entity) => {
+                      const outstandingOrders = entity.orders?.filter(o => calculateOrderBalance(o) > 0) || [];
+                      return (
+                        <TableRow key={entity.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{entity.name}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{getEntityTypeBadge(entity.entityType)}</TableCell>
+                          <TableCell>
+                            <div className="text-slate-600">
+                              {entity.contact?.name || '-'}
+                            </div>
+                            <div className="text-sm text-slate-500">
+                              {entity.contact?.primaryPhone || ''}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-mono">{formatCurrency(entity.totalReceivable)}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{formatCurrency(entity.totalPaid)}</TableCell>
+                          <TableCell className="text-right font-mono text-orange-600 font-bold">
+                            {formatCurrency(entity.totalRemaining)}
+                          </TableCell>
+                          <TableCell className="font-mono">{outstandingOrders.length}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => handleOpenEntityDetail(entity)}>
+                                详情
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+              <DataTablePagination
+                pagination={{
+                  page: tableProps.page,
+                  pageSize: tableProps.pageSize,
+                  total: tableProps.total,
+                }}
+                onPageChange={tableProps.setPage}
+                onPageSizeChange={tableProps.setPageSize}
+              />
+            </CardContent>
+          </Card>
+
+          <div className="md:hidden space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               {filters.map((filter) => (
                 <div key={filter.key} className="flex items-center gap-2">
-                  <span className="text-sm text-slate-600">{filter.label}:</span>
+                  <span className="text-xs text-slate-600">{filter.label}:</span>
                   {filter.type === 'select' ? (
                     <Select value={filterValues[filter.key] || 'all'} onValueChange={(v) => handleFilterChange(filter.key, v)}>
-                      <SelectTrigger className="w-32">
+                      <SelectTrigger className="w-24">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -593,94 +696,215 @@ export function Settlements() {
                       placeholder={filter.placeholder}
                       value={filterValues[filter.key] || ''}
                       onChange={(e) => handleFilterChange(filter.key, e.target.value)}
-                      className="w-48"
+                      className="w-32"
                     />
                   )}
                 </div>
               ))}
-              <Button variant="outline" onClick={handleResetFilters}>重置筛选</Button>
-              <Button variant="outline" onClick={loadData}>刷新数据</Button>
             </div>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>主体名称</TableHead>
-                  <TableHead>类型</TableHead>
-                  <TableHead>联系人</TableHead>
-                  <TableHead className="text-right">应付总额</TableHead>
-                  <TableHead className="text-right">已付金额</TableHead>
-                  <TableHead className="text-right">待收金额</TableHead>
-                  <TableHead>欠款笔数</TableHead>
-                  <TableHead>操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tableProps.total === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-slate-500">
-                      暂无应收账款数据
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  tableProps.data.map((entity) => {
-                    const outstandingOrders = entity.orders?.filter(o => calculateOrderBalance(o) > 0) || [];
-                    return (
-                      <TableRow key={entity.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{entity.name}</span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleResetFilters}>重置</Button>
+              <Button variant="outline" size="sm" onClick={loadData}>🔄 刷新</Button>
+            </div>
+            <div className="text-sm text-slate-500">共 {filteredEntities.length} 条记录</div>
+            {filteredEntities.length === 0 ? (
+              <Card>
+                <CardContent className="py-8 text-center text-slate-500">
+                  暂无应收账款数据
+                </CardContent>
+              </Card>
+            ) : (
+              filteredEntities.map((entity) => {
+                const outstandingOrders = entity.orders?.filter(o => calculateOrderBalance(o) > 0) || [];
+                return (
+                  <Card key={entity.id}>
+                    <CardContent className="pt-4">
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="font-medium text-lg">{entity.name}</div>
+                            <div className="flex items-center gap-2 mt-1">
+                              {getEntityTypeBadge(entity.entityType)}
+                            </div>
                           </div>
-                        </TableCell>
-                        <TableCell>{getEntityTypeBadge(entity.entityType)}</TableCell>
-                        <TableCell>
+                          <div className="text-right">
+                            <div className="text-sm text-slate-500">待收</div>
+                            <div className="text-xl font-bold text-orange-600">{formatCurrency(entity.totalRemaining)}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-sm">
                           <div className="text-slate-600">
                             {entity.contact?.name || '-'}
+                            {entity.contact?.primaryPhone && ` ${entity.contact.primaryPhone}`}
                           </div>
-                          <div className="text-sm text-slate-500">
-                            {entity.contact?.primaryPhone || ''}
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-sm">
+                          <div className="bg-slate-50 p-2 rounded">
+                            <div className="text-xs text-slate-500">应付总额</div>
+                            <div className="font-mono">{formatCurrency(entity.totalReceivable)}</div>
                           </div>
-                        </TableCell>
-                        <TableCell className="text-right font-mono">{formatCurrency(entity.totalReceivable)}</TableCell>
-                        <TableCell className="text-right font-mono text-green-600">{formatCurrency(entity.totalPaid)}</TableCell>
-                        <TableCell className="text-right font-mono text-orange-600 font-bold">
-                          {formatCurrency(entity.totalRemaining)}
-                        </TableCell>
-                        <TableCell className="font-mono">{outstandingOrders.length}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => handleOpenEntityDetail(entity)}>
-                              详情
-                            </Button>
+                          <div className="bg-green-50 p-2 rounded">
+                            <div className="text-xs text-slate-500">已付金额</div>
+                            <div className="font-mono text-green-600">{formatCurrency(entity.totalPaid)}</div>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-            <DataTablePagination
-              pagination={{
-                page: tableProps.page,
-                pageSize: tableProps.pageSize,
-                total: tableProps.total,
-              }}
-              onPageChange={tableProps.setPage}
-              onPageSizeChange={tableProps.setPageSize}
-            />
-          </CardContent>
-        </Card>
+                          <div className="bg-orange-50 p-2 rounded">
+                            <div className="text-xs text-slate-500">欠款笔数</div>
+                            <div className="font-mono">{outstandingOrders.length}</div>
+                          </div>
+                        </div>
+
+                        <Button variant="outline" size="sm" className="w-full" onClick={() => handleOpenEntityDetail(entity)}>
+                          查看详情
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+          </div>
+        </>
       )}
 
       {activeTab === 'credits' && (
-        <Card>
-          <CardHeader>
+        <>
+          <Card className="hidden md:block">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>主体信用额度</CardTitle>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      await EntityCreditService.batchUpdateAllEntities();
+                      toast('信用评分已更新', 'success');
+                      loadData();
+                    } catch (error) {
+                      console.error('[Settlements] 批量更新信用评分失败:', error);
+                      toast('更新失败，请重试', 'error');
+                    }
+                  }}
+                >
+                  重新计算信用评分
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>主体名称</TableHead>
+                    <TableHead>信用评分</TableHead>
+                    <TableHead>信用等级</TableHead>
+                    <TableHead>风险等级</TableHead>
+                    <TableHead>信用额度</TableHead>
+                    <TableHead>已用额度</TableHead>
+                    <TableHead>可用额度</TableHead>
+                    <TableHead>使用比例</TableHead>
+                    <TableHead>操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {entities.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8 text-slate-500">
+                        暂无数据
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    entities.map((entity) => {
+                      const availableCredit = entity.creditLimit - entity.creditUsed;
+                      const usageRatio = entity.creditLimit > 0 ? (entity.creditUsed / entity.creditLimit * 100) : 0;
+                      return (
+                        <TableRow key={entity.id}>
+                          <TableCell className="font-medium">{entity.name}</TableCell>
+                          <TableCell>
+                            {entity.creditScore !== null && entity.creditScore !== undefined ? (
+                              <span className={`font-mono font-bold ${
+                                entity.creditScore >= 80 ? 'text-green-600' :
+                                entity.creditScore >= 60 ? 'text-yellow-600' : 'text-red-600'
+                              }`}>
+                                {entity.creditScore.toFixed(0)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {entity.creditLevel ? (
+                              <Badge variant={
+                                entity.creditLevel === 'excellent' || entity.creditLevel === 'AAA' || entity.creditLevel === 'AA' ? 'default' :
+                                entity.creditLevel === 'good' || entity.creditLevel === 'A' || entity.creditLevel === 'BBB' ? 'secondary' : 'destructive'
+                              }>
+                                {getCreditLevelLabel(entity.creditLevel)}
+                              </Badge>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {entity.riskLevel ? (
+                              <Badge variant={
+                                entity.riskLevel === 'low' ? 'default' :
+                                entity.riskLevel === 'medium' ? 'secondary' : 'destructive'
+                              }>
+                                {getRiskLevelLabel(entity.riskLevel)}
+                              </Badge>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="font-mono">{formatCurrency(entity.creditLimit)}</TableCell>
+                          <TableCell className="font-mono text-orange-600">{formatCurrency(entity.creditUsed)}</TableCell>
+                          <TableCell className={`font-mono font-bold ${availableCredit < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {formatCurrency(Math.max(0, availableCredit))}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div className="w-20 h-2 bg-slate-200 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full ${usageRatio > 80 ? 'bg-red-500' : usageRatio > 50 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                                  style={{ width: `${Math.min(100, usageRatio)}%` }}
+                                />
+                              </div>
+                              <span className="text-sm text-slate-500">{usageRatio.toFixed(1)}%</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  await EntityCreditService.updateEntityCredit(entity.id);
+                                  toast('信用评分已更新', 'success');
+                                  loadData();
+                                } catch (error) {
+                                  console.error('[Settlements] 更新信用评分失败:', error);
+                                  toast('更新失败，请重试', 'error');
+                                }
+                              }}
+                            >
+                              重新计算
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <div className="md:hidden space-y-3">
             <div className="flex items-center justify-between">
-              <CardTitle>主体信用额度</CardTitle>
+              <CardTitle className="text-base">主体信用额度</CardTitle>
               <Button
                 variant="outline"
+                size="sm"
                 onClick={async () => {
                   try {
                     await EntityCreditService.batchUpdateAllEntities();
@@ -692,121 +916,115 @@ export function Settlements() {
                   }
                 }}
               >
-                重新计算信用评分
+                重新计算
               </Button>
             </div>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>主体名称</TableHead>
-                  <TableHead>信用评分</TableHead>
-                  <TableHead>信用等级</TableHead>
-                  <TableHead>风险等级</TableHead>
-                  <TableHead>信用额度</TableHead>
-                  <TableHead>已用额度</TableHead>
-                  <TableHead>可用额度</TableHead>
-                  <TableHead>使用比例</TableHead>
-                  <TableHead>操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {entities.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-slate-500">
-                      暂无数据
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  entities.map((entity) => {
-                    const availableCredit = entity.creditLimit - entity.creditUsed;
-                    const usageRatio = entity.creditLimit > 0 ? (entity.creditUsed / entity.creditLimit * 100) : 0;
-                    return (
-                      <TableRow key={entity.id}>
-                        <TableCell className="font-medium">{entity.name}</TableCell>
-                        <TableCell>
-                          {entity.creditScore !== null && entity.creditScore !== undefined ? (
-                            <span className={`font-mono font-bold ${
-                              entity.creditScore >= 80 ? 'text-green-600' :
-                              entity.creditScore >= 60 ? 'text-yellow-600' : 'text-red-600'
-                            }`}>
-                              {entity.creditScore.toFixed(0)}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {entity.creditLevel ? (
+            <div className="text-sm text-slate-500">共 {entities.length} 条记录</div>
+            {entities.length === 0 ? (
+              <Card>
+                <CardContent className="py-8 text-center text-slate-500">
+                  暂无数据
+                </CardContent>
+              </Card>
+            ) : (
+              entities.map((entity) => {
+                const availableCredit = entity.creditLimit - entity.creditUsed;
+                const usageRatio = entity.creditLimit > 0 ? (entity.creditUsed / entity.creditLimit * 100) : 0;
+                return (
+                  <Card key={entity.id}>
+                    <CardContent className="pt-4">
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div className="font-medium text-lg">{entity.name}</div>
+                          <div className="text-right">
+                            {entity.creditScore !== null && entity.creditScore !== undefined ? (
+                              <span className={`text-xl font-mono font-bold ${
+                                entity.creditScore >= 80 ? 'text-green-600' :
+                                entity.creditScore >= 60 ? 'text-yellow-600' : 'text-red-600'
+                              }`}>
+                                {entity.creditScore.toFixed(0)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {entity.creditLevel && (
                             <Badge variant={
                               entity.creditLevel === 'excellent' || entity.creditLevel === 'AAA' || entity.creditLevel === 'AA' ? 'default' :
                               entity.creditLevel === 'good' || entity.creditLevel === 'A' || entity.creditLevel === 'BBB' ? 'secondary' : 'destructive'
                             }>
                               {getCreditLevelLabel(entity.creditLevel)}
                             </Badge>
-                          ) : (
-                            <span className="text-slate-400">-</span>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          {entity.riskLevel ? (
+                          {entity.riskLevel && (
                             <Badge variant={
                               entity.riskLevel === 'low' ? 'default' :
                               entity.riskLevel === 'medium' ? 'secondary' : 'destructive'
                             }>
                               {getRiskLevelLabel(entity.riskLevel)}
                             </Badge>
-                          ) : (
-                            <span className="text-slate-400">-</span>
                           )}
-                        </TableCell>
-                        <TableCell className="font-mono">{formatCurrency(entity.creditLimit)}</TableCell>
-                        <TableCell className="font-mono text-orange-600">{formatCurrency(entity.creditUsed)}</TableCell>
-                        <TableCell className={`font-mono font-bold ${availableCredit < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                          {formatCurrency(Math.max(0, availableCredit))}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div className="w-20 h-2 bg-slate-200 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full ${usageRatio > 80 ? 'bg-red-500' : usageRatio > 50 ? 'bg-yellow-500' : 'bg-green-500'}`}
-                                style={{ width: `${Math.min(100, usageRatio)}%` }}
-                              />
-                            </div>
-                            <span className="text-sm text-slate-500">{usageRatio.toFixed(1)}%</span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-sm">
+                          <div className="bg-slate-50 p-2 rounded">
+                            <div className="text-xs text-slate-500">信用额度</div>
+                            <div className="font-mono">{formatCurrency(entity.creditLimit)}</div>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={async () => {
-                              try {
-                                await EntityCreditService.updateEntityCredit(entity.id);
-                                toast('信用评分已更新', 'success');
-                                loadData();
-                              } catch (error) {
-                                console.error('[Settlements] 更新信用评分失败:', error);
-                                toast('更新失败，请重试', 'error');
-                              }
-                            }}
-                          >
-                            重新计算
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                          <div className="bg-orange-50 p-2 rounded">
+                            <div className="text-xs text-slate-500">已用额度</div>
+                            <div className="font-mono text-orange-600">{formatCurrency(entity.creditUsed)}</div>
+                          </div>
+                          <div className="bg-green-50 p-2 rounded">
+                            <div className="text-xs text-slate-500">可用额度</div>
+                            <div className={`font-mono ${availableCredit < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {formatCurrency(Math.max(0, availableCredit))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full ${usageRatio > 80 ? 'bg-red-500' : usageRatio > 50 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                              style={{ width: `${Math.min(100, usageRatio)}%` }}
+                            />
+                          </div>
+                          <span className="text-sm text-slate-500">{usageRatio.toFixed(1)}%</span>
+                        </div>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          onClick={async () => {
+                            try {
+                              await EntityCreditService.updateEntityCredit(entity.id);
+                              toast('信用评分已更新', 'success');
+                              loadData();
+                            } catch (error) {
+                              console.error('[Settlements] 更新信用评分失败:', error);
+                              toast('更新失败，请重试', 'error');
+                            }
+                          }}
+                        >
+                          重新计算
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+          </div>
+        </>
       )}
 
       <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md mx-4 md:mx-0">
           <DialogHeader>
             <DialogTitle>记录还款</DialogTitle>
           </DialogHeader>
@@ -865,7 +1083,7 @@ export function Settlements() {
 
       {/* 还款二次确认对话框 */}
       <Dialog open={showPaymentConfirmDialog} onOpenChange={setShowPaymentConfirmDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md mx-4 md:mx-0">
           <DialogHeader>
             <DialogTitle>确认还款信息</DialogTitle>
           </DialogHeader>
@@ -895,7 +1113,7 @@ export function Settlements() {
       </Dialog>
 
       <Dialog open={showEntityDetailDialog} onOpenChange={setShowEntityDetailDialog}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col mx-0 md:mx-4">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle>主体详情 - {selectedEntity?.name}</DialogTitle>
           </DialogHeader>
@@ -1240,7 +1458,7 @@ export function Settlements() {
       </Dialog>
 
       <Dialog open={showNegotiatedDialog} onOpenChange={setShowNegotiatedDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md mx-4 md:mx-0">
           <DialogHeader>
             <DialogTitle>协商减免</DialogTitle>
           </DialogHeader>
@@ -1291,7 +1509,7 @@ export function Settlements() {
       </Dialog>
 
       <Dialog open={showBadDebtDialog} onOpenChange={setShowBadDebtDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md mx-4 md:mx-0">
           <DialogHeader>
             <DialogTitle>坏账处理申请</DialogTitle>
           </DialogHeader>
@@ -1345,7 +1563,7 @@ export function Settlements() {
       </Dialog>
 
       <Dialog open={showOrderDetailDialog} onOpenChange={setShowOrderDetailDialog}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col mx-0 md:mx-4">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle>订单明细 - {selectedOrder?.invoiceNo || selectedOrder?.id?.substring(0, 8)}</DialogTitle>
           </DialogHeader>

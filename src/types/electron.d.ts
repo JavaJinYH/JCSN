@@ -35,6 +35,9 @@ declare global {
         scan: () => Promise<{ success: boolean; data?: { relativePath: string; fullPath: string; size: number; modifiedAt: string }[] }>;
         getDbPaths: () => Promise<{ success: boolean; data?: Record<string, { id: string; photoPath: string }[]> }>;
       };
+      api: {
+        getUrl: () => Promise<{ success: boolean; data?: { url: string } }>;
+      };
     };
   }
 }

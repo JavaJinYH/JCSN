@@ -1,6 +1,8 @@
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useState, useEffect, useCallback } from 'react';
+import { isElectron, electronAPI } from '@/lib/electronEnv';
+import { MobileApiService } from '@/services/MobileApiService';
 
 interface PhotoItem {
   id: string;
@@ -32,9 +34,21 @@ export function PhotoViewer({ photos, open, onOpenChange, initialIndex = 0 }: Ph
   const loadPhoto = useCallback(async (photoPath: string) => {
     if (loadedImages[photoPath]) return;
     try {
-      const result = await (window as any).electronAPI.photo.read(photoPath);
-      if (result.success && result.data?.dataUrl) {
-        setLoadedImages(prev => ({ ...prev, [photoPath]: result.data.dataUrl }));
+      if (isElectron && electronAPI?.photo?.read) {
+        const result = await electronAPI.photo.read(photoPath);
+        if (result.success && result.data?.dataUrl) {
+          setLoadedImages(prev => ({ ...prev, [photoPath]: result.data.dataUrl }));
+        }
+      } else {
+        const baseUrl = MobileApiService.getBaseUrl();
+        if (baseUrl) {
+          const response = await fetch(`${baseUrl}/api/photo/${photoPath}`);
+          if (response.ok) {
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            setLoadedImages(prev => ({ ...prev, [photoPath]: url }));
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to load photo:', photoPath, error);

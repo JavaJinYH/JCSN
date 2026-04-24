@@ -1,0 +1,138 @@
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+
+interface MobilePageHeaderProps {
+  title: string;
+  subtitle?: string;
+  isOnline?: boolean;
+  isCached?: boolean;
+  onRefresh?: () => void;
+  rightContent?: React.ReactNode;
+}
+
+export function MobilePageHeader({
+  title,
+  subtitle,
+  isOnline = true,
+  isCached = false,
+  onRefresh,
+  rightContent
+}: MobilePageHeaderProps) {
+  return (
+    <div className="space-y-3 px-4 pt-4 pb-2">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <h2 className="text-xl font-bold text-slate-800 truncate">{title}</h2>
+          {subtitle && <p className="text-slate-500 text-sm mt-0.5 truncate">{subtitle}</p>}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {!isOnline && (
+            <Badge className="bg-amber-100 text-amber-700 text-xs">📴 离线</Badge>
+          )}
+          {isCached && (
+            <Badge className="bg-blue-100 text-blue-700 text-xs">💾 缓存</Badge>
+          )}
+          {rightContent}
+        </div>
+      </div>
+      {onRefresh && (
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={onRefresh} className="text-xs h-7">
+            🔄 刷新
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface MobileApiUrlFormProps {
+  apiUrl: string;
+  onApiUrlChange: (url: string) => void;
+  onSave: () => void;
+  error?: string;
+}
+
+export function MobileApiUrlForm({
+  apiUrl,
+  onApiUrlChange,
+  onSave,
+  error
+}: MobileApiUrlFormProps) {
+  return (
+    <div className="space-y-3 px-4 py-4">
+      <div>
+        <h2 className="text-xl font-bold text-slate-800">设置</h2>
+        <p className="text-slate-500 text-sm mt-1">请输入主电脑的局域网地址</p>
+      </div>
+      <div className="space-y-2">
+        <input
+          type="text"
+          placeholder="例如: http://192.168.1.100:3456"
+          value={apiUrl}
+          onChange={(e) => onApiUrlChange(e.target.value)}
+          className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm"
+        />
+        <Button onClick={onSave} className="w-full">保存并连接</Button>
+      </div>
+      {error && <div className="text-red-500 text-sm p-2 bg-red-50 rounded">{error}</div>}
+    </div>
+  );
+}
+
+export function MobileSectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 className="font-semibold text-slate-800 text-sm px-4">{children}</h3>
+  );
+}
+
+export function MobileCardGrid({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`grid grid-cols-2 gap-3 px-4 ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+export function MobileCardItem({
+  label,
+  value,
+  gradient,
+  icon
+}: {
+  label: string;
+  value: React.ReactNode;
+  gradient?: string;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <div className={`rounded-xl p-3 ${gradient || 'bg-slate-50'}`}>
+      <div className="text-xs text-slate-500 truncate">{icon} {label}</div>
+      <div className="text-xl font-bold text-slate-800 truncate mt-1">{value}</div>
+    </div>
+  );
+}
+
+export function MobileList({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return <div className={`space-y-3 px-4 ${className}`}>{children}</div>;
+}
+
+export function MobileEmptyState({ message }: { message: string }) {
+  return (
+    <div className="text-center py-12 text-slate-500">
+      <div className="text-4xl mb-2">📭</div>
+      <div>{message}</div>
+    </div>
+  );
+}
+
+export function MobileLoadingState({ message = '加载中...' }: { message?: string }) {
+  return (
+    <div className="flex items-center justify-center h-64 text-slate-500">
+      <div className="text-center">
+        <div className="text-3xl animate-pulse">⏳</div>
+        <div className="mt-2">{message}</div>
+      </div>
+    </div>
+  );
+}

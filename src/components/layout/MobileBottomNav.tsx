@@ -1,13 +1,36 @@
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { isMobile } from '@/components/DesktopOnlyRoute';
 
-const menuItems = [
+const allMenuItems = [
   { path: '/dashboard', label: '首页', icon: '📊' },
   { path: '/inventory', label: '库存', icon: '📦' },
   { path: '/sales', label: '销售', icon: '💰' },
   { path: '/purchases', label: '进货', icon: '📥' },
-  { path: '/mobile/pending-documents', label: '待拍照', icon: '📷' },
+  {
+    path: isMobile ? '/mobile/settlements' : '/settlements',
+    label: '挂账',
+    icon: '📋'
+  },
+  {
+    path: isMobile ? '/mobile/collections' : '/collections',
+    label: '催账',
+    icon: '📞'
+  },
+  { path: '/mobile/pending-documents', label: '待拍照', icon: '📷' }
 ];
+
+const menuItems = isMobile
+  ? [
+      { path: '/mobile/dashboard', label: '首页', icon: '📊' },
+      { path: '/mobile/inventory', label: '库存', icon: '📦' },
+      { path: '/mobile/sales', label: '销售', icon: '💰' },
+      { path: '/mobile/purchases', label: '进货', icon: '📥' },
+      { path: '/mobile/settlements', label: '挂账', icon: '📋' },
+      { path: '/mobile/collections', label: '催账', icon: '📞' },
+      { path: '/mobile/pending-documents', label: '待拍照', icon: '📷' }
+    ]
+  : allMenuItems;
 
 export function MobileBottomNav() {
   return (

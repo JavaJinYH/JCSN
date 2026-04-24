@@ -1,3 +1,5 @@
+import { isElectron, electronAPI } from './electronEnv';
+
 function createModelProxy(modelName: string): any {
   return new Proxy({}, {
     get(_target, operation: string | symbol) {
@@ -6,12 +8,11 @@ function createModelProxy(modelName: string): any {
 
       return async (...args: any[]) => {
         try {
-          const api = (window as any).electronAPI?.db;
-          if (!api) {
-            throw new Error('electronAPI.db 不可用，请确保在 Electron 环境中运行');
+          if (!isElectron || !electronAPI?.db) {
+            throw new Error('数据库不可用：仅支持在 Electron 桌面端访问');
           }
 
-          const result = await api(modelName, operation, args[0]);
+          const result = await electronAPI.db(modelName, operation, args[0]);
 
           if (result && typeof result === 'object' && 'success' in result) {
             if (!result.success) {

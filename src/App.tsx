@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
+import { DesktopOnlyRoute } from './components/DesktopOnlyRoute';
 import { Dashboard } from './pages/Dashboard';
 import { Inventory } from './pages/Inventory';
 import { Sales } from './pages/Sales';
@@ -32,6 +33,17 @@ import { ServiceAppointments } from './pages/ServiceAppointments';
 // 移动端页面
 import { MobilePendingDocuments } from './pages/mobile/MobilePendingDocuments';
 import { MobileDocumentDetail } from './pages/mobile/MobileDocumentDetail';
+import { MobileCollections } from './pages/mobile/MobileCollections';
+import { MobileSettlements } from './pages/mobile/MobileSettlements';
+import { MobileSettlementDetail } from './pages/mobile/MobileSettlementDetail';
+import { MobileDashboard } from './pages/mobile/MobileDashboard';
+import { MobileInventory } from './pages/mobile/MobileInventory';
+import { MobileSales } from './pages/mobile/MobileSales';
+import { MobileSaleDetail } from './pages/mobile/MobileSaleDetail';
+import { MobilePurchases } from './pages/mobile/MobilePurchases';
+import { MobilePurchaseDetail } from './pages/mobile/MobilePurchaseDetail';
+
+const isMobile = typeof window !== 'undefined' && !!(window as any).Capacitor;
 
 function App() {
   return (
@@ -44,37 +56,52 @@ function App() {
       <ToastContainer />
       <Routes>
         <Route path="/" element={<AppLayout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="inventory" element={<Inventory />} />
-          <Route path="purchases" element={<Purchases />} />
-          <Route path="sales" element={<Sales />} />
-          <Route path="sales/new" element={<ErrorBoundary><SaleNew /></ErrorBoundary>} />
-          <Route path="sales/drafts" element={<ErrorBoundary><SaleDrafts /></ErrorBoundary>} />
-          <Route path="products" element={<Products />} />
-          <Route path="products/new" element={<ErrorBoundary><ProductNew /></ErrorBoundary>} />
-          <Route path="products/:id/edit" element={<ErrorBoundary><ProductEdit /></ErrorBoundary>} />
-          <Route path="entities" element={<Entities />} />
-          <Route path="contacts" element={<ErrorBoundary><Contacts /></ErrorBoundary>} />
-          <Route path="suppliers" element={<Suppliers />} />
-          <Route path="projects" element={<ErrorBoundary><Projects /></ErrorBoundary>} />
-          <Route path="reports" element={<Reports />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="business-commissions" element={<BusinessCommissions />} />
-          <Route path="daily-expenses" element={<DailyExpenses />} />
-          <Route path="service-appointments" element={<ServiceAppointments />} />
-          <Route path="deliveries" element={<Deliveries />} />
-          <Route path="settlements" element={<Settlements />} />
-          <Route path="collections" element={<Collections />} />
-          <Route path="statements" element={<Statements />} />
-          <Route path="bad-debts" element={<BadDebts />} />
-          <Route path="audit-logs" element={<AuditLogs />} />
-          <Route path="legacy-bills" element={<LegacyBills />} />
-          <Route path="inventory/check" element={<InventoryCheckPage />} />
-          <Route path="photos" element={<PhotoManagement />} />
+          <Route index element={
+            isMobile ? (
+              <Navigate to="/mobile/dashboard" replace />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )
+          } />
+          <Route path="dashboard" element={<DesktopOnlyRoute><Dashboard /></DesktopOnlyRoute>} />
+          <Route path="inventory" element={<DesktopOnlyRoute><Inventory /></DesktopOnlyRoute>} />
+          <Route path="purchases" element={<DesktopOnlyRoute><Purchases /></DesktopOnlyRoute>} />
+          <Route path="sales" element={<DesktopOnlyRoute><Sales /></DesktopOnlyRoute>} />
+          <Route path="sales/new" element={<ErrorBoundary><DesktopOnlyRoute><SaleNew /></DesktopOnlyRoute></ErrorBoundary>} />
+          <Route path="sales/drafts" element={<ErrorBoundary><DesktopOnlyRoute><SaleDrafts /></DesktopOnlyRoute></ErrorBoundary>} />
+          <Route path="products" element={<DesktopOnlyRoute><Products /></DesktopOnlyRoute>} />
+          <Route path="products/new" element={<ErrorBoundary><DesktopOnlyRoute><ProductNew /></DesktopOnlyRoute></ErrorBoundary>} />
+          <Route path="products/:id/edit" element={<ErrorBoundary><DesktopOnlyRoute><ProductEdit /></DesktopOnlyRoute></ErrorBoundary>} />
+          <Route path="entities" element={<DesktopOnlyRoute><Entities /></DesktopOnlyRoute>} />
+          <Route path="contacts" element={<ErrorBoundary><DesktopOnlyRoute><Contacts /></DesktopOnlyRoute></ErrorBoundary>} />
+          <Route path="suppliers" element={<DesktopOnlyRoute><Suppliers /></DesktopOnlyRoute>} />
+          <Route path="projects" element={<ErrorBoundary><DesktopOnlyRoute><Projects /></DesktopOnlyRoute></ErrorBoundary>} />
+          <Route path="reports" element={<DesktopOnlyRoute><Reports /></DesktopOnlyRoute>} />
+          <Route path="settings" element={<DesktopOnlyRoute><Settings /></DesktopOnlyRoute>} />
+          <Route path="business-commissions" element={<DesktopOnlyRoute><BusinessCommissions /></DesktopOnlyRoute>} />
+          <Route path="daily-expenses" element={<DesktopOnlyRoute><DailyExpenses /></DesktopOnlyRoute>} />
+          <Route path="service-appointments" element={<DesktopOnlyRoute><ServiceAppointments /></DesktopOnlyRoute>} />
+          <Route path="deliveries" element={<DesktopOnlyRoute><Deliveries /></DesktopOnlyRoute>} />
+          <Route path="settlements" element={<DesktopOnlyRoute><Settlements /></DesktopOnlyRoute>} />
+          <Route path="collections" element={<DesktopOnlyRoute><Collections /></DesktopOnlyRoute>} />
+          <Route path="statements" element={<DesktopOnlyRoute><Statements /></DesktopOnlyRoute>} />
+          <Route path="bad-debts" element={<DesktopOnlyRoute><BadDebts /></DesktopOnlyRoute>} />
+          <Route path="audit-logs" element={<DesktopOnlyRoute><AuditLogs /></DesktopOnlyRoute>} />
+          <Route path="legacy-bills" element={<DesktopOnlyRoute><LegacyBills /></DesktopOnlyRoute>} />
+          <Route path="inventory/check" element={<DesktopOnlyRoute><InventoryCheckPage /></DesktopOnlyRoute>} />
+          <Route path="photos" element={<DesktopOnlyRoute><PhotoManagement /></DesktopOnlyRoute>} />
           {/* 移动端页面 */}
+          <Route path="mobile/dashboard" element={<MobileDashboard />} />
+          <Route path="mobile/inventory" element={<MobileInventory />} />
+          <Route path="mobile/sales" element={<MobileSales />} />
+          <Route path="mobile/sale/:id" element={<MobileSaleDetail />} />
+          <Route path="mobile/purchases" element={<MobilePurchases />} />
+          <Route path="mobile/purchase/:id" element={<MobilePurchaseDetail />} />
           <Route path="mobile/pending-documents" element={<MobilePendingDocuments />} />
           <Route path="mobile/document/:id" element={<MobileDocumentDetail />} />
+          <Route path="mobile/collections" element={<MobileCollections />} />
+          <Route path="mobile/settlements" element={<MobileSettlements />} />
+          <Route path="mobile/settlements/:id" element={<MobileSettlementDetail />} />
         </Route>
       </Routes>
     </BrowserRouter>

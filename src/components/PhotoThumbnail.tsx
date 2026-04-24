@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { isElectron, electronAPI } from '@/lib/electronEnv';
+import { MobileApiService } from '@/services/MobileApiService';
 
 interface PhotoItem {
   id: string;
@@ -19,9 +21,21 @@ export function PhotoThumbnail({ photo, onClick }: PhotoThumbnailProps) {
   useEffect(() => {
     const loadImage = async () => {
       try {
-        const result = await (window as any).electronAPI.photo.read(photo.photoPath);
-        if (result.success && result.data?.dataUrl) {
-          setImageSrc(result.data.dataUrl);
+        if (isElectron && electronAPI?.photo?.read) {
+          const result = await electronAPI.photo.read(photo.photoPath);
+          if (result.success && result.data?.dataUrl) {
+            setImageSrc(result.data.dataUrl);
+          }
+        } else {
+          const baseUrl = MobileApiService.getBaseUrl();
+          if (baseUrl) {
+            const response = await fetch(`${baseUrl}/api/photo/${photo.photoPath}`);
+            if (response.ok) {
+              const blob = await response.blob();
+              const url = URL.createObjectURL(blob);
+              setImageSrc(url);
+            }
+          }
         }
       } catch (error) {
         console.error('Failed to load thumbnail:', photo.photoPath, error);

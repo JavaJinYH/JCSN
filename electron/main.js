@@ -287,6 +287,78 @@ const startApiServer = () => {
     }
   });
 
+  // 获取首页数据（只读）
+  apiApp.get('/api/dashboard', async (req, res) => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const [
+        todaySales,
+        todayPurchases,
+        todayCollections,
+        totalProducts,
+        totalReceivable,
+        outstandingOrders,
+      ] = await Promise.all([
+        prisma.saleOrder.findMany({
+          where: { saleDate: { gte: today, lt: tomorrow } },
+          include: { buyer: true },
+          take: 5,
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.purchase.findMany({
+          where: { purchaseDate: { gte: today, lt: tomorrow } },
+          include: { supplier: true },
+          take: 5,
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.collectionRecord.findMany({
+          where: { collectionDate: { gte: today, lt: tomorrow } },
+          include: { entity: true },
+          take: 5,
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.product.count(),
+        prisma.receivable.aggregate({ _sum: { remainingAmount: true } }),
+        prisma.receivable.count({ where: { remainingAmount: { gt: 0 } } }),
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          todaySales,
+          todayPurchases,
+          todayCollections,
+          totalProducts,
+          totalReceivable: totalReceivable._sum.remainingAmount || 0,
+          outstandingOrders,
+        },
+      });
+    } catch (error) {
+      log.error('[API] dashboard error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 获取进货单列表（只读）
+  apiApp.get('/api/purchases', async (req, res) => {
+    try {
+      const purchases = await prisma.purchase.findMany({
+        include: { supplier: true },
+        orderBy: { purchaseDate: 'desc' },
+        take: 100,
+      });
+
+      res.json({ success: true, data: purchases });
+    } catch (error) {
+      log.error('[API] purchases error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // 获取销售单列表（只读）
   apiApp.get('/api/sales', async (req, res) => {
     try {
@@ -299,6 +371,53 @@ const startApiServer = () => {
       res.json({ success: true, data: sales });
     } catch (error) {
       log.error('[API] sales error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 获取销售单详情（只读）
+  apiApp.get('/api/sale/:id', async (req, res) => {
+    try {
+      const sale = await prisma.saleOrder.findUnique({
+        where: { id: req.params.id },
+        include: {
+          buyer: true,
+          items: { include: { product: true } },
+          photos: true,
+          receivable: true,
+        },
+      });
+
+      if (!sale) {
+        return res.status(404).json({ success: false, error: '销售单不存在' });
+      }
+
+      res.json({ success: true, data: sale });
+    } catch (error) {
+      log.error('[API] sale detail error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 获取进货单详情（只读）
+  apiApp.get('/api/purchase/:id', async (req, res) => {
+    try {
+      const purchase = await prisma.purchase.findUnique({
+        where: { id: req.params.id },
+        include: {
+          supplier: true,
+          items: { include: { product: true } },
+          photos: true,
+        },
+      });
+
+      if (!purchase) {
+        return res.status(404).json({ success: false, error: '进货单不存在' });
+      }
+
+      res.json({ success: true, data: purchase });
+    } catch (error) {
+      log.error('[API] purchase detail error:', error.message);
       res.status(500).json({ success: false, error: error.message });
     }
   });

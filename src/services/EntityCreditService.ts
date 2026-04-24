@@ -23,34 +23,29 @@ export class EntityCreditService {
    */
   static async calculateCreditScore(entityId: string): Promise<CreditScoreResult> {
     const now = new Date();
-    const twelveMonthsAgo = new Date(now.setMonth(now.getMonth() - 12));
+    const twelveMonthsAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
 
     // 1. 获取所有必要数据
     const [entity, orders, receivables, badDebts, legacyBills, orderItems, collectionRecords] = await Promise.all([
       db.entity.findUnique({ where: { id: entityId } }),
       db.saleOrder.findMany({
         where: {
-          entityId,
+          paymentEntityId: entityId,
           saleDate: { gte: twelveMonthsAgo }
         },
         include: { payments: true }
       }),
       db.receivable.findMany({
-        where: { entityId }
+        where: { order: { paymentEntityId: entityId } }
       }),
       db.badDebtWriteOff.findMany({
-        where: {
-          receivable: { entityId }
-        },
-        include: { receivable: true }
+        where: { entityId }
       }),
       db.legacyBill.findMany({
         where: { entityId }
       }),
       db.orderItem.findMany({
-        where: {
-          saleOrder: { entityId, saleDate: { gte: twelveMonthsAgo } }
-        }
+        where: { order: { paymentEntityId: entityId, saleDate: { gte: twelveMonthsAgo } } }
       }),
       db.collectionRecord.findMany({
         where: { entityId },
