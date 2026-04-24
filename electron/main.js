@@ -349,8 +349,8 @@ async function createWindow() {
   });
 
   if (isDev) {
-    log.info('Loading development URL: http://localhost:3000');
-    mainWindow.loadURL('http://localhost:3000');
+    log.info('Loading development URL: http://localhost:5173');
+    mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
     log.info('Loading production file');
