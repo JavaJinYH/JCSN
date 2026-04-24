@@ -35,6 +35,7 @@ export function Settings() {
   } | null>(null);
   const [idleTimeoutMinutes, setIdleTimeoutMinutes] = useState(5);
   const [lockPassword, setLockPassword] = useState('123456');
+  const [apiUrl, setApiUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [shopForm, setShopForm] = useState({
@@ -46,7 +47,19 @@ export function Settings() {
 
   useEffect(() => {
     loadData();
+    loadApiUrl();
   }, []);
+
+  const loadApiUrl = async () => {
+    try {
+      const result = await (window as any).electronAPI.api.getUrl();
+      if (result.success) {
+        setApiUrl(result.data.url);
+      }
+    } catch (error) {
+      console.error('Failed to load API URL:', error);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -438,6 +451,38 @@ export function Settings() {
                 className="px-3 py-2 border rounded-lg bg-white text-sm w-32"
                 placeholder="请输入密码"
               />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>📱 移动端访问</CardTitle>
+          <CardDescription>局域网内手机访问设置</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+              <div className="font-medium text-green-800 mb-1">🏠 局域网服务地址</div>
+              {apiUrl ? (
+                <div>
+                  <div className="font-mono text-lg text-green-700 break-all">{apiUrl}</div>
+                  <p className="text-xs text-green-600 mt-2">
+                    💡 提示：请确保手机和电脑在同一 WiFi 下，手机浏览器访问此地址
+                  </p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2"
+                    onClick={() => navigator.clipboard.writeText(apiUrl)}
+                  >
+                    📋 复制地址
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-slate-500">加载中...</div>
+              )}
             </div>
           </div>
         </CardContent>

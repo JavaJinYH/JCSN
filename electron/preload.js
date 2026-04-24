@@ -26,5 +26,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     delete: (relativePath) => ipcRenderer.invoke('photo-delete', relativePath),
     export: (photos, defaultFileName) => ipcRenderer.invoke('photo-export', { photos, defaultFileName }),
     stats: () => ipcRenderer.invoke('photo-stats'),
+  },
+
+  api: {
+    getUrl: () => ipcRenderer.invoke('api-getUrl'),
   }
 });

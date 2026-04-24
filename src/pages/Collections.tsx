@@ -33,6 +33,39 @@ import { formatCurrency } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import type { CollectionRecord, Entity, AccountReceivable } from '@/lib/types';
 
+// 翻译映射
+const methodTranslations: Record<string, string> = {
+  'phone': '电话',
+  'wechat': '微信',
+  'sms': '短信',
+  'visit': '上门',
+  'meeting': '面谈',
+  'other': '其他',
+  '电话': '电话',
+  '微信': '微信',
+  '短信': '短信',
+  '上门': '上门',
+  '面谈': '面谈',
+  '其他': '其他'
+};
+
+const resultTranslations: Record<string, string> = {
+  'promised': '已承诺付款',
+  'partial': '部分付款',
+  'refused': '拒绝付款',
+  'unreachable': '无法联系',
+  'negotiating': '协商中',
+  '已承诺付款': '已承诺付款',
+  '部分付款': '部分付款',
+  '拒绝付款': '拒绝付款',
+  '无法联系': '无法联系',
+  '协商中': '协商中'
+};
+
+// 翻译函数
+const translateMethod = (method: string) => methodTranslations[method] || method;
+const translateResult = (result: string) => resultTranslations[result] || result;
+
 const filters = [
   { key: 'search', label: '关键词', type: 'text' as const, placeholder: '主体名称、备注、沟通内容...' },
   { key: 'collectionMethod', label: '催账方式', type: 'select' as const, options: [
@@ -124,12 +157,14 @@ export function Collections() {
         }
       }
       if (filterValues.collectionMethod && filterValues.collectionMethod !== 'all') {
-        if (r.collectionMethod !== filterValues.collectionMethod) {
+        const translatedMethod = translateMethod(r.collectionMethod);
+        if (translatedMethod !== filterValues.collectionMethod) {
           return false;
         }
       }
       if (filterValues.collectionResult && filterValues.collectionResult !== 'all') {
-        if (r.collectionResult !== filterValues.collectionResult) {
+        const translatedResult = translateResult(r.collectionResult);
+        if (translatedResult !== filterValues.collectionResult) {
           return false;
         }
       }
@@ -283,7 +318,8 @@ export function Collections() {
   };
 
   const getResultBadge = (result: string) => {
-    switch (result) {
+    const translated = translateResult(result);
+    switch (translated) {
       case '已承诺付款':
         return <Badge className="bg-green-100 text-green-700">已承诺付款</Badge>;
       case '部分付款':
@@ -293,7 +329,7 @@ export function Collections() {
       case '无法联系':
         return <Badge className="bg-slate-100 text-slate-700">无法联系</Badge>;
       default:
-        return <Badge variant="outline">{result}</Badge>;
+        return <Badge variant="outline">{translated}</Badge>;
     }
   };
 
@@ -357,9 +393,9 @@ export function Collections() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{record.collectionMethod}</Badge>
-                    </TableCell>
-                    <TableCell>{getResultBadge(record.collectionResult)}</TableCell>
+                  <Badge variant="outline">{translateMethod(record.collectionMethod)}</Badge>
+                </TableCell>
+                <TableCell>{getResultBadge(record.collectionResult)}</TableCell>
                     <TableCell className="text-slate-500 max-w-xs truncate">
                       {record.communication || '-'}
                     </TableCell>
@@ -888,7 +924,7 @@ export function Collections() {
                 </div>
                 <div>
                   <div className="text-sm text-slate-500">催账方式</div>
-                  <div><Badge variant="outline">{selectedRecord.collectionMethod}</Badge></div>
+                  <div><Badge variant="outline">{translateMethod(selectedRecord.collectionMethod)}</Badge></div>
                 </div>
                 <div>
                   <div className="text-sm text-slate-500">催账结果</div>
