@@ -26,15 +26,34 @@ export function PhotoUpload({ photos, onChange, maxPhotos = 3 }: PhotoUploadProp
     const remainingSlots = maxPhotos - photos.length;
     const filesToAdd = Array.from(files).slice(0, remainingSlots);
 
-    const newPhotos = filesToAdd.map((file) => ({
-      id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      file,
-      preview: URL.createObjectURL(file),
-      remark: '',
-      type: 'handwritten',
-    }));
+    const newPhotos: PhotoItem[] = [];
+    let processed = 0;
 
-    onChange([...photos, ...newPhotos]);
+    filesToAdd.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const preview = event.target?.result as string;
+        newPhotos.push({
+          id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          file,
+          preview,
+          remark: '',
+          type: 'handwritten',
+        });
+
+        processed++;
+        if (processed === filesToAdd.length) {
+          onChange([...photos, ...newPhotos]);
+        }
+      };
+      reader.onerror = () => {
+        processed++;
+        if (processed === filesToAdd.length) {
+          onChange([...photos, ...newPhotos]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
 
     if (inputRef.current) {
       inputRef.current.value = '';
@@ -42,10 +61,6 @@ export function PhotoUpload({ photos, onChange, maxPhotos = 3 }: PhotoUploadProp
   };
 
   const removePhoto = (id: string) => {
-    const photo = photos.find((p) => p.id === id);
-    if (photo?.preview) {
-      URL.revokeObjectURL(photo.preview);
-    }
     onChange(photos.filter((p) => p.id !== id));
   };
 

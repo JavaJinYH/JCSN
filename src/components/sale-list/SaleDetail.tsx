@@ -68,6 +68,7 @@ export function SaleDetail({
   const [returnItemIndex, setReturnItemIndex] = useState(0);
   const [returnQuantity, setReturnQuantity] = useState('');
   const [printDialogOpen, setPrintDialogOpen] = useState(false);
+  const [loadedPhotos, setLoadedPhotos] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (open && saleId) {
@@ -93,6 +94,31 @@ export function SaleDetail({
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!sale?.photos || sale.photos.length === 0) return;
+
+    const loadPhotos = async () => {
+      const newLoadedPhotos: Record<string, string> = {};
+      for (const photo of sale.photos) {
+        if (!loadedPhotos[photo.photoPath]) {
+          try {
+            const result = await (window as any).electronAPI.photo.read(photo.photoPath);
+            if (result.success && result.data?.dataUrl) {
+              newLoadedPhotos[photo.photoPath] = result.data.dataUrl;
+            }
+          } catch (error) {
+            console.error('[SaleDetail] 加载照片失败:', photo.photoPath, error);
+          }
+        }
+      }
+      if (Object.keys(newLoadedPhotos).length > 0) {
+        setLoadedPhotos(prev => ({ ...prev, ...newLoadedPhotos }));
+      }
+    };
+
+    loadPhotos();
+  }, [sale?.photos]);
 
   const handleOpenReturnDialog = (itemIndex: number) => {
     setReturnItemIndex(itemIndex);
@@ -343,6 +369,33 @@ export function SaleDetail({
             <div>
               <h3 className="font-bold text-slate-700 mb-2">备注</h3>
               <div className="bg-slate-50 p-3 rounded-lg text-slate-600">{sale.remark}</div>
+            </div>
+          )}
+
+          {sale.photos && sale.photos.length > 0 && (
+            <div>
+              <h3 className="font-bold text-slate-700 mb-2">单据照片 ({sale.photos.length})</h3>
+              <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+                {sale.photos.map((photo: any, index: number) => (
+                  <div
+                    key={photo.id}
+                    className="relative aspect-square cursor-pointer overflow-hidden rounded-lg border border-slate-200 hover:border-slate-400 transition-colors"
+                    onClick={() => {
+                      setPhotoViewerIndex(index);
+                      setPhotoViewerOpen(true);
+                    }}
+                  >
+                    <img
+                      src={loadedPhotos[photo.photoPath] || photo.photoPath}
+                      alt={`照片 ${index + 1}`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23f0f0f0" width="100" height="100"/><text x="50" y="50" text-anchor="middle" dy=".3em" fill="%23999">图片加载失败</text></svg>';
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </>

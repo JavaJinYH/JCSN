@@ -21,14 +21,25 @@ const API_PORT = 3456;
 // 获取本机局域网 IP 地址
 const getLocalIP = () => {
   const interfaces = os.networkInterfaces();
-  for (const iface of Object.values(interfaces)) {
+  let preferredIP = '';
+
+  for (const name of Object.keys(interfaces)) {
+    const iface = interfaces[name];
     for (const alias of iface || []) {
       if (alias.family === 'IPv4' && !alias.internal) {
-        return alias.address;
+        // 优先选择 10.x.x.x 或 192.168.x.x 这种常见的局域网 IP
+        if (alias.address.startsWith('10.') || alias.address.startsWith('192.168.')) {
+          return alias.address;
+        }
+        // 如果没找到常见IP，先保存第一个
+        if (!preferredIP) {
+          preferredIP = alias.address;
+        }
       }
     }
   }
-  return '127.0.0.1';
+
+  return preferredIP || '127.0.0.1';
 };
 
 // 启动局域网 API 服务
@@ -41,6 +52,31 @@ const startApiServer = () => {
   // 健康检查
   apiApp.get('/api/health', (req, res) => {
     res.json({ success: true, message: 'API server is running', timestamp: new Date().toISOString() });
+  });
+
+  // 读取照片（供浏览器访问）
+  apiApp.use('/api/photo', async (req, res, next) => {
+    if (req.method === 'GET') {
+      try {
+        const relativePath = req.url.replace('/', '');
+        const fullPath = getPhotoPath(relativePath);
+        if (!fs.existsSync(fullPath)) {
+          res.status(404).json({ success: false, error: '照片文件不存在' });
+          return;
+        }
+        const buffer = fs.readFileSync(fullPath);
+        const ext = path.extname(relativePath).toLowerCase();
+        const mimeTypes = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' };
+        const mimeType = mimeTypes[ext] || 'image/jpeg';
+        res.set('Content-Type', mimeType);
+        res.send(buffer);
+      } catch (error) {
+        log.error('[API] Photo read error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    } else {
+      next();
+    }
   });
 
   // 获取待拍照单据列表
@@ -105,7 +141,7 @@ const startApiServer = () => {
       // 先尝试找销售单
       let document = await prisma.saleOrder.findUnique({
         where: { id },
-        include: { buyer: true, orderItems: { include: { product: true } } },
+        include: { buyer: true, items: { include: { product: true } } },
       });
 
       if (document) {
@@ -118,7 +154,7 @@ const startApiServer = () => {
             date: document.saleDate,
             partyName: document.buyer?.name || '散客',
             amount: document.totalAmount,
-            items: document.orderItems.map(item => ({
+            items: document.items.map(item => ({
               productName: item.product?.name || '商品',
               quantity: item.quantity,
               unitPrice: item.unitPrice,
@@ -263,6 +299,221 @@ const startApiServer = () => {
       res.json({ success: true, data: sales });
     } catch (error) {
       log.error('[API] sales error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 获取催账记录列表（只读）
+  apiApp.get('/api/collections', async (req, res) => {
+    try {
+      const records = await prisma.collectionRecord.findMany({
+        include: { entity: true },
+        orderBy: { collectionDate: 'desc' },
+        take: 200,
+      });
+
+      const data = records.map(r => ({
+        id: r.id,
+        entityId: r.entityId,
+        entityName: r.entity?.name || '未知主体',
+        collectionDate: r.collectionDate,
+        collectionTime: r.collectionTime,
+        collectionMethod: r.collectionMethod,
+        collectionResult: r.collectionResult,
+        attitude: r.attitude,
+        collectionAmount: r.collectionAmount,
+        communication: r.communication,
+        nextPlan: r.nextPlan,
+        followUpDate: r.followUpDate,
+        followUpTime: r.followUpTime,
+        remark: r.remark,
+      }));
+
+      res.json({ success: true, data });
+    } catch (error) {
+      log.error('[API] collections error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 获取挂账主体列表（只读）
+  apiApp.get('/api/settlements', async (req, res) => {
+    try {
+      const entities = await prisma.entity.findMany({
+        include: { contact: true },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const entitiesWithStats = await Promise.all(
+        entities.map(async (entity) => {
+          const orders = await prisma.saleOrder.findMany({
+            where: { paymentEntityId: entity.id },
+            include: {
+              returns: true,
+              badDebtWriteOffs: true,
+            },
+          });
+
+          let totalReceivable = 0;
+          let totalPaid = 0;
+
+          for (const order of orders) {
+            let orderTotal = order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0);
+
+            for (const ret of order.returns || []) {
+              orderTotal -= ret.totalAmount;
+            }
+
+            for (const writeOff of order.badDebtWriteOffs || []) {
+              orderTotal -= writeOff.writtenOffAmount;
+            }
+
+            totalReceivable += orderTotal;
+            totalPaid += order.paidAmount;
+          }
+
+          const totalRemaining = Math.max(0, totalReceivable - totalPaid);
+          const outstandingOrders = orders.filter(o => {
+            let orderTotal = o.totalAmount + (o.deliveryFee || 0) - (o.discount || 0);
+            for (const ret of o.returns || []) orderTotal -= ret.totalAmount;
+            for (const writeOff of o.badDebtWriteOffs || []) orderTotal -= writeOff.writtenOffAmount;
+            return Math.max(0, orderTotal - o.paidAmount) > 0;
+          });
+
+          return {
+            id: entity.id,
+            name: entity.name,
+            entityType: entity.entityType,
+            contactName: entity.contact?.name || '-',
+            contactPhone: entity.contact?.primaryPhone || '-',
+            totalReceivable,
+            totalPaid,
+            totalRemaining,
+            orderCount: orders.length,
+            outstandingCount: outstandingOrders.length,
+          };
+        })
+      );
+
+      res.json({ success: true, data: entitiesWithStats });
+    } catch (error) {
+      log.error('[API] settlements error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 获取挂账主体详情（只读）
+  apiApp.get('/api/settlements/entity/:id', async (req, res) => {
+    try {
+      const entityId = req.params.id;
+
+      const entity = await prisma.entity.findUnique({
+        where: { id: entityId },
+        include: { contact: true },
+      });
+
+      if (!entity) {
+        res.status(404).json({ success: false, error: '主体不存在' });
+        return;
+      }
+
+      const orders = await prisma.saleOrder.findMany({
+        where: { paymentEntityId: entityId },
+        include: {
+          buyer: true,
+          project: true,
+          items: { include: { product: true } },
+          returns: true,
+          badDebtWriteOffs: true,
+          photos: true,
+        },
+        orderBy: { saleDate: 'desc' },
+      });
+
+      const calculateOrderBalance = (order) => {
+        let total = order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0);
+        for (const ret of order.returns || []) total -= ret.totalAmount;
+        for (const writeOff of order.badDebtWriteOffs || []) total -= writeOff.writtenOffAmount;
+        return Math.max(0, total - order.paidAmount);
+      };
+
+      const isOrderOverdue = (order) => {
+        const remaining = calculateOrderBalance(order);
+        const saleDate = new Date(order.saleDate);
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        return remaining > 0 && saleDate < thirtyDaysAgo;
+      };
+
+      const getOrderStatus = (order) => {
+        const remaining = calculateOrderBalance(order);
+        if (remaining <= 0) return 'settled';
+        if (isOrderOverdue(order)) return 'overdue';
+        if (order.paidAmount > 0) return 'partial';
+        return 'pending';
+      };
+
+      const getStatusLabel = (status) => {
+        switch (status) {
+          case 'settled': return '已结清';
+          case 'overdue': return '已逾期';
+          case 'partial': return '部分还款';
+          default: return '待收款';
+        }
+      };
+
+      let totalReceivable = 0;
+      let totalPaid = 0;
+
+      const ordersData = orders.map(order => {
+        let orderTotal = order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0);
+        for (const ret of order.returns || []) orderTotal -= ret.totalAmount;
+        for (const writeOff of order.badDebtWriteOffs || []) orderTotal -= writeOff.writtenOffAmount;
+
+        totalReceivable += orderTotal;
+        totalPaid += order.paidAmount;
+
+        const remaining = Math.max(0, orderTotal - order.paidAmount);
+        const status = getOrderStatus(order);
+
+        return {
+          id: order.id,
+          invoiceNo: order.invoiceNo || order.id.substring(0, 8),
+          saleDate: order.saleDate,
+          buyerName: order.buyer?.name || '-',
+          projectName: order.project?.name || '-',
+          totalAmount: order.totalAmount,
+          deliveryFee: order.deliveryFee,
+          discount: order.discount,
+          paidAmount: order.paidAmount,
+          remaining,
+          status: getStatusLabel(status),
+          items: order.items.map(item => ({
+            productName: item.product?.name || '商品',
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            subtotal: item.subtotal,
+          })),
+        };
+      });
+
+      res.json({
+        success: true,
+        data: {
+          id: entity.id,
+          name: entity.name,
+          entityType: entity.entityType,
+          contactName: entity.contact?.name || '-',
+          contactPhone: entity.contact?.primaryPhone || '-',
+          address: entity.address,
+          totalReceivable,
+          totalPaid,
+          totalRemaining: Math.max(0, totalReceivable - totalPaid),
+          orders: ordersData,
+        },
+      });
+    } catch (error) {
+      log.error('[API] settlement entity detail error:', error.message);
       res.status(500).json({ success: false, error: error.message });
     }
   });
@@ -621,11 +872,25 @@ function registerAppHandlers() {
 
   ipcMain.handle('app-restart', async () => {
     log.info('App restart requested via IPC');
-    stopApiServer();
-    if (prisma) {
-      await prisma.$disconnect();
+    try {
+      stopApiServer();
+      if (prisma) {
+        await prisma.$disconnect();
+      }
+    } catch (e) {
+      log.error('Cleanup error:', e);
     }
-    app.relaunch();
+
+    if (isDev) {
+      require('child_process').spawn('cmd.exe', ['/c', 'start', 'cmd', '/k', 'npm', 'start'], {
+        detached: true,
+        stdio: 'ignore',
+        shell: true,
+        cwd: app.getAppPath()
+      }).unref();
+    } else {
+      app.relaunch();
+    }
     app.exit(0);
   });
 
