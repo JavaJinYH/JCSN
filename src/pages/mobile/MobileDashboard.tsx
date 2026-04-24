@@ -109,10 +109,10 @@ export function MobileDashboard() {
                   <div className="text-2xl font-bold text-green-800">{data.todayPurchases?.length || 0}</div>
                 </CardContent>
               </Card>
-              <Card className="bg-gradient-to-br from-red-50 to-red-100">
+              <Card className="bg-gradient-to-br from-orange-50 to-orange-100">
                 <CardContent className="pt-4">
-                  <div className="text-xs text-red-600">待收款</div>
-                  <div className="text-2xl font-bold text-red-800">{formatCurrency(data.totalReceivable || 0)}</div>
+                  <div className="text-xs text-orange-600">今日销售额</div>
+                  <div className="text-2xl font-bold text-orange-800">{formatCurrency(data.todaySalesTotal || 0)}</div>
                 </CardContent>
               </Card>
             </div>

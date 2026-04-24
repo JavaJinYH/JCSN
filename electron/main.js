@@ -315,6 +315,8 @@ const startApiServer = () => {
         prisma.receivable.count({ where: { remainingAmount: { gt: 0 } } }),
       ]);
 
+      const todaySalesTotal = todaySales.reduce((sum, order) => sum + order.paidAmount, 0);
+
       res.json({
         success: true,
         data: {
@@ -324,6 +326,7 @@ const startApiServer = () => {
           totalProducts,
           totalReceivable: totalReceivable._sum.remainingAmount || 0,
           outstandingOrders,
+          todaySalesTotal,
         },
       });
     } catch (error) {
@@ -335,18 +338,35 @@ const startApiServer = () => {
   // 获取进货单列表（只读）- 返回 PurchaseOrder
   apiApp.get('/api/purchases', async (req, res) => {
     try {
-      const purchaseOrders = await prisma.purchaseOrder.findMany({
-        include: {
-          supplier: true,
-          items: {
-            include: { product: true }
-          }
-        },
-        orderBy: { purchaseDate: 'desc' },
-        take: 100,
-      });
+      const page = parseInt(req.query.page) || 1;
+      const pageSize = parseInt(req.query.pageSize) || 5;
+      const skip = (page - 1) * pageSize;
+      const search = (req.query.search || '').toLowerCase();
 
-      // 计算每个进货单的总金额
+      const where = search ? {
+        OR: [
+          { supplier: { name: { contains: search } } },
+          { supplierName: { contains: search } },
+          { batchNo: { contains: search } },
+        ],
+      } : {};
+
+      const [purchaseOrders, total] = await Promise.all([
+        prisma.purchaseOrder.findMany({
+          where,
+          include: {
+            supplier: true,
+            items: {
+              include: { product: true }
+            }
+          },
+          orderBy: { purchaseDate: 'desc' },
+          skip,
+          take: pageSize,
+        }),
+        prisma.purchaseOrder.count({ where }),
+      ]);
+
       const ordersWithTotal = purchaseOrders.map(order => {
         const totalAmount = order.items.reduce((sum, item) => sum + item.totalAmount, 0);
         return {
@@ -356,7 +376,7 @@ const startApiServer = () => {
         };
       });
 
-      res.json({ success: true, data: ordersWithTotal });
+      res.json({ success: true, data: ordersWithTotal, page, pageSize, total });
     } catch (error) {
       log.error('[API] purchases error:', error.message);
       res.status(500).json({ success: false, error: error.message });
@@ -366,13 +386,31 @@ const startApiServer = () => {
   // 获取销售单列表（只读）
   apiApp.get('/api/sales', async (req, res) => {
     try {
-      const sales = await prisma.saleOrder.findMany({
-        include: { buyer: true },
-        orderBy: { saleDate: 'desc' },
-        take: 100,
-      });
+      const page = parseInt(req.query.page) || 1;
+      const pageSize = parseInt(req.query.pageSize) || 5;
+      const skip = (page - 1) * pageSize;
+      const search = (req.query.search || '').toLowerCase();
 
-      res.json({ success: true, data: sales });
+      const where = search ? {
+        OR: [
+          { buyer: { name: { contains: search } } },
+          { invoiceNo: { contains: search } },
+          { picker: { name: { contains: search } } },
+        ],
+      } : {};
+
+      const [sales, total] = await Promise.all([
+        prisma.saleOrder.findMany({
+          where,
+          include: { buyer: true },
+          orderBy: { saleDate: 'desc' },
+          skip,
+          take: pageSize,
+        }),
+        prisma.saleOrder.count({ where }),
+      ]);
+
+      res.json({ success: true, data: sales, page, pageSize, total });
     } catch (error) {
       log.error('[API] sales error:', error.message);
       res.status(500).json({ success: false, error: error.message });
@@ -440,11 +478,30 @@ const startApiServer = () => {
   // 获取催账记录列表（只读）
   apiApp.get('/api/collections', async (req, res) => {
     try {
-      const records = await prisma.collectionRecord.findMany({
-        include: { entity: true },
-        orderBy: { collectionDate: 'desc' },
-        take: 200,
-      });
+      const page = parseInt(req.query.page) || 1;
+      const pageSize = parseInt(req.query.pageSize) || 5;
+      const skip = (page - 1) * pageSize;
+      const search = (req.query.search || '').toLowerCase();
+
+      const where = search ? {
+        OR: [
+          { entity: { name: { contains: search } } },
+          { communication: { contains: search } },
+          { nextPlan: { contains: search } },
+          { remark: { contains: search } },
+        ],
+      } : {};
+
+      const [records, total] = await Promise.all([
+        prisma.collectionRecord.findMany({
+          where,
+          include: { entity: true },
+          orderBy: { collectionDate: 'desc' },
+          skip,
+          take: pageSize,
+        }),
+        prisma.collectionRecord.count({ where }),
+      ]);
 
       const data = records.map(r => ({
         id: r.id,
@@ -463,7 +520,7 @@ const startApiServer = () => {
         remark: r.remark,
       }));
 
-      res.json({ success: true, data });
+      res.json({ success: true, data, page, pageSize, total });
     } catch (error) {
       log.error('[API] collections error:', error.message);
       res.status(500).json({ success: false, error: error.message });
@@ -473,10 +530,29 @@ const startApiServer = () => {
   // 获取挂账主体列表（只读）
   apiApp.get('/api/settlements', async (req, res) => {
     try {
-      const entities = await prisma.entity.findMany({
-        include: { contact: true },
-        orderBy: { createdAt: 'desc' },
-      });
+      const page = parseInt(req.query.page) || 1;
+      const pageSize = parseInt(req.query.pageSize) || 5;
+      const skip = (page - 1) * pageSize;
+      const search = (req.query.search || '').toLowerCase();
+
+      const where = search ? {
+        OR: [
+          { name: { contains: search } },
+          { contact: { name: { contains: search } } },
+          { contact: { primaryPhone: { contains: search } } },
+        ],
+      } : {};
+
+      const [entities, total] = await Promise.all([
+        prisma.entity.findMany({
+          where,
+          include: { contact: true },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: pageSize,
+        }),
+        prisma.entity.count({ where }),
+      ]);
 
       const entitiesWithStats = await Promise.all(
         entities.map(async (entity) => {
@@ -529,7 +605,7 @@ const startApiServer = () => {
         })
       );
 
-      res.json({ success: true, data: entitiesWithStats });
+      res.json({ success: true, data: entitiesWithStats, page, pageSize, total });
     } catch (error) {
       log.error('[API] settlements error:', error.message);
       res.status(500).json({ success: false, error: error.message });

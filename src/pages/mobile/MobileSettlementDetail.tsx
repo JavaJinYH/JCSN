@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { MobileApiService, SettlementEntityDetail } from '@/services/MobileApiService';
 
-const formatCurrency = (amount: number) => {
+const formatCurrency = (amount: number | null | undefined) => {
+  if (amount == null) return '¥--';
   return `¥${amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
@@ -225,7 +226,7 @@ export function MobileSettlementDetail() {
                     <div>
                       <div className="font-medium">{order.invoiceNo}</div>
                       <div className="text-sm text-slate-500 mt-1">
-                        {new Date(order.saleDate).toLocaleDateString('zh-CN')}
+                        {order.saleDate ? new Date(order.saleDate).toLocaleDateString('zh-CN') : '-'}
                       </div>
                       <div className="text-sm text-slate-500">
                         购货人: {order.buyerName}

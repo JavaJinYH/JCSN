@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { MobileApiService } from '@/services/MobileApiService';
 import { MobilePageHeader, MobileList, MobileLoadingState, MobileSectionTitle, MobileCardGrid, MobileCardItem, MobileEmptyState } from '@/components/mobile/MobilePageHeader';
 import { SaleCard } from '@/components/mobile/MobileCards';
@@ -13,11 +14,18 @@ export function MobileSales() {
   const navigate = useNavigate();
   const [sales, setSales] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [isCached, setIsCached] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(5);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const apiUrl = MobileApiService.getBaseUrl();
 
-  const loadData = async () => {
+  const loadData = useCallback(async (pageNum = 1, append = false, search = '') => {
     if (!apiUrl) {
       setError('请先在"待拍照"页面设置 API 地址');
       setLoading(false);
@@ -25,10 +33,21 @@ export function MobileSales() {
     }
 
     try {
-      setLoading(true);
-      const res = await MobileApiService.getSales();
+      if (pageNum === 1) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+      const res = await MobileApiService.getSales(pageNum, pageSize, search);
       if (res.success) {
-        setSales(res.data || []);
+        if (append) {
+          setSales(prev => [...prev, ...(res.data || [])]);
+        } else {
+          setSales(res.data || []);
+        }
+        setPage(res.page || pageNum);
+        setTotal(res.total || 0);
+        setHasMore((res.data?.length || 0) >= pageSize && (res.data?.length || 0) > 0);
         setIsCached(res.isCached || false);
         if (res.isCached) {
           setError('显示缓存数据，请连接 WiFi 查看最新');
@@ -43,18 +62,28 @@ export function MobileSales() {
       console.error(e);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  };
+  }, [apiUrl, pageSize]);
 
   useEffect(() => {
     if (apiUrl) {
-      loadData();
+      loadData(1, false, searchTerm);
     } else {
       setLoading(false);
     }
-  }, []);
+  }, [apiUrl, searchTerm, loadData]);
 
-  const isOnline = MobileApiService.isOnline();
+  const handleSearch = () => {
+    setSearchTerm(searchInput);
+  };
+
+  const handleLoadMore = () => {
+    if (!loadingMore && hasMore) {
+      loadData(page + 1, true, searchTerm);
+    }
+  };
+
   const totalAmount = sales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
 
   if (!apiUrl) {
@@ -75,11 +104,11 @@ export function MobileSales() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20">
+    <div className="min-h-screen bg-slate-50 pb-24">
       <MobilePageHeader
         title="销售记录"
         subtitle="查看销售记录（只读）"
-        onRefresh={loadData}
+        onRefresh={() => loadData(1, false, searchTerm)}
       />
 
       {error && !isCached && (
@@ -93,36 +122,63 @@ export function MobileSales() {
         </div>
       )}
 
-      <MobileCardGrid className="px-4 pt-2">
-        <MobileCardItem
-          label="销售总额"
-          value={formatCurrency(totalAmount)}
-          gradient="bg-gradient-to-br from-orange-50 to-orange-100"
-          icon="💰"
-        />
-        <MobileCardItem
-          label="订单数量"
-          value={sales.length}
-          gradient="bg-gradient-to-br from-blue-50 to-blue-100"
-          icon="📋"
-        />
-      </MobileCardGrid>
+      <div className="px-4 pt-2 space-y-3">
+        <div className="flex gap-2">
+          <Input
+            placeholder="搜索销售记录..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          />
+          <Button variant="outline" onClick={handleSearch}>搜索</Button>
+        </div>
+
+        <MobileCardGrid className="grid grid-cols-2 gap-3">
+          <MobileCardItem
+            label="销售总额"
+            value={formatCurrency(totalAmount)}
+            gradient="bg-gradient-to-br from-orange-50 to-orange-100"
+            icon="💰"
+          />
+          <MobileCardItem
+            label="订单数量"
+            value={`${sales.length}/${total}`}
+            gradient="bg-gradient-to-br from-blue-50 to-blue-100"
+            icon="📋"
+          />
+        </MobileCardGrid>
+      </div>
 
       {loading ? (
         <MobileLoadingState />
       ) : sales.length === 0 ? (
-        <MobileEmptyState message="暂无销售记录" />
+        <MobileEmptyState message={searchTerm ? '未找到匹配的销售记录' : '暂无销售记录'} />
       ) : (
-        <MobileList className="pt-4">
-          <MobileSectionTitle>销售记录（点击查看详情）</MobileSectionTitle>
-          {sales.map((sale) => (
-            <SaleCard
-              key={sale.id}
-              sale={sale}
-              onClick={() => navigate(`/mobile/sale/${sale.id}`)}
-            />
-          ))}
-        </MobileList>
+        <>
+          <MobileList className="pt-4">
+            <MobileSectionTitle>销售记录（{sales.length}/{total}）</MobileSectionTitle>
+            {sales.map((sale) => (
+              <SaleCard
+                key={sale.id}
+                sale={sale}
+                onClick={() => navigate(`/mobile/sale/${sale.id}`)}
+              />
+            ))}
+          </MobileList>
+
+          {hasMore && (
+            <div className="p-4">
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? '加载中...' : `加载更多（${sales.length}/${total}）`}
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

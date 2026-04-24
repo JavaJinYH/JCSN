@@ -260,8 +260,10 @@ export class MobileApiService {
     return this.request('/api/inventory', {}, useCache);
   }
 
-  static async getSales(useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean }> {
-    return this.request('/api/sales', {}, useCache);
+  static async getSales(page = 1, pageSize = 5, search = '', useCache = true): Promise<{ success: boolean; data?: any[]; error?: string; isCached?: boolean; page?: number; pageSize?: number; total?: number }> {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (search) params.append('search', search);
+    return this.request(`/api/sales?${params}`, {}, useCache);
   }
 
   static async getSaleById(id: string, useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean }> {
@@ -272,16 +274,22 @@ export class MobileApiService {
     return this.request(`/api/purchase/${id}`, {}, useCache);
   }
 
-  static async getPurchases(useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean }> {
-    return this.request('/api/purchases', {}, useCache);
+  static async getPurchases(page = 1, pageSize = 5, search = '', useCache = true): Promise<{ success: boolean; data?: any[]; error?: string; isCached?: boolean; page?: number; pageSize?: number; total?: number }> {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (search) params.append('search', search);
+    return this.request(`/api/purchases?${params}`, {}, useCache);
   }
 
-  static async getCollections(useCache = true): Promise<{ success: boolean; data?: CollectionRecord[]; error?: string; isCached?: boolean }> {
-    return this.request<CollectionRecord[]>('/api/collections', {}, useCache);
+  static async getCollections(page = 1, pageSize = 5, search = '', useCache = true): Promise<{ success: boolean; data?: CollectionRecord[]; error?: string; isCached?: boolean; page?: number; pageSize?: number; total?: number }> {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (search) params.append('search', search);
+    return this.request<CollectionRecord[]>(`/api/collections?${params}`, {}, useCache);
   }
 
-  static async getSettlements(useCache = true): Promise<{ success: boolean; data?: SettlementEntity[]; error?: string; isCached?: boolean }> {
-    return this.request<SettlementEntity[]>('/api/settlements', {}, useCache);
+  static async getSettlements(page = 1, pageSize = 5, search = '', useCache = true): Promise<{ success: boolean; data?: SettlementEntity[]; error?: string; isCached?: boolean; page?: number; pageSize?: number; total?: number }> {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (search) params.append('search', search);
+    return this.request<SettlementEntity[]>(`/api/settlements?${params}`, {}, useCache);
   }
 
   static async getSettlementEntityDetail(id: string, useCache = true): Promise<{ success: boolean; data?: SettlementEntityDetail; error?: string; isCached?: boolean }> {
