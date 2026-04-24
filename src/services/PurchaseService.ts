@@ -92,9 +92,9 @@ export const PurchaseService = {
           const fileName = `purchase_${order.id}_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
           const result = await (window as any).electronAPI.photo.save(fileName, photo.preview, 'purchases');
           if (result.success) {
-            const savedPhoto = await db.purchasePhoto.create({
+            const savedPhoto = await db.purchaseOrderPhoto.create({
               data: {
-                purchaseId: createdItems[0].id,
+                purchaseOrderId: order.id,
                 photoPath: result.data.path,
                 photoType: photo.type,
                 photoRemark: photo.remark || null,
@@ -151,11 +151,11 @@ export const PurchaseService = {
           include: {
             product: { include: { category: true } },
             supplier: true,
-            photos: true,
           },
           orderBy: { createdAt: 'asc' },
         },
         supplier: true,
+        photos: true,
       },
       orderBy: { purchaseDate: 'desc' },
       take: 100,
@@ -170,11 +170,11 @@ export const PurchaseService = {
           include: {
             product: { include: { category: true } },
             supplier: true,
-            photos: true,
           },
           orderBy: { createdAt: 'asc' },
         },
         supplier: true,
+        photos: true,
       },
     });
   },
@@ -489,10 +489,10 @@ export const PurchaseService = {
     });
   },
 
-  async createPurchasePhoto(purchaseId: string, data: { url?: string; photoPath?: string; remark?: string; type?: string; photoType?: string; photoRemark?: string }) {
-    return db.purchasePhoto.create({
+  async createPurchaseOrderPhoto(purchaseOrderId: string, data: { url?: string; photoPath?: string; remark?: string; type?: string; photoType?: string; photoRemark?: string }) {
+    return db.purchaseOrderPhoto.create({
       data: {
-        purchaseId,
+        purchaseOrderId,
         photoPath: data.photoPath || data.url || '',
         photoType: data.type || data.photoType || 'delivery',
         photoRemark: data.remark || data.photoRemark || null,

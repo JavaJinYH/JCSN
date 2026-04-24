@@ -899,15 +899,12 @@ function OrderDetail({
 
           await (window as any).electronAPI.photo.save(fileName, dataUrl, 'purchases');
 
-          // 为订单中的第一个商品添加照片关联（因为照片是属于订单级别的，但数据库只支持关联到单个采购项）
-          // 未来可以改进数据库结构，支持订单级别的照片
-          if (order.items.length > 0) {
-            await PurchaseService.createPurchasePhoto(order.items[0].id, {
-              url: `purchases/${fileName}`,
-              type: photo.type || 'signed',
-              remark: photo.remark || undefined,
-            });
-          }
+          // 为订单添加照片关联（照片关联到订单级别）
+          await PurchaseService.createPurchaseOrderPhoto(order.id, {
+            url: `purchases/${fileName}`,
+            type: photo.type || 'signed',
+            remark: photo.remark || undefined,
+          });
         }
       }
       loadOrder();
@@ -925,8 +922,12 @@ function OrderDetail({
 
   const getAllPhotos = () => {
     if (!order) return [];
-    // 收集所有商品的照片
     const allPhotos: any[] = [];
+    // 收集订单级别的照片
+    if ((order as any).photos) {
+      allPhotos.push(...(order as any).photos);
+    }
+    // 收集所有商品的照片（兼容旧数据）
     order.items.forEach(item => {
       if (item.photos) {
         allPhotos.push(...item.photos);

@@ -241,7 +241,6 @@ export function Inventory() {
         unitPrice: p.lastPurchasePrice || 0,
       }));
 
-    console.log('[Inventory] 跳转前选中的商品:', selectedItems);
     setSelectedProducts(new Set());
     navigate('/purchases', {
       state: {

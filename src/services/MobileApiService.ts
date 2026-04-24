@@ -1,6 +1,9 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+
 const API_BASE_URL_KEY = 'mobile_api_base_url';
 const CACHE_PREFIX = 'mobile_api_cache_';
 const CACHE_DURATION = 30 * 60 * 1000; // 30分钟
+const HEALTH_CHECK_INTERVAL = 5000; // 5秒检测一次
 
 interface CacheEntry<T> {
   data: T;
@@ -244,6 +247,11 @@ export class MobileApiService {
     }, false); // 上传照片不缓存
   }
 
+  static getPhotoUrl(relativePath: string): string {
+    const baseUrl = this.getBaseUrl();
+    return `${baseUrl}/api/photo/${relativePath}`;
+  }
+
   static async getDashboard(useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean }> {
     return this.request('/api/dashboard', {}, useCache);
   }
@@ -297,4 +305,112 @@ export class MobileApiService {
       console.warn('[Mobile API] Clear cache error:', e);
     }
   }
+}
+
+export function useMobileApi() {
+  // 设备是否联网（WiFi）
+  const [deviceOnline, setDeviceOnline] = useState(MobileApiService.isOnline());
+  // API 服务是否可用
+  const [apiAvailable, setApiAvailable] = useState(false);
+  // 缓存标记
+  const [isCached, setIsCached] = useState(false);
+  // API 地址
+  const [apiUrl, setApiUrlState] = useState<string | null>(MobileApiService.getBaseUrl());
+  // 是否正在检测
+  const [isChecking, setIsChecking] = useState(false);
+  // 定时器引用
+  const healthCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 单独的健康检测函数
+  const checkApiHealth = useCallback(async () => {
+    if (!apiUrl) {
+      setApiAvailable(false);
+      return;
+    }
+
+    try {
+      const result = await MobileApiService.checkHealth();
+      const available = result.success;
+      setApiAvailable(available);
+    } catch (error) {
+      setApiAvailable(false);
+    }
+  }, [apiUrl]);
+
+  // 监听设备网络状态
+  useEffect(() => {
+    const handleOnline = () => setDeviceOnline(true);
+    const handleOffline = () => {
+      setDeviceOnline(false);
+      setApiAvailable(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // 当有 API 地址时，开始定期检测
+  useEffect(() => {
+    if (apiUrl && deviceOnline) {
+      // 立即检测一次
+      checkApiHealth();
+
+      // 设置定时器定期检测
+      healthCheckIntervalRef.current = setInterval(() => {
+        checkApiHealth();
+      }, HEALTH_CHECK_INTERVAL);
+    } else {
+      setApiAvailable(false);
+      // 清理定时器
+      if (healthCheckIntervalRef.current) {
+        clearInterval(healthCheckIntervalRef.current);
+        healthCheckIntervalRef.current = null;
+      }
+    }
+
+    // 清理函数
+    return () => {
+      if (healthCheckIntervalRef.current) {
+        clearInterval(healthCheckIntervalRef.current);
+        healthCheckIntervalRef.current = null;
+      }
+    };
+  }, [apiUrl, deviceOnline, checkApiHealth]);
+
+  const setApiUrl = useCallback((url: string) => {
+    if (url) {
+      MobileApiService.setBaseUrl(url);
+      setApiUrlState(url);
+    } else {
+      MobileApiService.clearBaseUrl();
+      setApiUrlState(null);
+      setApiAvailable(false);
+    }
+  }, []);
+
+  // 手动触发一次检测
+  const refreshStatus = useCallback(() => {
+    if (apiUrl) {
+      checkApiHealth();
+    }
+  }, [apiUrl, checkApiHealth]);
+
+  return {
+    // 总的连接状态：设备在线 + API 可用
+    isOnline: deviceOnline && apiAvailable,
+    // 分开的状态
+    deviceOnline,
+    apiAvailable,
+    isCached,
+    setIsCached,
+    apiUrl,
+    setApiUrl,
+    refreshStatus,
+    isChecking
+  };
 }

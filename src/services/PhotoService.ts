@@ -11,9 +11,9 @@ export const PhotoService = {
   },
 
   async getPurchasePhotos(include?: any) {
-    return db.purchasePhoto.findMany({
+    return db.purchaseOrderPhoto.findMany({
       include: include?.purchase
-        ? { purchase: { include: { product: true, supplier: true } } }
+        ? { purchaseOrder: { include: { supplier: true } } }
         : undefined,
       orderBy: { createdAt: 'desc' },
     });

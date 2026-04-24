@@ -177,15 +177,11 @@ export function Sales() {
 
   const loadData = async () => {
     try {
-      console.log('[Sales] 开始加载数据...');
       const [newSales, contactsData, entitiesData] = await Promise.all([
         SaleService.getSaleOrders(),
         SaleService.getContacts(),
         SaleService.getPaymentEntities(),
       ]);
-
-      console.log('[Sales] 原始销售数据:', newSales.length, '条');
-      console.log('[Sales] 销售数据详情:', newSales);
 
       const saleItems: SaleListItem[] = newSales.map((s) => ({
         id: s.id,
@@ -212,11 +208,9 @@ export function Sales() {
         _count: { items: s.items?.length || 0 },
       }));
 
-      console.log('[Sales] 即将设置sales状态, saleItems:', saleItems);
       setSales(saleItems);
       setContacts(contactsData);
       setEntities(entitiesData);
-      console.log('[Sales] 已设置sales状态');
     } catch (error) {
       console.error('[Sales] 加载销售数据失败:', error);
       toast('加载销售数据失败，请刷新页面重试', 'error');

@@ -27,11 +27,9 @@ const getLocalIP = () => {
     const iface = interfaces[name];
     for (const alias of iface || []) {
       if (alias.family === 'IPv4' && !alias.internal) {
-        // 优先选择 10.x.x.x 或 192.168.x.x 这种常见的局域网 IP
         if (alias.address.startsWith('10.') || alias.address.startsWith('192.168.')) {
           return alias.address;
         }
-        // 如果没找到常见IP，先保存第一个
         if (!preferredIP) {
           preferredIP = alias.address;
         }
@@ -82,26 +80,25 @@ const startApiServer = () => {
   // 获取待拍照单据列表
   apiApp.get('/api/pending-documents', async (req, res) => {
     try {
-      // 获取没有照片的销售单和进货单
-      const [saleOrders, purchases] = await Promise.all([
+      // 销售单和进货单（PurchaseOrder）
+      const [saleOrders, purchaseOrders] = await Promise.all([
         prisma.saleOrder.findMany({
           include: { buyer: true },
           orderBy: { saleDate: 'desc' },
         }),
-        prisma.purchase.findMany({
-          include: { supplier: true },
+        prisma.purchaseOrder.findMany({
+          include: { supplier: true, items: true },
           orderBy: { purchaseDate: 'desc' },
         }),
       ]);
 
-      // 获取已有关联照片的单据 ID
       const [salePhotoOrders, purchasePhotoOrders] = await Promise.all([
         prisma.saleOrderPhoto.findMany({ select: { saleOrderId: true } }),
-        prisma.purchasePhoto.findMany({ select: { purchaseId: true } }),
+        prisma.purchaseOrderPhoto.findMany({ select: { purchaseOrderId: true } }),
       ]);
 
       const saleWithPhotos = new Set(salePhotoOrders.map(p => p.saleOrderId));
-      const purchaseWithPhotos = new Set(purchasePhotoOrders.map(p => p.purchaseId));
+      const purchaseWithPhotos = new Set(purchasePhotoOrders.map(p => p.purchaseOrderId));
 
       const documents = [
         ...saleOrders.map(order => ({
@@ -114,15 +111,15 @@ const startApiServer = () => {
           hasPhotos: saleWithPhotos.has(order.id),
           photoCount: saleWithPhotos.has(order.id) ? 1 : 0,
         })),
-        ...purchases.map(p => ({
-          id: p.id,
+        ...purchaseOrders.map(order => ({
+          id: order.id,
           type: 'purchase',
-          invoiceNo: p.invoiceNo,
-          date: p.purchaseDate,
-          partyName: p.supplier?.name || '供应商',
-          amount: p.totalAmount,
-          hasPhotos: purchaseWithPhotos.has(p.id),
-          photoCount: purchaseWithPhotos.has(p.id) ? 1 : 0,
+          invoiceNo: order.invoiceNo,
+          date: order.purchaseDate,
+          partyName: order.supplier?.name || '供应商',
+          amount: order.items.reduce((sum, item) => sum + item.totalAmount, 0),
+          hasPhotos: purchaseWithPhotos.has(order.id),
+          photoCount: purchaseWithPhotos.has(order.id) ? 1 : 0,
         })),
       ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -138,7 +135,6 @@ const startApiServer = () => {
     try {
       const id = req.params.id;
 
-      // 先尝试找销售单
       let document = await prisma.saleOrder.findUnique({
         where: { id },
         include: { buyer: true, items: { include: { product: true } } },
@@ -165,8 +161,7 @@ const startApiServer = () => {
         return;
       }
 
-      // 再尝试找进货单
-      document = await prisma.purchase.findUnique({
+      document = await prisma.purchaseOrder.findUnique({
         where: { id },
         include: { supplier: true, items: { include: { product: true } } },
       });
@@ -180,12 +175,12 @@ const startApiServer = () => {
             invoiceNo: document.invoiceNo,
             date: document.purchaseDate,
             partyName: document.supplier?.name || '供应商',
-            amount: document.totalAmount,
+            amount: document.items.reduce((sum, item) => sum + item.totalAmount, 0),
             items: document.items.map(item => ({
               productName: item.product?.name || '商品',
               quantity: item.quantity,
               unitPrice: item.unitPrice,
-              subtotal: item.subtotal,
+              subtotal: item.totalAmount,
             })),
           },
         });
@@ -205,10 +200,8 @@ const startApiServer = () => {
       const id = req.params.id;
       const { dataUrl, photoType, remark } = req.body;
 
-      // 尝试找销售单
       const saleOrder = await prisma.saleOrder.findUnique({ where: { id } });
       if (saleOrder) {
-        // 保存照片文件
         const fileName = `sale_${id}_${Date.now()}.jpg`;
         const subDir = 'sales';
         const targetDir = subDir ? path.join(getPhotosDir(), subDir) : getPhotosDir();
@@ -220,7 +213,6 @@ const startApiServer = () => {
         fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
         const relativePath = subDir ? `${subDir}/${fileName}` : fileName;
 
-        // 保存数据库记录
         await prisma.saleOrderPhoto.create({
           data: {
             saleOrderId: id,
@@ -235,10 +227,8 @@ const startApiServer = () => {
         return;
       }
 
-      // 尝试找进货单
-      const purchase = await prisma.purchase.findUnique({ where: { id } });
-      if (purchase) {
-        // 保存照片文件
+      const purchaseOrder = await prisma.purchaseOrder.findUnique({ where: { id } });
+      if (purchaseOrder) {
         const fileName = `purchase_${id}_${Date.now()}.jpg`;
         const subDir = 'purchases';
         const targetDir = subDir ? path.join(getPhotosDir(), subDir) : getPhotosDir();
@@ -250,10 +240,9 @@ const startApiServer = () => {
         fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
         const relativePath = subDir ? `${subDir}/${fileName}` : fileName;
 
-        // 保存数据库记录
-        await prisma.purchasePhoto.create({
+        await prisma.purchaseOrderPhoto.create({
           data: {
-            purchaseId: id,
+            purchaseOrderId: id,
             photoPath: relativePath,
             photoType: photoType || 'receipt',
             photoRemark: remark,
@@ -276,7 +265,7 @@ const startApiServer = () => {
   apiApp.get('/api/inventory', async (req, res) => {
     try {
       const products = await prisma.product.findMany({
-        include: { category: true, brand: true },
+        include: { category: true },
         orderBy: { name: 'asc' },
       });
 
@@ -343,16 +332,31 @@ const startApiServer = () => {
     }
   });
 
-  // 获取进货单列表（只读）
+  // 获取进货单列表（只读）- 返回 PurchaseOrder
   apiApp.get('/api/purchases', async (req, res) => {
     try {
-      const purchases = await prisma.purchase.findMany({
-        include: { supplier: true },
+      const purchaseOrders = await prisma.purchaseOrder.findMany({
+        include: {
+          supplier: true,
+          items: {
+            include: { product: true }
+          }
+        },
         orderBy: { purchaseDate: 'desc' },
         take: 100,
       });
 
-      res.json({ success: true, data: purchases });
+      // 计算每个进货单的总金额
+      const ordersWithTotal = purchaseOrders.map(order => {
+        const totalAmount = order.items.reduce((sum, item) => sum + item.totalAmount, 0);
+        return {
+          ...order,
+          totalAmount,
+          itemCount: order.items.length,
+        };
+      });
+
+      res.json({ success: true, data: ordersWithTotal });
     } catch (error) {
       log.error('[API] purchases error:', error.message);
       res.status(500).json({ success: false, error: error.message });
@@ -384,7 +388,7 @@ const startApiServer = () => {
           buyer: true,
           items: { include: { product: true } },
           photos: true,
-          receivable: true,
+          receivables: true,
         },
       });
 
@@ -399,23 +403,34 @@ const startApiServer = () => {
     }
   });
 
-  // 获取进货单详情（只读）
+  // 获取进货单详情（只读）- 返回 PurchaseOrder 及明细
   apiApp.get('/api/purchase/:id', async (req, res) => {
     try {
-      const purchase = await prisma.purchase.findUnique({
+      const order = await prisma.purchaseOrder.findUnique({
         where: { id: req.params.id },
         include: {
           supplier: true,
-          items: { include: { product: true } },
-          photos: true,
+          items: {
+            include: { product: true }
+          },
         },
       });
 
-      if (!purchase) {
+      if (!order) {
         return res.status(404).json({ success: false, error: '进货单不存在' });
       }
 
-      res.json({ success: true, data: purchase });
+      // 计算总金额
+      const totalAmount = order.items.reduce((sum, item) => sum + item.totalAmount, 0);
+
+      res.json({
+        success: true,
+        data: {
+          ...order,
+          totalAmount,
+          itemCount: order.items.length,
+        }
+      });
     } catch (error) {
       log.error('[API] purchase detail error:', error.message);
       res.status(500).json({ success: false, error: error.message });
@@ -689,7 +704,6 @@ async function createWindow() {
     log.error('Database connection failed:', err.message);
   }
 
-  // 启动局域网 API 服务
   try {
     startApiServer();
     log.info('API server started successfully');
@@ -745,7 +759,7 @@ function registerDbHandlers() {
     'purchase', 'purchaseOrder', 'purchaseReturn', 'purchaseReturnItem',
     'deliveryFee', 'deliveryRecord',
     'paymentPlan', 'auditLog',
-    'purchasePhoto', 'saleOrderPhoto', 'collectionRecord',
+    'purchasePhoto', 'purchaseOrderPhoto', 'saleOrderPhoto', 'collectionRecord',
     'inventoryCheck', 'inventoryCheckItem',
     'contact', 'contactPhone', 'entity', 'bizProject',
     'contactEntityRole', 'contactProjectRole',
@@ -791,7 +805,6 @@ function registerDbHandlers() {
   log.info(`Registered DB IPC handlers for ${models.length} models`);
 }
 
-// 照片存储 IPC 处理器
 function registerPhotoHandlers() {
   // 保存照片文件
   ipcMain.handle('photo-save', async (event, { fileName, dataUrl, subDir }) => {
@@ -1038,17 +1051,15 @@ function registerAppHandlers() {
     if (mainWindow) {
       try {
         if (flag) {
-          // 置顶：使用 'screen-saver' 级别，这是 Windows 上最稳定的级别
           mainWindow.setAlwaysOnTop(true, 'screen-saver');
           mainWindow.moveTop();
           mainWindow.focus();
           log.info('Window set to always on top successfully with screen-saver level');
         } else {
-          // 取消置顶
           mainWindow.setAlwaysOnTop(false);
           log.info('Window removed from always on top');
         }
-        
+
         const currentState = mainWindow.isAlwaysOnTop();
         log.info('Current always on top state:', currentState);
         return { success: true, isAlwaysOnTop: currentState };

@@ -81,6 +81,7 @@ export function SaleCard({ sale, onClick }: SaleCardProps) {
 interface PurchaseCardProps {
   purchase: {
     id: string;
+    internalSeq?: number;
     invoiceNo?: string;
     supplier?: { name: string };
     purchaseDate: string;
@@ -104,7 +105,7 @@ export function PurchaseCard({ purchase, onClick }: PurchaseCardProps) {
                 {purchase.supplier?.name || '供应商'}
               </div>
               <div className="text-xs text-slate-500">
-                {purchase.invoiceNo || purchase.id.substring(0, 8)}
+                {purchase.internalSeq ? `#${purchase.internalSeq}` : purchase.invoiceNo || purchase.id.substring(0, 8)}
               </div>
             </div>
             <div className="text-right flex-shrink-0 ml-2">

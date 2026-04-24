@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
+import { MobileLayout } from './components/layout/MobileLayout';
 import { DesktopOnlyRoute } from './components/DesktopOnlyRoute';
 import { Dashboard } from './pages/Dashboard';
 import { Inventory } from './pages/Inventory';
@@ -55,10 +56,11 @@ function App() {
     >
       <ToastContainer />
       <Routes>
+        {/* 桌面端路由 */}
         <Route path="/" element={<AppLayout />}>
           <Route index element={
             isMobile ? (
-              <Navigate to="/mobile/dashboard" replace />
+              <Navigate to="/mobile/pending-documents" replace />
             ) : (
               <Navigate to="/dashboard" replace />
             )
@@ -90,18 +92,22 @@ function App() {
           <Route path="legacy-bills" element={<DesktopOnlyRoute><LegacyBills /></DesktopOnlyRoute>} />
           <Route path="inventory/check" element={<DesktopOnlyRoute><InventoryCheckPage /></DesktopOnlyRoute>} />
           <Route path="photos" element={<DesktopOnlyRoute><PhotoManagement /></DesktopOnlyRoute>} />
-          {/* 移动端页面 */}
+        </Route>
+        
+        {/* 移动端路由 - 独立布局 */}
+        <Route path="/" element={<MobileLayout />}>
+          <Route index element={<Navigate to="/mobile/pending-documents" replace />} />
+          <Route path="mobile/pending-documents" element={<MobilePendingDocuments />} />
+          <Route path="mobile/document/:id" element={<MobileDocumentDetail />} />
+          <Route path="mobile/collections" element={<MobileCollections />} />
+          <Route path="mobile/settlements" element={<MobileSettlements />} />
+          <Route path="mobile/settlements/:id" element={<MobileSettlementDetail />} />
           <Route path="mobile/dashboard" element={<MobileDashboard />} />
           <Route path="mobile/inventory" element={<MobileInventory />} />
           <Route path="mobile/sales" element={<MobileSales />} />
           <Route path="mobile/sale/:id" element={<MobileSaleDetail />} />
           <Route path="mobile/purchases" element={<MobilePurchases />} />
           <Route path="mobile/purchase/:id" element={<MobilePurchaseDetail />} />
-          <Route path="mobile/pending-documents" element={<MobilePendingDocuments />} />
-          <Route path="mobile/document/:id" element={<MobileDocumentDetail />} />
-          <Route path="mobile/collections" element={<MobileCollections />} />
-          <Route path="mobile/settlements" element={<MobileSettlements />} />
-          <Route path="mobile/settlements/:id" element={<MobileSettlementDetail />} />
         </Route>
       </Routes>
     </BrowserRouter>

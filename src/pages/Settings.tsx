@@ -463,26 +463,58 @@ export function Settings() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+              <h4 className="text-sm font-semibold text-blue-800 mb-2">📋 使用步骤</h4>
+              <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
+                <li>确保手机和电脑连接同一 WiFi</li>
+                <li>复制下方的局域网地址</li>
+                <li>在手机应用中输入该地址</li>
+              </ol>
+            </div>
             <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
               <div className="font-medium text-green-800 mb-1">🏠 局域网服务地址</div>
               {apiUrl ? (
                 <div>
-                  <div className="font-mono text-lg text-green-700 break-all">{apiUrl}</div>
+                  <div className="font-mono text-lg text-green-700 break-all bg-white p-2 rounded border border-green-200">
+                    {apiUrl}
+                  </div>
                   <p className="text-xs text-green-600 mt-2">
-                    💡 提示：请确保手机和电脑在同一 WiFi 下，手机浏览器访问此地址
+                    💡 提示：此地址在电脑重启或切换网络后可能会变化
                   </p>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="mt-2"
-                    onClick={() => navigator.clipboard.writeText(apiUrl)}
-                  >
-                    📋 复制地址
-                  </Button>
+                  <div className="flex gap-2 mt-3">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => {
+                        navigator.clipboard.writeText(apiUrl);
+                        toast('地址已复制到剪贴板！', 'success');
+                      }}
+                    >
+                      📋 复制地址
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={loadApiUrl}
+                    >
+                      🔄 刷新地址
+                    </Button>
+                  </div>
                 </div>
               ) : (
-                <div className="text-slate-500">加载中...</div>
+                <div className="flex items-center gap-2 text-slate-500">
+                  <div className="animate-spin">⏳</div>
+                  <span>加载中...</span>
+                </div>
               )}
+            </div>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <h4 className="text-sm font-semibold text-amber-800 mb-1">⚠️ 常见问题</h4>
+              <ul className="text-xs text-amber-700 space-y-1">
+                <li>• 如果无法连接，请检查电脑防火墙设置</li>
+                <li>• 确保桌面端应用正在运行</li>
+                <li>• 部分路由器可能需要设置端口转发</li>
+              </ul>
             </div>
           </div>
         </CardContent>

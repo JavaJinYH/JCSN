@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MobileApiService, CollectionRecord } from '@/services/MobileApiService';
+import { MobileApiService, useMobileApi, CollectionRecord } from '@/services/MobileApiService';
+import { MobilePageHeader } from '@/components/mobile/MobilePageHeader';
 
 const methodTranslations: Record<string, string> = {
   'phone': '电话',
@@ -32,12 +34,11 @@ export function MobileCollections() {
   const [records, setRecords] = useState<CollectionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [apiUrl, setApiUrl] = useState(MobileApiService.getBaseUrl() || '');
-  const [isCached, setIsCached] = useState(false);
+  const { apiUrl, setIsCached } = useMobileApi();
 
   const loadData = async () => {
     if (!apiUrl) {
-      setError('请先设置 API 地址');
+      setError('请先在"待拍照"页面设置 API 地址');
       setLoading(false);
       return;
     }
@@ -72,13 +73,6 @@ export function MobileCollections() {
     }
   }, [apiUrl]);
 
-  const handleSaveApiUrl = () => {
-    MobileApiService.setBaseUrl(apiUrl);
-    loadData();
-  };
-
-  const isOnline = MobileApiService.isOnline();
-
   const getResultBadge = (result: string) => {
     const translated = translateResult(result);
     switch (translated) {
@@ -97,128 +91,112 @@ export function MobileCollections() {
 
   if (!apiUrl) {
     return (
-      <div className="space-y-6 p-4">
-        <div>
-          <h2 className="text-xl font-bold text-slate-800">催账记录</h2>
-          <p className="text-slate-500 text-sm mt-1">查看催账历史（只读）</p>
+      <div className="min-h-screen bg-slate-50">
+        <MobilePageHeader title="催账记录" subtitle="查看催账历史（只读）" />
+        <div className="p-4 space-y-3">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-blue-800 mb-3">📱 请先设置 API</h3>
+            <p className="text-xs text-blue-700 mb-3">请先在"待拍照"页面设置 API 地址，才能查看数据</p>
+            <Link to="/mobile/pending-documents">
+              <Button className="w-full">去设置</Button>
+            </Link>
+          </div>
         </div>
-        <div className="space-y-2">
-          <div className="text-sm text-slate-600 mb-2">请输入主电脑的局域网地址</div>
-          <input
-            type="text"
-            placeholder="例如: http://192.168.1.100:3456"
-            value={apiUrl}
-            onChange={(e) => setApiUrl(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-          />
-          <Button onClick={handleSaveApiUrl} className="w-full">保存</Button>
-        </div>
-        {error && <div className="text-red-500 text-sm">{error}</div>}
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-800">催账记录</h2>
-          <p className="text-slate-500 text-sm">查看催账历史（只读）</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {!isOnline && (
-            <Badge className="bg-amber-100 text-amber-700">📴 离线</Badge>
-          )}
-          {isCached && (
-            <Badge className="bg-blue-100 text-blue-700">💾 缓存</Badge>
-          )}
-        </div>
-      </div>
+    <div className="min-h-screen bg-slate-50 pb-20">
+      <MobilePageHeader
+        title="催账记录"
+        subtitle="查看催账历史（只读）"
+        onRefresh={loadData}
+      />
+      
+      <div className="p-4 space-y-4">
+        {error && (
+          <div className="text-sm p-2 rounded">
+            <div className="text-amber-600 bg-amber-50 border border-amber-200">{error}</div>
+          </div>
+        )}
 
-      {error && !isCached && <div className="text-red-500 text-sm">{error}</div>}
-      {isCached && <div className="text-amber-600 text-sm">⚠️ {error}</div>}
+        <div className="text-sm text-slate-500 px-1">共 {records.length} 条记录</div>
 
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={loadData}>
-          🔄 刷新
-        </Button>
-      </div>
-
-      <div className="text-sm text-slate-500">共 {records.length} 条记录</div>
-
-      {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <div className="text-slate-500">加载中...</div>
-        </div>
-      ) : records.length === 0 ? (
-        <Card>
-          <CardContent className="py-8 text-center text-slate-500">
-            暂无催账记录
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {records.map((record) => (
-            <Card key={record.id} className="overflow-hidden">
-              <CardContent className="pt-4">
-                <div className="space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="font-medium text-lg">{record.entityName}</div>
-                      <div className="text-sm text-slate-500 mt-1">
-                        {new Date(record.collectionDate).toLocaleDateString('zh-CN')}
-                        {record.collectionTime && ` ${record.collectionTime}`}
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-slate-500">加载中...</div>
+          </div>
+        ) : records.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-slate-500">
+              暂无催账记录
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {records.map((record) => (
+              <Card key={record.id} className="overflow-hidden">
+                <CardContent className="pt-4">
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="font-medium text-lg">{record.entityName}</div>
+                        <div className="text-sm text-slate-500 mt-1">
+                          {new Date(record.collectionDate).toLocaleDateString('zh-CN')}
+                          {record.collectionTime && ` ${record.collectionTime}`}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        {getResultBadge(record.collectionResult)}
+                        {record.collectionAmount && (
+                          <span className="text-orange-600 font-bold text-sm">
+                            {formatCurrency(record.collectionAmount)}
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <div className="flex flex-col items-end gap-1">
-                      {getResultBadge(record.collectionResult)}
-                      {record.collectionAmount && (
-                        <span className="text-orange-600 font-bold text-sm">
-                          {formatCurrency(record.collectionAmount)}
-                        </span>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline">{translateMethod(record.collectionMethod)}</Badge>
+                      {record.attitude && (
+                        <Badge variant="secondary">{record.attitude}</Badge>
                       )}
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="outline">{translateMethod(record.collectionMethod)}</Badge>
-                    {record.attitude && (
-                      <Badge variant="secondary">{record.attitude}</Badge>
+                    {record.communication && (
+                      <div className="bg-slate-50 p-3 rounded-lg">
+                        <div className="text-xs text-slate-500 mb-1">沟通内容</div>
+                        <div className="text-sm text-slate-700">{record.communication}</div>
+                      </div>
+                    )}
+
+                    {record.nextPlan && (
+                      <div className="bg-slate-50 p-3 rounded-lg">
+                        <div className="text-xs text-slate-500 mb-1">后续计划</div>
+                        <div className="text-sm text-slate-700">{record.nextPlan}</div>
+                      </div>
+                    )}
+
+                    {record.followUpDate && (
+                      <div className="text-sm text-slate-500">
+                        下次跟进: {new Date(record.followUpDate).toLocaleDateString('zh-CN')}
+                        {record.followUpTime && ` ${record.followUpTime}`}
+                      </div>
+                    )}
+
+                    {record.remark && (
+                      <div className="text-sm text-slate-500">
+                        备注: {record.remark}
+                      </div>
                     )}
                   </div>
-
-                  {record.communication && (
-                    <div className="bg-slate-50 p-3 rounded-lg">
-                      <div className="text-xs text-slate-500 mb-1">沟通内容</div>
-                      <div className="text-sm text-slate-700">{record.communication}</div>
-                    </div>
-                  )}
-
-                  {record.nextPlan && (
-                    <div className="bg-slate-50 p-3 rounded-lg">
-                      <div className="text-xs text-slate-500 mb-1">后续计划</div>
-                      <div className="text-sm text-slate-700">{record.nextPlan}</div>
-                    </div>
-                  )}
-
-                  {record.followUpDate && (
-                    <div className="text-sm text-slate-500">
-                      下次跟进: {new Date(record.followUpDate).toLocaleDateString('zh-CN')}
-                      {record.followUpTime && ` ${record.followUpTime}`}
-                    </div>
-                  )}
-
-                  {record.remark && (
-                    <div className="text-sm text-slate-500">
-                      备注: {record.remark}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

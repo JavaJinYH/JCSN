@@ -87,10 +87,6 @@ export function SaleNew() {
     loadProjects();
   }, []);
 
-  useEffect(() => {
-    console.log('[SaleNew] selectedEntity 变化:', selectedEntity);
-  }, [selectedEntity]);
-
   const [searchParams] = useSearchParams();
   const draftIdFromUrl = searchParams.get('draftId');
   const isHistoricalFromUrl = searchParams.get('isHistorical') === 'true';
@@ -117,16 +113,12 @@ export function SaleNew() {
   const loadDraft = async (id: string, productsData?: Product[]) => {
     try {
       setLoading(true);
-      console.log('[SaleNew] 开始加载草稿, id:', id);
       const draft = await SaleService.getSaleDraftById(id);
-      console.log('[SaleNew] 草稿数据:', draft);
-      console.log('[SaleNew] paymentEntityId:', draft?.paymentEntityId);
       if (draft) {
         setDraftId(draft.id);
         setSelectedBuyer(draft.buyerId || '__none__');
         setSelectedIntroducer(draft.introducerId || '__none__');
         setSelectedEntity(draft.paymentEntityId || '');
-        console.log('[SaleNew] 设置 selectedEntity 为:', draft.paymentEntityId || '');
         setSelectedProject(draft.projectId || '__none__');
         setPickerName(draft.pickerName || '');
         setPickerPhone(draft.pickerPhone || '');

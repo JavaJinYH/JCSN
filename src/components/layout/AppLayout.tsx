@@ -7,12 +7,17 @@ import { ScreenLockOverlay } from '@/components/ScreenLock';
 import { SettingsService } from '@/services/SettingsService';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
 
+// 检测是否是 Capacitor 移动端
+function isCapacitorMobile() {
+  return typeof window !== 'undefined' && !!(window as any).Capacitor;
+}
+
 function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768 || isCapacitorMobile());
 
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
+      setIsMobile(window.innerWidth < 768 || isCapacitorMobile());
     };
 
     window.addEventListener('resize', handleResize);
@@ -30,6 +35,11 @@ export function AppLayout() {
   const [lockPassword, setLockPassword] = useState('123456');
 
   useEffect(() => {
+    // 只有非移动端（Electron）才加载设置
+    if (isCapacitorMobile()) {
+      return;
+    }
+
     const loadSettings = async () => {
       try {
         const settings = await SettingsService.getSettings();

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 import { MobileApiService } from '@/services/MobileApiService';
 import { MobilePageHeader, MobileList, MobileLoadingState, MobileSectionTitle, MobileCardGrid, MobileCardItem, MobileEmptyState } from '@/components/mobile/MobilePageHeader';
 import { SaleCard } from '@/components/mobile/MobileCards';
@@ -13,12 +14,12 @@ export function MobileSales() {
   const [sales, setSales] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [apiUrl, setApiUrl] = useState(MobileApiService.getBaseUrl() || '');
   const [isCached, setIsCached] = useState(false);
+  const apiUrl = MobileApiService.getBaseUrl();
 
   const loadData = async () => {
     if (!apiUrl) {
-      setError('请先设置 API 地址');
+      setError('请先在"待拍照"页面设置 API 地址');
       setLoading(false);
       return;
     }
@@ -51,12 +52,7 @@ export function MobileSales() {
     } else {
       setLoading(false);
     }
-  }, [apiUrl]);
-
-  const handleSaveApiUrl = () => {
-    MobileApiService.setBaseUrl(apiUrl);
-    loadData();
-  };
+  }, []);
 
   const isOnline = MobileApiService.isOnline();
   const totalAmount = sales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
@@ -66,20 +62,13 @@ export function MobileSales() {
       <div className="min-h-screen bg-slate-50">
         <MobilePageHeader title="销售记录" subtitle="查看销售记录（只读）" />
         <div className="p-4 space-y-3">
-          <div className="text-sm text-slate-600">请输入主电脑的局域网地址</div>
-          <input
-            type="text"
-            placeholder="例如: http://192.168.1.100:3456"
-            value={apiUrl}
-            onChange={(e) => setApiUrl(e.target.value)}
-            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm"
-          />
-          <button
-            onClick={handleSaveApiUrl}
-            className="w-full py-2.5 bg-orange-500 text-white rounded-lg font-medium"
-          >
-            保存
-          </button>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-blue-800 mb-3">📱 请先设置 API</h3>
+            <p className="text-xs text-blue-700 mb-3">请先在"待拍照"页面设置 API 地址，才能查看数据</p>
+            <Link to="/mobile/pending-documents">
+              <Button className="w-full">去设置</Button>
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -90,8 +79,6 @@ export function MobileSales() {
       <MobilePageHeader
         title="销售记录"
         subtitle="查看销售记录（只读）"
-        isOnline={isOnline}
-        isCached={isCached}
         onRefresh={loadData}
       />
 

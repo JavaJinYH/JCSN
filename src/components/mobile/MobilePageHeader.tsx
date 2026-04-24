@@ -1,11 +1,10 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useMobileApi } from '@/services/MobileApiService';
 
 interface MobilePageHeaderProps {
   title: string;
   subtitle?: string;
-  isOnline?: boolean;
-  isCached?: boolean;
   onRefresh?: () => void;
   rightContent?: React.ReactNode;
 }
@@ -13,11 +12,11 @@ interface MobilePageHeaderProps {
 export function MobilePageHeader({
   title,
   subtitle,
-  isOnline = true,
-  isCached = false,
   onRefresh,
   rightContent
 }: MobilePageHeaderProps) {
+  const { isOnline, isCached, refreshStatus } = useMobileApi();
+  
   return (
     <div className="space-y-3 px-4 pt-4 pb-2">
       <div className="flex items-start justify-between gap-4">
@@ -26,7 +25,9 @@ export function MobilePageHeader({
           {subtitle && <p className="text-slate-500 text-sm mt-0.5 truncate">{subtitle}</p>}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {!isOnline && (
+          {isOnline ? (
+            <Badge className="bg-green-100 text-green-700 text-xs">✅ 在线</Badge>
+          ) : (
             <Badge className="bg-amber-100 text-amber-700 text-xs">📴 离线</Badge>
           )}
           {isCached && (
@@ -42,40 +43,6 @@ export function MobilePageHeader({
           </Button>
         </div>
       )}
-    </div>
-  );
-}
-
-interface MobileApiUrlFormProps {
-  apiUrl: string;
-  onApiUrlChange: (url: string) => void;
-  onSave: () => void;
-  error?: string;
-}
-
-export function MobileApiUrlForm({
-  apiUrl,
-  onApiUrlChange,
-  onSave,
-  error
-}: MobileApiUrlFormProps) {
-  return (
-    <div className="space-y-3 px-4 py-4">
-      <div>
-        <h2 className="text-xl font-bold text-slate-800">设置</h2>
-        <p className="text-slate-500 text-sm mt-1">请输入主电脑的局域网地址</p>
-      </div>
-      <div className="space-y-2">
-        <input
-          type="text"
-          placeholder="例如: http://192.168.1.100:3456"
-          value={apiUrl}
-          onChange={(e) => onApiUrlChange(e.target.value)}
-          className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm"
-        />
-        <Button onClick={onSave} className="w-full">保存并连接</Button>
-      </div>
-      {error && <div className="text-red-500 text-sm p-2 bg-red-50 rounded">{error}</div>}
     </div>
   );
 }

@@ -138,6 +138,7 @@ model PurchaseOrder {
   updatedAt    DateTime   @updatedAt
 
   items        Purchase[]
+  photos       PurchaseOrderPhoto[]
 
   @@index([supplierId])
 }
@@ -170,7 +171,6 @@ model Purchase {
   pendingReturnQty Int         @default(0)
   shortageQty     Int         @default(0)
 
-  photos       PurchasePhoto[]
   createdAt    DateTime        @default(now())
 
   returns      PurchaseReturn[]
@@ -385,15 +385,17 @@ model SaleOrderPhoto {
   updatedAt   DateTime @updatedAt
 }
 
-model PurchasePhoto {
-  id          String   @id @default(cuid())
-  purchaseId  String
-  purchase    Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  photoPath   String
-  photoType   String   @default("delivery")
-  photoRemark String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+
+model PurchaseOrderPhoto {
+  id             String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder  PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  photoPath     String
+  photoType     String        @default("receipt")
+  photoRemark   String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 }
 
 model CreditRecord {
