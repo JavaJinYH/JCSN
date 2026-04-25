@@ -3,7 +3,7 @@ appId: com.jiancai.manager
 productName: 折柳建材管理系统
 copyright: Copyright © 2024
 directories:
-  output: release-v4
+  output: release
   buildResources: build
 files:
   - dist/**/*
@@ -25,10 +25,22 @@ asar: false
 compression: maximum
 win:
   target:
-    - portable
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
   signingHashAlgorithms:
     - sha256
   signAndEditExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 折柳建材管理系统
 portable:
   artifactName: 折柳建材管理系统-${version}-portable.exe
   unpackDirName: 折柳建材管理系统
