@@ -41,9 +41,6 @@ export function MobileDocumentDetail() {
       if (data.success) {
         setDoc(data.data || null);
         setIsCached(data.isCached || false);
-        if (data.isCached) {
-          toast('显示缓存数据，请连接WiFi查看最新', 'info');
-        }
         setError('');
       } else {
         setError(data.error || '加载失败');
@@ -82,8 +79,24 @@ export function MobileDocumentDetail() {
   };
 
   const handleRemovePhoto = (photoId: string): void => {
-    setPhotos(prev => prev.filter(p => p.id !== photoId));
+    // 清理临时 URL，防止内存泄漏
+    setPhotos(prev => {
+      const photo = prev.find(p => p.id === photoId);
+      if (photo) {
+        URL.revokeObjectURL(photo.preview);
+      }
+      return prev.filter(p => p.id !== photoId);
+    });
   };
+
+  // 组件卸载时清理所有临时 URL
+  useEffect(() => {
+    return () => {
+      photos.forEach(photo => {
+        URL.revokeObjectURL(photo.preview);
+      });
+    };
+  }, [photos]);
 
   const handleUpload = async (): Promise<void> => {
     if (!apiUrl || !id) {
@@ -134,7 +147,14 @@ export function MobileDocumentDetail() {
 
       if (successCount > 0) {
         toast(`成功上传 ${successCount} 张照片`, 'success');
-        setPhotos(prev => prev.map(p => ({ ...p, isUploaded: true })));
+        // 上传成功后移除照片，释放内存
+        setPhotos(prev => {
+          // 清理已上传照片的临时 URL
+          prev.filter(p => !p.isUploaded).forEach(p => {
+            URL.revokeObjectURL(p.preview);
+          });
+          return [];
+        });
       }
     } catch (e) {
       toast('上传失败，请检查网络', 'error');
