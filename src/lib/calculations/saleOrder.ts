@@ -35,6 +35,8 @@ export function calculateOrderCost(order: {
     cost += (item.costPriceSnapshot || 0) * item.quantity;
   }
 
+  cost += order.deliveryFee || 0;
+
   const orderTotal = order.totalAmount + (order.deliveryFee || 0) - (order.discount || 0);
 
   if (orderTotal > 0) {

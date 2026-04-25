@@ -28,6 +28,17 @@ export const ReportService = {
     });
   },
 
+  async getServiceAppointmentsInPeriod(start: Date, end: Date) {
+    return db.serviceAppointment.findMany({
+      where: {
+        appointmentDate: { gte: start, lte: end },
+        status: '已完成',
+        installerType: '店主',
+        installationFee: { gt: 0 },
+      },
+    });
+  },
+
   async getContacts() {
     return db.contact.findMany({
       where: { contactType: { in: ['customer', 'plumber'] } },

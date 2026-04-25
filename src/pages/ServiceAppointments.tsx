@@ -27,6 +27,11 @@ import { toast } from '@/components/Toast';
 
 const SERVICE_TYPES = ['水暖安装', '维修', '其他'];
 const INSTALLER_TYPES = ['店主', '水电工', '第三方'];
+const INSTALLER_TYPE_NOTES: Record<string, string> = {
+  '店主': '算利润',
+  '水电工': '不算利润',
+  '第三方': '不算利润',
+};
 const STATUS_OPTIONS = ['待上门', '已上门', '待返工', '已完成'];
 const STATUS_COLORS: Record<string, 'success' | 'warning' | 'default' | 'destructive' | 'outline' | 'secondary'> = {
   '待上门': 'secondary',
@@ -50,10 +55,12 @@ export function ServiceAppointments() {
   const [contacts, setContacts] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [projectOrders, setProjectOrders] = useState<any[]>([]);
+  const [availableOrders, setAvailableOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [installerTypeFilter, setInstallerTypeFilter] = useState<string>('all');
+  const [showOrderSelector, setShowOrderSelector] = useState(false);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>('__none__');
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
@@ -100,11 +107,27 @@ export function ServiceAppointments() {
     }
   };
 
+  const handleContactChange = async (contactId: string) => {
+    setFormData({ ...formData, contactId });
+    setSelectedItems([]);
+
+    if (contactId !== '__none__') {
+      try {
+        const orders = await ServiceAppointmentService.getContactOrdersWithItems(contactId);
+        setProjectOrders(orders);
+      } catch (error) {
+        console.error('Failed to load contact orders:', error);
+      }
+    } else {
+      setProjectOrders([]);
+    }
+  };
+
   const handleProjectChange = async (projectId: string) => {
     setFormData({ ...formData, projectId });
     setSelectedProjectId(projectId);
     setSelectedItems([]);
-    
+
     if (projectId !== '__none__') {
       try {
         const orders = await ServiceAppointmentService.getProjectOrdersWithItems(projectId);
@@ -115,6 +138,17 @@ export function ServiceAppointments() {
       }
     } else {
       setProjectOrders([]);
+    }
+  };
+
+  const handleLoadAllOrders = async () => {
+    try {
+      setShowOrderSelector(true);
+      const orders = await ServiceAppointmentService.getAvailableOrdersForService();
+      setAvailableOrders(orders);
+    } catch (error) {
+      console.error('Failed to load orders:', error);
+      toast('加载订单失败', 'error');
     }
   };
 
@@ -207,6 +241,8 @@ export function ServiceAppointments() {
     setSelectedProjectId('__none__');
     setSelectedItems([]);
     setProjectOrders([]);
+    setAvailableOrders([]);
+    setShowOrderSelector(false);
   };
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
@@ -322,7 +358,7 @@ export function ServiceAppointments() {
                 <label className="text-sm font-medium text-slate-700 mb-1 block">联系人（可选）</label>
                 <Select
                   value={formData.contactId}
-                  onValueChange={(value) => setFormData({ ...formData, contactId: value })}
+                  onValueChange={handleContactChange}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="选择联系人" />
@@ -339,7 +375,7 @@ export function ServiceAppointments() {
               </div>
 
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">项目（可选）</label>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">关联项目（可选）</label>
                 <Select
                   value={formData.projectId}
                   onValueChange={handleProjectChange}
@@ -356,6 +392,20 @@ export function ServiceAppointments() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-sm font-medium text-slate-700 mb-1 block">选择销售订单（可选）</label>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={handleLoadAllOrders} className="flex-1">
+                    {showOrderSelector ? '刷新订单列表' : '从销售订单选择'}
+                  </Button>
+                  {projectOrders.length > 0 && (
+                    <span className="flex items-center text-sm text-green-600">
+                      {projectOrders.length}个订单可用
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -399,7 +449,7 @@ export function ServiceAppointments() {
                     <SelectItem value="__none__">无</SelectItem>
                     {INSTALLER_TYPES.map((type) => (
                       <SelectItem key={type} value={type}>
-                        {type}
+                        {type} ({INSTALLER_TYPE_NOTES[type]})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -460,18 +510,19 @@ export function ServiceAppointments() {
             </div>
 
             {/* 选择安装商品 */}
-            {selectedProjectId !== '__none__' && (
+            {(selectedProjectId !== '__none__' || projectOrders.length > 0 || showOrderSelector) && (
               <div className="border rounded-lg p-4 bg-slate-50">
                 <h4 className="font-medium text-slate-700 mb-3">选择要安装的商品（可多选）</h4>
-                {projectOrders.length === 0 ? (
-                  <p className="text-slate-500">该项目暂无订单</p>
+                {projectOrders.length === 0 && !showOrderSelector ? (
+                  <p className="text-slate-500">选择联系人或点击上方按钮加载订单</p>
                 ) : (
                   <div className="space-y-4">
-                    {projectOrders.map((order) => (
+                    {(showOrderSelector ? availableOrders : projectOrders).map((order) => (
                       <div key={order.id} className="border rounded p-3 bg-white">
                         <div className="text-sm font-medium text-slate-700 mb-2">
-                          订单号：{order.invoiceNo || order.writtenInvoiceNo || order.id.slice(0, 8)} 
+                          订单号：{order.invoiceNo || order.writtenInvoiceNo || order.id.slice(0, 8)}
                           <span className="text-slate-500 ml-2">{formatDate(order.saleDate)}</span>
+                          {order.buyer && <span className="ml-2 text-blue-600">({order.buyer.name})</span>}
                         </div>
                         <div className="space-y-2">
                           {order.items.map((item: any) => {
@@ -493,7 +544,7 @@ export function ServiceAppointments() {
                                   <div>
                                     <div className="font-medium">{item.product.name}</div>
                                     <div className="text-sm text-slate-500">
-                                      规格：{item.product.specification || '-'} 
+                                      规格：{item.product.specification || '-'}
                                       <span className="ml-2">购买数量：{item.quantity}</span>
                                     </div>
                                   </div>

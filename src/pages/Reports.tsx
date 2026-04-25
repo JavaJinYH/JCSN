@@ -53,6 +53,7 @@ interface ReportData {
   totalExpense?: number;
   totalRebateOut?: number;
   totalRebateIn?: number;
+  totalServiceIncome?: number;
 }
 
 const COLORS = ['#f97316', '#3b82f6', '#22c55e', '#eab308', '#ef4444', '#8b5cf6'];
@@ -271,17 +272,18 @@ export function Reports() {
   };
 
   const loadProfitReport = async (start: Date, end: Date) => {
-    const [orders, commissions, expenses] = await Promise.all([
+    const [orders, commissions, expenses, serviceAppointments] = await Promise.all([
       ReportService.getSalesInPeriod(start, end),
       DashboardService.getBusinessCommissionsInDateRange(start, end),
       DashboardService.getDailyExpensesInDateRange(start, end),
+      ReportService.getServiceAppointmentsInPeriod(start, end),
     ]);
 
-    const dailyData = new Map<string, { revenue: number; cost: number; profit: number; expense: number; rebateOut: number; rebateIn: number }>();
+    const dailyData = new Map<string, { revenue: number; cost: number; profit: number; expense: number; rebateOut: number; rebateIn: number; serviceIncome: number }>();
     const current = new Date(start);
     while (current <= end) {
       const key = dayjs(current).format('MM-DD');
-      dailyData.set(key, { revenue: 0, cost: 0, profit: 0, expense: 0, rebateOut: 0, rebateIn: 0 });
+      dailyData.set(key, { revenue: 0, cost: 0, profit: 0, expense: 0, rebateOut: 0, rebateIn: 0, serviceIncome: 0 });
       current.setDate(current.getDate() + 1);
     }
 
@@ -320,6 +322,15 @@ export function Reports() {
       }
     });
 
+    serviceAppointments.forEach((appt: any) => {
+      const key = dayjs(appt.appointmentDate).format('MM-DD');
+      const existing = dailyData.get(key);
+      if (existing) {
+        existing.serviceIncome += appt.installationFee || 0;
+        existing.profit += appt.installationFee || 0;
+      }
+    });
+
     setChartData(
       Array.from(dailyData.entries()).map(([date, data]) => ({
         date,
@@ -329,6 +340,7 @@ export function Reports() {
         expense: Math.round(data.expense),
         rebateOut: Math.round(data.rebateOut),
         rebateIn: Math.round(data.rebateIn),
+        serviceIncome: Math.round(data.serviceIncome),
       }))
     );
 
@@ -337,6 +349,7 @@ export function Reports() {
     let totalExpense = 0;
     let totalRebateOut = 0;
     let totalRebateIn = 0;
+    let totalServiceIncome = 0;
     orders.forEach(order => {
       totalRevenue += calculateNetSales(order);
       totalCost += calculateOrderCost(order);
@@ -351,8 +364,11 @@ export function Reports() {
     expenses.forEach((expense: any) => {
       totalExpense += expense.amount || 0;
     });
+    serviceAppointments.forEach((appt: any) => {
+      totalServiceIncome += appt.installationFee || 0;
+    });
 
-    const totalProfit = totalRevenue - totalCost - totalExpense - totalRebateOut + totalRebateIn;
+    const totalProfit = totalRevenue - totalCost - totalExpense - totalRebateOut + totalRebateIn + totalServiceIncome;
 
     setReportData({
       totalSales: totalRevenue,
@@ -363,6 +379,7 @@ export function Reports() {
       totalExpense,
       totalRebateOut,
       totalRebateIn,
+      totalServiceIncome,
     });
   };
 
@@ -559,6 +576,14 @@ export function Reports() {
                   {formatCurrency(reportData.totalRebateIn || 0)}
                 </div>
                 <div className="text-sm text-slate-500">供应商返点</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold text-blue-600">
+                  {formatCurrency(reportData.totalServiceIncome || 0)}
+                </div>
+                <div className="text-sm text-slate-500">服务收入(店主安装)</div>
               </CardContent>
             </Card>
             <Card className="bg-green-50 border-green-200">

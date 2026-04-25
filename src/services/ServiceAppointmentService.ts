@@ -194,4 +194,40 @@ export const ServiceAppointmentService = {
       orderBy: { saleDate: 'desc' },
     });
   },
+
+  // 按联系人获取订单和商品（不依赖项目）
+  async getContactOrdersWithItems(contactId: string) {
+    return db.saleOrder.findMany({
+      where: {
+        buyerId: contactId,
+      },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+      },
+      orderBy: { saleDate: 'desc' },
+    });
+  },
+
+  // 获取所有可用的销售订单（用于服务预约快速选择）
+  async getAvailableOrdersForService() {
+    return db.saleOrder.findMany({
+      where: {
+        status: { not: '已取消' },
+      },
+      include: {
+        buyer: true,
+        items: {
+          include: {
+            product: true,
+          },
+        },
+      },
+      orderBy: { saleDate: 'desc' },
+      take: 50,
+    });
+  }
 };
