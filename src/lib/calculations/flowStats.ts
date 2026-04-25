@@ -11,6 +11,7 @@ interface FlowStatsResult {
   collectionIncome: number;
   purchaseReturnIncome: number;
   supplierCommissionIncome: number;
+  serviceIncome: number;
   purchaseExpense: number;
   saleReturnExpense: number;
   dailyExpenseTotal: number;
@@ -54,6 +55,7 @@ interface DailyExpense {
 
 interface ServiceAppointment {
   installationFee?: number;
+  installerType?: string | null;
 }
 
 /**
@@ -76,6 +78,7 @@ export function calculateFlowStats(
   let collectionIncome = 0;
   let purchaseReturnIncome = 0;
   let supplierCommissionIncome = 0;
+  let serviceIncome = 0;
   let purchaseExpense = 0;
   let saleReturnExpense = 0;
   let dailyExpenseTotal = 0;
@@ -153,11 +156,17 @@ export function calculateFlowStats(
   // 处理安装费
   serviceAppointments.forEach(appt => {
     if (appt.installationFee) {
-      installationFeeTotal += appt.installationFee;
+      if (appt.installerType === '店主') {
+        // 店主安装 → 收入
+        serviceIncome += appt.installationFee;
+      } else {
+        // 其他人安装 → 支出
+        installationFeeTotal += appt.installationFee;
+      }
     }
   });
 
-  const totalIncome = salesIncome + collectionIncome + purchaseReturnIncome + supplierCommissionIncome;
+  const totalIncome = salesIncome + collectionIncome + purchaseReturnIncome + supplierCommissionIncome + serviceIncome;
   const totalExpense = purchaseExpense + saleReturnExpense + dailyExpenseTotal + introducerCommissionExpense + installationFeeTotal;
   const netIncome = totalIncome - totalExpense;
 
@@ -170,6 +179,7 @@ export function calculateFlowStats(
     collectionIncome,
     purchaseReturnIncome,
     supplierCommissionIncome,
+    serviceIncome,
     purchaseExpense,
     saleReturnExpense,
     dailyExpenseTotal,

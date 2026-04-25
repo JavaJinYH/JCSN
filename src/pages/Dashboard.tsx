@@ -35,6 +35,7 @@ interface FlowStats {
   collectionIncome: number;
   purchaseReturnIncome: number;
   supplierCommissionIncome: number;
+  serviceIncome: number;
   purchaseExpense: number;
   saleReturnExpense: number;
   dailyExpenseTotal: number;
@@ -139,6 +140,7 @@ export function Dashboard() {
     alipayAmount: 0,
     transferAmount: 0,
     supplierCommissionIncome: 0,
+    serviceIncome: 0,
     dailyExpenseTotal: 0,
     introducerCommissionExpense: 0,
     installationFeeTotal: 0,
@@ -207,7 +209,7 @@ export function Dashboard() {
       setReceivableStats(receivable);
 
       const lowStock = allProducts.filter(p => p.stock <= (p.minStock || 0));
-      const todayNewOrdersTotal = todayNewOrders.reduce((sum, o) => sum + o.paidAmount, 0);
+      const todayNewOrdersTotal = todayNewOrders.reduce((sum, o) => sum + o.totalAmount, 0);
 
       setStats({
         todaySales: todayNewOrdersTotal,
@@ -218,6 +220,7 @@ export function Dashboard() {
 
       const recentAll = recentNewOrders.map(o => ({
         id: o.id,
+        totalAmount: o.totalAmount,
         paidAmount: o.paidAmount,
         saleDate: o.saleDate,
         buyer: o.buyer,
@@ -235,7 +238,7 @@ export function Dashboard() {
         const dateStr = new Date(order.saleDate).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
         const existing = chartMap.get(dateStr);
         if (existing) {
-          existing.sales += order.paidAmount;
+          existing.sales += order.totalAmount;
           existing.orders += 1;
         }
       });
@@ -577,8 +580,13 @@ export function Dashboard() {
                     </div>
                     <div className="text-right">
                       <div className="font-bold text-orange-600">
-                        {maskCurrency(sale.paidAmount)}
+                        {maskCurrency(sale.totalAmount)}
                       </div>
+                      {sale.paidAmount < sale.totalAmount && (
+                        <div className="text-xs text-slate-500">
+                          已付 {maskCurrency(sale.paidAmount)}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -687,6 +695,12 @@ export function Dashboard() {
                       <span className="font-bold text-green-800">{maskCurrency(flowStats.supplierCommissionIncome)}</span>
                     </div>
                   )}
+                  {flowStats.serviceIncome > 0 && (
+                    <div className="flex justify-between p-3 bg-blue-50 rounded-lg">
+                      <span>服务收入（店主安装）</span>
+                      <span className="font-bold text-blue-800">{maskCurrency(flowStats.serviceIncome)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -717,7 +731,7 @@ export function Dashboard() {
                   )}
                   {flowStats.installationFeeTotal > 0 && (
                     <div className="flex justify-between p-3 bg-orange-50 rounded-lg">
-                      <span>安装费</span>
+                      <span>安装费支出（水电工/第三方）</span>
                       <span className="font-bold text-orange-800">{maskCurrency(flowStats.installationFeeTotal)}</span>
                     </div>
                   )}
