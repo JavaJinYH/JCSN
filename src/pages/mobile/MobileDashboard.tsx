@@ -41,9 +41,7 @@ export function MobileDashboard() {
           const cachedTimestamp = MobileApiService.getCacheTimestamp('/api/dashboard');
           if (cachedTimestamp) setLastUpdated(cachedTimestamp);
         }
-        if (res.isCached) {
-          setError('显示缓存数据，请连接 WiFi 查看最新');
-        } else {
+        if (!res.isCached) {
           setError('');
         }
       } else {

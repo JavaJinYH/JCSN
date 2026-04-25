@@ -71,9 +71,6 @@ export function MobilePendingDocuments() {
       if (data.success) {
         setDocuments(data.data || []);
         setIsCached(data.isCached || false);
-        if (data.isCached) {
-          toast('显示缓存数据，请连接WiFi查看最新', 'info');
-        }
         setError('');
       } else {
         setError(data.error || '加载失败');

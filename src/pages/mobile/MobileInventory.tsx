@@ -32,9 +32,7 @@ export function MobileInventory() {
       if (res.success) {
         setProducts(res.data || []);
         setIsCached(res.isCached || false);
-        if (res.isCached) {
-          setError('显示缓存数据，请连接 WiFi 查看最新');
-        } else {
+        if (!res.isCached) {
           setError('');
         }
       } else {

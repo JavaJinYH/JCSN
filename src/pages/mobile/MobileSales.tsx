@@ -95,7 +95,6 @@ export function MobileSales() {
               const cachedTimestamp = MobileApiService.getCacheTimestamp(`/api/sales?page=1&pageSize=1000`);
               if (cachedTimestamp) setLastUpdated(cachedTimestamp);
             }
-            setError('显示缓存数据，请连接 WiFi 查看最新');
           } else {
             setError(res.error || '加载失败');
           }
@@ -140,9 +139,7 @@ export function MobileSales() {
           const cachedTimestamp = MobileApiService.getCacheTimestamp(`/api/sales?page=${pageNum}&pageSize=${usePageSize}`);
           if (cachedTimestamp) setLastUpdated(cachedTimestamp);
         }
-        if (res.isCached) {
-          setError('显示缓存数据，请连接 WiFi 查看最新');
-        } else {
+        if (!res.isCached) {
           setError('');
         }
         // 自动预加载前5条详情（如果在线且不是缓存数据）
