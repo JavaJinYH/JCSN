@@ -49,6 +49,10 @@ interface ReportData {
   totalOrders: number;
   totalProfit: number;
   avgOrderValue: number;
+  totalCost?: number;
+  totalExpense?: number;
+  totalRebateOut?: number;
+  totalRebateIn?: number;
 }
 
 const COLORS = ['#f97316', '#3b82f6', '#22c55e', '#eab308', '#ef4444', '#8b5cf6'];
@@ -267,13 +271,17 @@ export function Reports() {
   };
 
   const loadProfitReport = async (start: Date, end: Date) => {
-    const orders = await ReportService.getSalesInPeriod(start, end);
+    const [orders, commissions, expenses] = await Promise.all([
+      ReportService.getSalesInPeriod(start, end),
+      DashboardService.getBusinessCommissionsInDateRange(start, end),
+      DashboardService.getDailyExpensesInDateRange(start, end),
+    ]);
 
-    const dailyData = new Map<string, { revenue: number; cost: number; profit: number }>();
+    const dailyData = new Map<string, { revenue: number; cost: number; profit: number; expense: number; rebateOut: number; rebateIn: number }>();
     const current = new Date(start);
     while (current <= end) {
       const key = dayjs(current).format('MM-DD');
-      dailyData.set(key, { revenue: 0, cost: 0, profit: 0 });
+      dailyData.set(key, { revenue: 0, cost: 0, profit: 0, expense: 0, rebateOut: 0, rebateIn: 0 });
       current.setDate(current.getDate() + 1);
     }
 
@@ -283,10 +291,32 @@ export function Reports() {
       if (existing) {
         const netSales = calculateNetSales(order);
         const orderCost = calculateOrderCost(order);
-        
         existing.revenue += netSales;
         existing.cost += orderCost;
         existing.profit += netSales - orderCost;
+      }
+    });
+
+    commissions.forEach((commission: any) => {
+      const key = dayjs(commission.recordedAt).format('MM-DD');
+      const existing = dailyData.get(key);
+      if (existing) {
+        if (commission.type === 'OUTGOING') {
+          existing.rebateOut += commission.amount || 0;
+          existing.profit -= commission.amount || 0;
+        } else {
+          existing.rebateIn += commission.amount || 0;
+          existing.profit += commission.amount || 0;
+        }
+      }
+    });
+
+    expenses.forEach((expense: any) => {
+      const key = dayjs(expense.date).format('MM-DD');
+      const existing = dailyData.get(key);
+      if (existing) {
+        existing.expense += expense.amount || 0;
+        existing.profit -= expense.amount || 0;
       }
     });
 
@@ -296,21 +326,43 @@ export function Reports() {
         revenue: Math.round(data.revenue),
         cost: Math.round(data.cost),
         profit: Math.round(data.profit),
+        expense: Math.round(data.expense),
+        rebateOut: Math.round(data.rebateOut),
+        rebateIn: Math.round(data.rebateIn),
       }))
     );
 
     let totalRevenue = 0;
     let totalCost = 0;
+    let totalExpense = 0;
+    let totalRebateOut = 0;
+    let totalRebateIn = 0;
     orders.forEach(order => {
       totalRevenue += calculateNetSales(order);
       totalCost += calculateOrderCost(order);
     });
+    commissions.forEach((commission: any) => {
+      if (commission.type === 'OUTGOING') {
+        totalRebateOut += commission.amount || 0;
+      } else {
+        totalRebateIn += commission.amount || 0;
+      }
+    });
+    expenses.forEach((expense: any) => {
+      totalExpense += expense.amount || 0;
+    });
+
+    const totalProfit = totalRevenue - totalCost - totalExpense - totalRebateOut + totalRebateIn;
 
     setReportData({
       totalSales: totalRevenue,
+      totalCost,
+      totalProfit,
       totalOrders: orders.length,
-      totalProfit: totalRevenue - totalCost,
       avgOrderValue: orders.length > 0 ? totalRevenue / orders.length : 0,
+      totalExpense,
+      totalRebateOut,
+      totalRebateIn,
     });
   };
 
@@ -450,7 +502,78 @@ export function Reports() {
         </CardHeader>
       </Card>
 
-      {reportData && reportType !== 'returns' && reportType !== 'baddebt' && (
+      {reportData && reportType === 'profit' && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold text-orange-600">
+                  {formatCurrency(reportData.totalSales)}
+                </div>
+                <div className="text-sm text-slate-500">销售总额</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold text-slate-800">
+                  {reportData.totalOrders}
+                </div>
+                <div className="text-sm text-slate-500">订单总数</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold text-slate-800">
+                  {formatCurrency(reportData.avgOrderValue)}
+                </div>
+                <div className="text-sm text-slate-500">平均客单价</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold text-slate-600">
+                  {formatCurrency(reportData.totalCost || 0)}
+                </div>
+                <div className="text-sm text-slate-500">商品成本</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold text-red-600">
+                  {formatCurrency(reportData.totalExpense || 0)}
+                </div>
+                <div className="text-sm text-slate-500">日常支出</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold text-red-600">
+                  {formatCurrency(reportData.totalRebateOut || 0)}
+                </div>
+                <div className="text-sm text-slate-500">介绍人佣金</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold text-green-600">
+                  {formatCurrency(reportData.totalRebateIn || 0)}
+                </div>
+                <div className="text-sm text-slate-500">供应商返点</div>
+              </CardContent>
+            </Card>
+            <Card className="bg-green-50 border-green-200">
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold text-green-700">
+                  {formatCurrency(reportData.totalProfit)}
+                </div>
+                <div className="text-sm text-green-600">净利润</div>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
+
+      {reportData && reportType !== 'profit' && reportType !== 'returns' && reportType !== 'baddebt' && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <CardContent className="pt-6">

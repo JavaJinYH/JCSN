@@ -44,7 +44,9 @@ export function Suppliers() {
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierWithRelations | null>(null);
+  const [detailSupplier, setDetailSupplier] = useState<{ supplier: SupplierWithRelations | null; rebates: any[] }>({ supplier: null, rebates: [] });
   const [filterValues, setFilterValues] = useState<Record<string, any>>({});
 
   const [formData, setFormData] = useState({
@@ -201,6 +203,16 @@ export function Suppliers() {
     setShowEditDialog(true);
   };
 
+  const handleViewDetail = async (supplier: SupplierWithRelations) => {
+    const rebates = await db.businessCommission.findMany({
+      where: { supplierId: supplier.id },
+      include: { contact: true, product: true },
+      orderBy: { recordedAt: 'desc' },
+    });
+    setDetailSupplier({ supplier, rebates });
+    setShowDetailDialog(true);
+  };
+
   const handleEdit = async () => {
     if (!selectedSupplier) return;
     if (!editFormData.name.trim()) {
@@ -306,9 +318,14 @@ export function Suppliers() {
                       {supplier.remark || '-'}
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm" onClick={() => handleOpenEdit(supplier)}>
-                        编辑
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => handleViewDetail(supplier)}>
+                          详情
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleOpenEdit(supplier)}>
+                          编辑
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -457,6 +474,73 @@ export function Suppliers() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditDialog(false)}>取消</Button>
             <Button onClick={handleEdit}>保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>供应商详情 - {detailSupplier.supplier?.name}</DialogTitle>
+          </DialogHeader>
+          {detailSupplier.supplier && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm text-slate-500">供应商编码</div>
+                  <div className="font-medium">{detailSupplier.supplier.code}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-500">联系人</div>
+                  <div className="font-medium">{detailSupplier.supplier.supplierContact?.name || '-'}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-500">联系电话</div>
+                  <div className="font-medium">{detailSupplier.supplier.phone || '-'}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-500">地址</div>
+                  <div className="font-medium">{detailSupplier.supplier.address || '-'}</div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-medium mb-3">返点记录 ({detailSupplier.rebates.length})</h4>
+                {detailSupplier.rebates.length === 0 ? (
+                  <div className="text-slate-500 text-center py-4">暂无返点记录</div>
+                ) : (
+                  <div className="space-y-2">
+                    {detailSupplier.rebates.map((rebate) => (
+                      <div key={rebate.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg text-sm">
+                        <div>
+                          <div className="font-medium">
+                            {rebate.contact?.name || '未知联系人'}
+                            <span className="ml-2 text-xs text-slate-500">
+                              {rebate.type === 'OUTGOING' ? '支出' : '收入'}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {rebate.product?.name || '-'} | {new Date(rebate.recordedAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className={`font-medium ${rebate.type === 'OUTGOING' ? 'text-red-600' : 'text-green-600'}`}>
+                          {rebate.type === 'OUTGOING' ? '-' : '+'}{formatCurrency(rebate.amount)}
+                        </div>
+                      </div>
+                    ))}
+                    <div className="flex justify-between p-3 bg-green-50 rounded-lg font-medium">
+                      <span>累计返点（收入）</span>
+                      <span className="text-green-600">
+                        +{formatCurrency(detailSupplier.rebates.filter(r => r.type === 'INCOMING').reduce((sum, r) => sum + r.amount, 0))}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDetailDialog(false)}>关闭</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

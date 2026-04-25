@@ -206,7 +206,7 @@ export function Dashboard() {
       setReminderAppointments(upcomingAppointments);
       setReceivableStats(receivable);
 
-      const lowStock = allProducts.filter(p => p.stock <= p.minStock && p.minStock > 0);
+      const lowStock = allProducts.filter(p => p.stock <= (p.minStock || 0));
       const todayNewOrdersTotal = todayNewOrders.reduce((sum, o) => sum + o.paidAmount, 0);
 
       setStats({

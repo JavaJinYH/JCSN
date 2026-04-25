@@ -252,8 +252,9 @@ export function Sales() {
 
   const tableProps = useDataTable<SaleListItem>({ data: filteredSales, defaultPageSize: 20 });
 
-  const totalAmount = filteredSales.reduce((sum, s) => sum + s.paidAmount, 0);
-  const totalProfit = filteredSales.reduce((sum, s) => sum + (s.paidAmount - (s.totalAmount - s.discount)), 0);
+  const totalSalesAmount = filteredSales.reduce((sum, s) => sum + s.totalAmount, 0);
+  const totalPaidAmount = filteredSales.reduce((sum, s) => sum + s.paidAmount, 0);
+  const totalUnpaidAmount = totalSalesAmount - totalPaidAmount;
 
   const handleViewSale = (sale: SaleListItem) => {
     setSelectedSale({ id: sale.id });
@@ -283,8 +284,9 @@ export function Sales() {
       <SaleStats
         totalCount={filteredSales.length}
         newCount={filteredSales.length}
-        paidAmount={totalAmount}
-        profit={totalProfit}
+        paidAmount={totalPaidAmount}
+        unpaidAmount={totalUnpaidAmount}
+        salesAmount={totalSalesAmount}
       />
 
       <Card>

@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { AuditLogService } from './AuditLogService';
 
 export interface CreateProductDTO {
   code?: string;
@@ -21,7 +22,7 @@ export interface CreateProductDTO {
 
 export const ProductService = {
   async createProduct(data: CreateProductDTO) {
-    return db.product.create({
+    const product = await db.product.create({
       data: {
         code: data.code || null,
         name: data.name,
@@ -42,6 +43,15 @@ export const ProductService = {
       },
       include: { category: true },
     });
+
+    await AuditLogService.createAuditLog({
+      actionType: 'CREATE',
+      entityType: 'Product',
+      entityId: product.id,
+      newValue: JSON.stringify({ name: product.name, category: product.category?.name }),
+    });
+
+    return product;
   },
 
   async getProducts(filters?: {
@@ -133,6 +143,16 @@ export const ProductService = {
   },
 
   async deleteProduct(id: string) {
+    const product = await db.product.findUnique({ where: { id } });
+    if (!product) throw new Error('商品不存在');
+
+    await AuditLogService.createAuditLog({
+      actionType: 'DELETE',
+      entityType: 'Product',
+      entityId: id,
+      oldValue: JSON.stringify({ name: product.name }),
+    });
+
     return db.product.delete({ where: { id } });
   },
 

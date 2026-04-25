@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { AuditLogService } from './AuditLogService';
 
 export interface CreateContactDTO {
   name: string;
@@ -61,6 +62,14 @@ export const ContactService = {
       },
       include: { phonesObj: true },
     });
+
+    await AuditLogService.createAuditLog({
+      actionType: 'CREATE',
+      entityType: 'Contact',
+      entityId: contact.id,
+      newValue: JSON.stringify({ name: contact.name, type: contact.contactType }),
+    });
+
     return contact;
   },
 
@@ -119,6 +128,16 @@ export const ContactService = {
   },
 
   async deleteContact(id: string) {
+    const contact = await db.contact.findUnique({ where: { id } });
+    if (!contact) throw new Error('联系人不存在');
+
+    await AuditLogService.createAuditLog({
+      actionType: 'DELETE',
+      entityType: 'Contact',
+      entityId: id,
+      oldValue: JSON.stringify({ name: contact.name, type: contact.contactType }),
+    });
+
     return db.contact.delete({ where: { id } });
   },
 

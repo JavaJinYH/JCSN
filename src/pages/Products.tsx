@@ -111,17 +111,37 @@ export function Products() {
       return;
     }
 
+    const names = categoryName.split('\n').map(n => n.trim()).filter(n => n);
+
+    if (names.length === 0) {
+      toast('请输入分类名称', 'warning');
+      return;
+    }
+
     try {
-      await SettingsService.createCategory({
-        name: categoryName.trim(),
-        description: categoryDesc.trim() || undefined,
-      });
+      let successCount = 0;
+      for (const name of names) {
+        try {
+          await SettingsService.createCategory({
+            name,
+            description: categoryDesc.trim() || undefined,
+          });
+          successCount++;
+        } catch (err) {
+          console.error(`添加分类 "${name}" 失败:`, err);
+        }
+      }
 
       setShowCategoryDialog(false);
       setCategoryName('');
       setCategoryDesc('');
       loadCategories();
-      toast('分类添加成功', 'success');
+
+      if (successCount === names.length) {
+        toast(`成功添加 ${successCount} 个分类`, 'success');
+      } else {
+        toast(`成功添加 ${successCount}/${names.length} 个分类，部分重复已跳过`, 'warning');
+      }
     } catch (error) {
       console.error('Failed to add category:', error);
       toast('添加分类失败', 'error');
@@ -328,14 +348,19 @@ export function Products() {
               <label className="text-sm font-medium mb-1 block">
                 分类名称 <span className="text-red-500">*</span>
               </label>
-              <Input
+              <textarea
                 value={categoryName}
                 onChange={(e) => setCategoryName(e.target.value)}
-                placeholder="输入分类名称"
+                placeholder="输入分类名称（支持批量：每行一个）"
+                rows={6}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
               />
+              <p className="text-xs text-slate-500 mt-1">
+                💡 每行一个分类名称，可一次性添加多个
+              </p>
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">分类描述</label>
+              <label className="text-sm font-medium mb-1 block">分类描述（批量时统一描述）</label>
               <Input
                 value={categoryDesc}
                 onChange={(e) => setCategoryDesc(e.target.value)}
@@ -347,7 +372,7 @@ export function Products() {
             <Button variant="outline" onClick={() => setShowCategoryDialog(false)}>
               取消
             </Button>
-            <Button onClick={handleAddCategory}>保存</Button>
+            <Button onClick={handleAddCategory}>添加</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

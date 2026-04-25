@@ -24,6 +24,21 @@ const ACTION_TYPE_MAP: Record<string, { label: string; color: string }> = {
   LOGOUT: { label: '登出', color: 'bg-gray-100 text-gray-800' },
 };
 
+const ENTITY_TYPE_MAP: Record<string, string> = {
+  Contact: '联系人',
+  BizProject: '项目',
+  SaleOrder: '销售订单',
+  PurchaseOrder: '进货单',
+  Entity: '挂靠主体',
+  Product: '商品',
+  ServiceAppointment: '服务预约',
+  DailyExpense: '日常支出',
+  BusinessCommission: '业务佣金',
+  SaleReturn: '销售退货',
+  PurchaseReturn: '进货退货',
+  Supplier: '供应商',
+};
+
 export function AuditLogs() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,6 +101,10 @@ export function AuditLogs() {
     return Array.from(types);
   };
 
+  const getEntityLabel = (type: string) => {
+    return ENTITY_TYPE_MAP[type] || type;
+  };
+
   const formatTimestamp = (ts: Date) => {
     const date = new Date(ts);
     return date.toLocaleString('zh-CN', {
@@ -144,7 +163,7 @@ export function AuditLogs() {
               <option value="all">全部实体</option>
               {getEntityTypes().map((type) => (
                 <option key={type} value={type}>
-                  {type}
+                  {getEntityLabel(type)}
                 </option>
               ))}
             </select>
@@ -224,7 +243,7 @@ export function AuditLogs() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary">{log.entityType}</Badge>
+                        <Badge variant="secondary">{getEntityLabel(log.entityType)}</Badge>
                       </TableCell>
                       <TableCell className="font-mono text-xs">
                         {log.entityId.slice(0, 12)}...

@@ -156,15 +156,19 @@ export function SaleCart({
                         const newSaleUnit = v;
                         const newUnitRatio = item.purchaseUnit && newSaleUnit === item.purchaseUnit ? item.unitRatio : 1;
                         let newUnitPrice = item.salePrice;
+                        let newCostPrice = item.costPrice;
                         if (item.purchaseUnit && newSaleUnit === item.purchaseUnit) {
                           newUnitPrice = item.salePrice * item.unitRatio;
+                          newCostPrice = item.costPrice * item.unitRatio;
                         } else if (item.purchaseUnit && newSaleUnit === item.product.unit) {
                           newUnitPrice = item.salePrice / item.unitRatio;
+                          newCostPrice = item.costPrice / item.unitRatio;
                         }
                         onUpdateCartItem(item.product.id, {
                           saleUnit: newSaleUnit,
                           unitRatio: newUnitRatio,
                           unitPrice: newUnitPrice,
+                          costPrice: newCostPrice,
                         });
                       }}
                     >

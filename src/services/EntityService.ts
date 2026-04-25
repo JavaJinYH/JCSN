@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { AuditLogService } from './AuditLogService';
 
 export const EntityService = {
   async getEntities() {
@@ -101,7 +102,7 @@ export const EntityService = {
   },
 
   async createEntity(data: { name: string; entityType?: string; contactId?: string; address?: string; remark?: string }) {
-    return db.entity.create({
+    const entity = await db.entity.create({
       data: {
         name: data.name,
         entityType: data.entityType || 'personal',
@@ -110,6 +111,15 @@ export const EntityService = {
         remark: data.remark,
       },
     });
+
+    await AuditLogService.createAuditLog({
+      actionType: 'CREATE',
+      entityType: 'Entity',
+      entityId: entity.id,
+      newValue: JSON.stringify({ name: entity.name, type: entity.entityType }),
+    });
+
+    return entity;
   },
 
   async updateEntity(id: string, data: { name?: string; entityType?: string; contactId?: string; address?: string; remark?: string }) {
@@ -126,6 +136,16 @@ export const EntityService = {
   },
 
   async deleteEntity(id: string) {
+    const entity = await db.entity.findUnique({ where: { id } });
+    if (!entity) throw new Error('挂靠主体不存在');
+
+    await AuditLogService.createAuditLog({
+      actionType: 'DELETE',
+      entityType: 'Entity',
+      entityId: id,
+      oldValue: JSON.stringify({ name: entity.name, type: entity.entityType }),
+    });
+
     return db.entity.delete({
       where: { id },
     });

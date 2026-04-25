@@ -101,6 +101,7 @@ export function SaleProductSelect({
                   <div className="flex flex-col">
                     <span className="text-orange-600 font-bold">
                       {product.referencePrice ? formatCurrency(product.referencePrice) : '-'}
+                      {product.referencePrice && <span className="text-xs font-normal">/{product.unit}</span>}
                     </span>
                     {historicalPrices.has(product.id) && (
                       <span className="text-xs text-slate-400">
@@ -112,7 +113,7 @@ export function SaleProductSelect({
                     variant={product.stock === 0 ? 'destructive' : 'secondary'}
                     className="text-xs"
                   >
-                    {product.stock === 0 ? '缺货' : `库存: ${product.stock}`}
+                    {product.stock === 0 ? '缺货' : `库存: ${product.stock}${product.unit}`}
                   </Badge>
                 </div>
               </button>

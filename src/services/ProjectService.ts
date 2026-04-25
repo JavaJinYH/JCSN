@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { AuditLogService } from './AuditLogService';
 
 export const ProjectService = {
   async getEntities() {
@@ -57,7 +58,7 @@ export const ProjectService = {
     startDate?: Date;
     endDate?: Date;
   }) {
-    return db.bizProject.create({
+    const project = await db.bizProject.create({
       data: {
         name: data.name,
         entityId: data.entityId,
@@ -70,6 +71,15 @@ export const ProjectService = {
         endDate: data.endDate,
       },
     });
+
+    await AuditLogService.createAuditLog({
+      actionType: 'CREATE',
+      entityType: 'BizProject',
+      entityId: project.id,
+      newValue: JSON.stringify({ name: project.name }),
+    });
+
+    return project;
   },
 
   async createAuditLog(data: {
@@ -114,6 +124,16 @@ export const ProjectService = {
   },
 
   async deleteProject(id: string) {
+    const project = await db.bizProject.findUnique({ where: { id } });
+    if (!project) throw new Error('项目不存在');
+
+    await AuditLogService.createAuditLog({
+      actionType: 'DELETE',
+      entityType: 'BizProject',
+      entityId: id,
+      oldValue: JSON.stringify({ name: project.name }),
+    });
+
     return db.bizProject.delete({
       where: { id },
     });

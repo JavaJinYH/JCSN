@@ -135,15 +135,20 @@ export function SaleNew() {
         for (const item of draft.items) {
           const product = productList.find(p => p.id === item.productId);
           if (product) {
+            const isPurchaseUnit = item.saleUnit === product.purchaseUnit;
+            const effectiveUnitRatio = item.unitRatio || 1;
+            const costPrice = isPurchaseUnit
+              ? (product.lastPurchasePrice || 0)
+              : (product.lastPurchasePrice || 0) / effectiveUnitRatio;
             cartItems.push({
               product,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
-              costPrice: product.lastPurchasePrice || 0,
-              salePrice: product.referencePrice || 0,
+              costPrice,
+              salePrice: (item as any).sellingPriceSnapshot || product.referencePrice || 0,
               purchaseUnit: product.purchaseUnit || null,
-              saleUnit: product.unit,
-              unitRatio: product.unitRatio || 1,
+              saleUnit: item.saleUnit || product.unit,
+              unitRatio: effectiveUnitRatio,
             });
           }
         }
@@ -302,7 +307,7 @@ export function SaleNew() {
           product,
           quantity: 1,
           unitPrice: historicalPrice || product.referencePrice || 0,
-          costPrice: product.lastPurchasePrice || 0,
+          costPrice: (product.lastPurchasePrice || 0) / (product.unitRatio || 1),
           salePrice: product.referencePrice || 0,
           purchaseUnit: product.purchaseUnit || null,
           saleUnit: product.unit,

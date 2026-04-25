@@ -738,6 +738,8 @@ model SaleSlipItem {
   quantity  Int
   unitPrice Float
   subtotal  Float
+  unitRatio Int      @default(1)
+  saleUnit  String?
   createdAt DateTime @default(now())
 }
 

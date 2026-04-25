@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { generateInvoiceNo } from '@/lib/utils';
 import { calculateReturnTotal } from '@/lib/calculations';
+import { AuditLogService } from './AuditLogService';
 import { ContactService } from './ContactService';
 import { EntityService } from './EntityService';
 import { ProductService } from './ProductService';
@@ -51,6 +52,8 @@ export interface CreateOrderItemDTO {
   subtotal: number;
   costPriceSnapshot: number;
   sellingPriceSnapshot: number;
+  unitRatio?: number;
+  saleUnit?: string;
 }
 
 export interface SaleOrderResult {
@@ -236,6 +239,18 @@ export const SaleService = {
       }
     }
 
+    await AuditLogService.createAuditLog({
+      actionType: 'CREATE',
+      entityType: 'SaleOrder',
+      entityId: sale.id,
+      newValue: JSON.stringify({
+        invoiceNo: sale.invoiceNo,
+        totalAmount: sale.totalAmount,
+        paidAmount: sale.paidAmount,
+        itemCount: data.items.length,
+      }),
+    });
+
     return { sale, items: data.items, receivable, deliveryRecord, photos: savedPhotos };
   },
 
@@ -301,7 +316,7 @@ export const SaleService = {
         buyer: true,
         introducer: true,
         picker: true,
-        paymentEntity: true,
+        paymentEntity: { include: { contact: true } },
         project: true,
         items: { include: { product: true } },
         payments: true,
@@ -390,6 +405,8 @@ export const SaleService = {
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             subtotal: item.subtotal,
+            unitRatio: item.unitRatio || 1,
+            saleUnit: item.saleUnit || null,
           })),
         },
         payments: JSON.stringify(data.payments || []),
@@ -440,6 +457,8 @@ export const SaleService = {
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             subtotal: item.subtotal,
+            unitRatio: item.unitRatio || 1,
+            saleUnit: item.saleUnit || null,
           })),
         } : undefined,
         payments: data.payments ? JSON.stringify(data.payments) : undefined,

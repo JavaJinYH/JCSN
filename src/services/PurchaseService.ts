@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { generateBatchNo } from '@/lib/utils';
+import { AuditLogService } from './AuditLogService';
 import { CounterService } from './CounterService';
 
 export interface CreatePhotoDTO {
@@ -119,6 +120,17 @@ export const PurchaseService = {
         },
       });
     }
+
+    await AuditLogService.createAuditLog({
+      actionType: 'CREATE',
+      entityType: 'PurchaseOrder',
+      entityId: order.id,
+      newValue: JSON.stringify({
+        batchNo,
+        totalAmount: createdItems.reduce((sum, item) => sum + item.totalAmount, 0),
+        itemCount: createdItems.length,
+      }),
+    });
 
     return { order, items: createdItems, photos: savedPhotos, payment };
   },
@@ -422,10 +434,13 @@ export const PurchaseService = {
   async createExchangePurchase(originalPurchaseId: string, newQuantity: number, newUnitPrice: number) {
     const original = await db.purchase.findUnique({
       where: { id: originalPurchaseId },
-      include: { order: true },
+      include: { order: true, product: true },
     });
 
     if (!original) throw new Error('原进货记录不存在');
+
+    const unitRatio = original.product.unitRatio || 1;
+    const stockIncrement = newQuantity * unitRatio;
 
     const newPurchase = await db.purchase.create({
       data: {
@@ -446,7 +461,7 @@ export const PurchaseService = {
     await db.product.update({
       where: { id: original.productId },
       data: {
-        stock: { increment: newQuantity },
+        stock: { increment: stockIncrement },
         lastPurchasePrice: newUnitPrice,
       },
     });
@@ -457,15 +472,17 @@ export const PurchaseService = {
   async deletePurchaseOrder(id: string) {
     const order = await db.purchaseOrder.findUnique({
       where: { id },
-      include: { items: true },
+      include: { items: { include: { product: true } } },
     });
 
     if (!order) throw new Error('进货单不存在');
 
     for (const item of order.items) {
+      const unitRatio = item.product.unitRatio || 1;
+      const stockDecrement = item.quantity * unitRatio;
       await db.product.update({
         where: { id: item.productId },
-        data: { stock: { decrement: item.quantity } },
+        data: { stock: { decrement: stockDecrement } },
       });
     }
 
