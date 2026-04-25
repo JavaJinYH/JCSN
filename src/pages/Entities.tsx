@@ -100,7 +100,7 @@ export function Entities() {
   const loadContacts = async () => {
     try {
       const contactsData = await EntityService.getContacts();
-      setContacts(contactsData.filter(c => c.contactType === 'customer' || c.contactType === 'company'));
+      setContacts(contactsData.filter(c => c.contactType === 'customer' || c.contactType === 'company' || c.contactType === 'plumber'));
     } catch (error) {
       console.error('[Entities] 加载联系人失败:', error);
     }
@@ -445,7 +445,7 @@ export function Entities() {
                   <SelectItem value="__none__">无</SelectItem>
                   {contacts.map((contact) => (
                     <SelectItem key={contact.id} value={contact.id}>
-                      {contact.name} ({contact.contactType === 'plumber' ? '水电工' : '客户'})
+                      {contact.name} ({contact.contactType === 'plumber' ? '水电工' : contact.contactType === 'company' ? '公司' : '客户'})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -526,7 +526,7 @@ export function Entities() {
                   <SelectItem value="__none__">无</SelectItem>
                   {contacts.map((contact) => (
                     <SelectItem key={contact.id} value={contact.id}>
-                      {contact.name} ({contact.contactType === 'plumber' ? '水电工' : '客户'})
+                      {contact.name} ({contact.contactType === 'plumber' ? '水电工' : contact.contactType === 'company' ? '公司' : '客户'})
                     </SelectItem>
                   ))}
                 </SelectContent>

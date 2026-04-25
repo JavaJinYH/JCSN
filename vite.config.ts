@@ -10,16 +10,13 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  esbuild: {
+    drop: ['console', 'debugger'],
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    // 移动端优化：代码压缩更彻底（esbuild更快
     minify: 'esbuild',
-    esbuild: {
-      // 生产环境移除 console
-      drop: ['console', 'debugger'],
-    },
-    // 移动端优化：提升首屏加载
     target: 'es2020',
     cssMinify: true,
     rollupOptions: {
@@ -29,7 +26,6 @@ export default defineConfig({
           charts: ['recharts'],
           ui: ['@radix-ui/react-dialog', '@radix-ui/react-select', 'zod'],
         },
-        // 优化 chunk 命名
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]',

@@ -212,7 +212,7 @@ export const PurchaseService = {
   async confirmPurchaseDelivery(id: string, actualQuantities: { [purchaseId: string]: number }) {
     const order = await db.purchaseOrder.findUnique({
       where: { id },
-      include: { items: true },
+      include: { items: { include: { product: true } } },
     });
 
     if (!order) throw new Error('进货单不存在');
@@ -222,6 +222,8 @@ export const PurchaseService = {
       const orderedQty = item.quantity;
       const actualQty = actualQuantities[item.id] ?? orderedQty;
       const shortageQty = Math.max(0, orderedQty - actualQty);
+      const unitRatio = item.product.unitRatio || 1;
+      const stockIncrement = actualQty * unitRatio;
 
       if (shortageQty > 0) {
         hasShortage = true;
@@ -240,7 +242,7 @@ export const PurchaseService = {
       await db.product.update({
         where: { id: item.productId },
         data: {
-          stock: { increment: actualQty },
+          stock: { increment: stockIncrement },
           lastPurchasePrice: item.unitPrice,
         },
       });
@@ -266,6 +268,9 @@ export const PurchaseService = {
 
     if (!purchase) throw new Error('进货记录不存在');
 
+    const unitRatio = purchase.product.unitRatio || 1;
+    const stockDecrement = quantity * unitRatio;
+
     const returnRecord = await db.purchaseReturn.create({
       data: {
         purchaseId,
@@ -281,7 +286,7 @@ export const PurchaseService = {
     await db.product.update({
       where: { id: purchase.productId },
       data: {
-        stock: { decrement: quantity },
+        stock: { decrement: stockDecrement },
       },
     });
 
@@ -321,13 +326,15 @@ export const PurchaseService = {
   async confirmReturn(purchaseId: string, orderId: string | null, returnQty: number, unitPrice: number, isPriceVolatile: boolean, isCompleted: boolean) {
     const purchase = await db.purchase.findUnique({
       where: { id: purchaseId },
-      include: { supplier: true },
+      include: { supplier: true, product: true },
     });
 
     if (!purchase) throw new Error('进货记录不存在');
 
     if (returnQty <= 0) throw new Error('退货数量必须大于0');
 
+    const unitRatio = purchase.product.unitRatio || 1;
+    const stockDecrement = returnQty * unitRatio;
     const totalRefund = returnQty * unitPrice;
 
     const returnRecord = await db.purchaseReturn.create({
@@ -350,7 +357,7 @@ export const PurchaseService = {
     if (isCompleted) {
       await db.product.update({
         where: { id: purchase.productId },
-        data: { stock: { decrement: returnQty } },
+        data: { stock: { decrement: stockDecrement } },
       });
 
       if (purchase.pendingReturnQty > 0) {
@@ -385,6 +392,9 @@ export const PurchaseService = {
 
     if (!purchase) throw new Error('进货记录不存在');
 
+    const unitRatio = purchase.product.unitRatio || 1;
+    const stockDecrement = quantity * unitRatio;
+
     const returnRecord = await db.purchaseReturn.create({
       data: {
         purchaseId,
@@ -403,7 +413,7 @@ export const PurchaseService = {
 
     await db.product.update({
       where: { id: purchase.productId },
-      data: { stock: { decrement: quantity } },
+      data: { stock: { decrement: stockDecrement } },
     });
 
     return returnRecord;

@@ -40,6 +40,7 @@ interface PurchaseItemRow {
   productId: string;
   quantity: string;
   unitPrice: string;
+  purchaseUnit: string;
 }
 
 interface PurchaseForReturn {
@@ -85,7 +86,7 @@ export function Purchases() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const prefilledDataRef = useRef<any[] | null>(null);
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItemRow[]>([
-    { id: '1', productId: '', quantity: '', unitPrice: '' }
+    { id: '1', productId: '', quantity: '', unitPrice: '', purchaseUnit: '' }
   ]);
   const [commonSupplierId, setCommonSupplierId] = useState('');
   const [commonBatchNo, setCommonBatchNo] = useState('');
@@ -121,12 +122,16 @@ export function Purchases() {
 
   useEffect(() => {
     if (prefilledDataRef.current && prefilledDataRef.current.length > 0 && products.length > 0) {
-      setPurchaseItems(prefilledDataRef.current.map((item: any, index: number) => ({
-        id: String(index + 1),
-        productId: String(item.productId),
-        quantity: String(item.quantity),
-        unitPrice: String(item.unitPrice),
-      })));
+      setPurchaseItems(prefilledDataRef.current.map((item: any, index: number) => {
+        const product = products.find(p => p.id === item.productId);
+        return {
+          id: String(index + 1),
+          productId: String(item.productId),
+          quantity: String(item.quantity),
+          unitPrice: String(item.unitPrice),
+          purchaseUnit: product?.purchaseUnit || '',
+        };
+      }));
       setShowAddDialog(true);
       prefilledDataRef.current = null;
       navigate('.', { replace: true });
@@ -237,7 +242,7 @@ export function Purchases() {
       });
 
       setShowAddDialog(false);
-      setPurchaseItems([{ id: '1', productId: '', quantity: '', unitPrice: '' }]);
+      setPurchaseItems([{ id: '1', productId: '', quantity: '', unitPrice: '', purchaseUnit: '' }]);
       setCommonSupplierId('');
       setCommonBatchNo('');
       setCommonRemark('');
@@ -367,7 +372,7 @@ export function Purchases() {
                         <div key={item.id} className="flex items-center justify-between p-2 bg-slate-50 rounded text-sm">
                           <div>
                             <span className="font-medium">{item.product?.name}</span>
-                            <span className="text-slate-500 ml-2">x{item.quantity}</span>
+                            <span className="text-slate-500 ml-2">x{item.quantity} {item.product?.purchaseUnit || item.product?.unit || ''}</span>
                           </div>
                           <div className="text-right">
                             <span className="font-mono">{formatCurrency(item.totalAmount)}</span>
@@ -425,7 +430,7 @@ export function Purchases() {
                     <th className="text-left p-2 text-sm font-medium">操作</th>
                     <th className="text-left p-2 text-sm font-medium">商品</th>
                     <th className="text-left p-2 text-sm font-medium w-24">数量</th>
-                    <th className="text-left p-2 text-sm font-medium w-28">单价 (元)</th>
+                    <th className="text-left p-2 text-sm font-medium">单价 (元/单位)</th>
                     <th className="text-right p-2 text-sm font-medium w-28">小计 (元)</th>
                   </tr>
                 </thead>
@@ -454,7 +459,12 @@ export function Purchases() {
                             onValueChange={(v) => {
                               const product = products.find(p => p.id === v);
                               const newItems = purchaseItems.map(i =>
-                                i.id === item.id ? { ...i, productId: v, unitPrice: product ? String(product.lastPurchasePrice || '') : '' } : i
+                                i.id === item.id ? {
+                                  ...i,
+                                  productId: v,
+                                  unitPrice: product ? String(product.lastPurchasePrice || '') : '',
+                                  purchaseUnit: product?.purchaseUnit || ''
+                                } : i
                               );
                               setPurchaseItems(newItems);
                             }}
@@ -488,18 +498,23 @@ export function Purchases() {
                           />
                         </td>
                         <td className="p-2">
-                          <Input
-                            type="number"
-                            value={item.unitPrice}
-                            onChange={(e) => {
-                              const newItems = purchaseItems.map(i =>
-                                i.id === item.id ? { ...i, unitPrice: e.target.value } : i
-                              );
-                              setPurchaseItems(newItems);
-                            }}
-                            className="h-8"
-                            placeholder="单价"
-                          />
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              value={item.unitPrice}
+                              onChange={(e) => {
+                                const newItems = purchaseItems.map(i =>
+                                  i.id === item.id ? { ...i, unitPrice: e.target.value } : i
+                                );
+                                setPurchaseItems(newItems);
+                              }}
+                              className="h-8"
+                              placeholder="单价"
+                            />
+                            <span className="text-sm text-slate-500 whitespace-nowrap">
+                              {item.purchaseUnit || '元'}
+                            </span>
+                          </div>
                         </td>
                         <td className="p-2 text-right font-mono">
                           {formatCurrency(subtotal)}
@@ -518,7 +533,8 @@ export function Purchases() {
                   id: String(Date.now()),
                   productId: '',
                   quantity: '',
-                  unitPrice: ''
+                  unitPrice: '',
+                  purchaseUnit: ''
                 }]);
               }}
               className="w-full"
@@ -1088,12 +1104,12 @@ function OrderDetail({
                     <div>
                       <div className="font-medium">{item.product?.name}</div>
                       <div className="text-sm text-slate-500">
-                        {item.product?.category?.name} | {item.product?.specification || '-'} | {item.product?.unit || '-'}
+                        {item.product?.category?.name} | {item.product?.specification || '-'} | {item.product?.purchaseUnit || item.product?.unit || '-'}
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-medium">x{item.quantity}</div>
-                      <div className="text-sm text-slate-500">单价: {formatCurrency(item.unitPrice)}</div>
+                      <div className="font-medium">x{item.quantity} {item.product?.purchaseUnit || item.product?.unit || ''}</div>
+                      <div className="text-sm text-slate-500">单价: {formatCurrency(item.unitPrice)}/{item.product?.purchaseUnit || item.product?.unit || ''}</div>
                     </div>
                   </div>
                   <div className="flex justify-between items-center mt-2 pt-2 border-t">
@@ -1245,21 +1261,24 @@ function OrderDetail({
                     <div className="grid grid-cols-3 gap-2 items-center">
                       <div>
                         <div className="text-xs text-slate-500">订购数量</div>
-                        <div className="font-bold">{orderedQty}</div>
+                        <div className="font-bold">{orderedQty} {item.product?.purchaseUnit || item.product?.unit || ''}</div>
                       </div>
                       <div>
                         <div className="text-xs text-slate-500">实际到货</div>
-                        <Input
-                          type="number"
-                          value={actualQty}
-                          onChange={(e) => setActualQuantities(prev => ({
-                            ...prev,
-                            [item.id]: e.target.value
-                          }))}
-                          className="h-8"
-                          min="0"
-                          max={orderedQty}
-                        />
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            value={actualQty}
+                            onChange={(e) => setActualQuantities(prev => ({
+                              ...prev,
+                              [item.id]: e.target.value
+                            }))}
+                            className="h-8"
+                            min="0"
+                            max={orderedQty}
+                          />
+                          <span className="text-xs text-slate-500">{item.product?.purchaseUnit || item.product?.unit || ''}</span>
+                        </div>
                       </div>
                       <div>
                         <div className="text-xs text-slate-500">缺货</div>

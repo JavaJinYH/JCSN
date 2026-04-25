@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 export const EntityService = {
   async getEntities() {
     return db.entity.findMany({
+      include: { contact: true },
       orderBy: { name: 'asc' },
     });
   },
@@ -10,6 +11,7 @@ export const EntityService = {
   async getEntityById(id: string) {
     return db.entity.findUnique({
       where: { id },
+      include: { contact: true },
     });
   },
 
@@ -27,6 +29,7 @@ export const EntityService = {
 
   async getAllEntitiesStats() {
     const entities = await db.entity.findMany({
+      include: { contact: true },
       orderBy: { name: 'asc' },
     });
     const stats: Record<string, { total: number; paid: number; count: number }> = {};

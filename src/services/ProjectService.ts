@@ -73,19 +73,19 @@ export const ProjectService = {
   },
 
   async createAuditLog(data: {
-    action: string;
+    actionType: 'CREATE' | 'UPDATE' | 'DELETE';
     entityType: string;
     entityId: string;
     operatorName?: string;
-    remark?: string;
+    newValue?: string;
   }) {
     return db.auditLog.create({
       data: {
-        action: data.action,
+        actionType: data.actionType,
         entityType: data.entityType,
         entityId: data.entityId,
         operatorName: data.operatorName,
-        remark: data.remark,
+        newValue: data.newValue,
       },
     });
   },
@@ -110,6 +110,12 @@ export const ProjectService = {
         status: data.status,
         remark: data.remark,
       },
+    });
+  },
+
+  async deleteProject(id: string) {
+    return db.bizProject.delete({
+      where: { id },
     });
   },
 };

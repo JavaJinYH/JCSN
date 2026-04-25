@@ -107,15 +107,15 @@ export function PurchaseReturn({
       <div className="grid grid-cols-3 gap-4">
         <div>
           <div className="text-sm text-slate-500">原进货数量</div>
-          <div className="font-bold">{purchase.quantity}</div>
+          <div className="font-bold">{purchase.quantity} {purchase.product.purchaseUnit || purchase.product.unit}</div>
         </div>
         <div>
           <div className="text-sm text-slate-500">已标记待退</div>
-          <div className="font-bold text-orange-600">{purchase.pendingReturnQty}</div>
+          <div className="font-bold text-orange-600">{purchase.pendingReturnQty} {purchase.product.purchaseUnit || purchase.product.unit}</div>
         </div>
         <div>
           <div className="text-sm text-slate-500">可退数量</div>
-          <div className="font-bold text-green-600">{availableQty}</div>
+          <div className="font-bold text-green-600">{availableQty} {purchase.product.purchaseUnit || purchase.product.unit}</div>
         </div>
       </div>
 
@@ -188,7 +188,7 @@ export function PurchaseReturn({
           max={availableQty}
         />
         <div className="text-xs text-slate-500 mt-1">
-          最大可退: {availableQty} {purchase.product.unit}
+          最大可退: {availableQty} {purchase.product.purchaseUnit || purchase.product.unit}
         </div>
       </div>
 

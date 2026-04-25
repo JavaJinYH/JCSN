@@ -110,7 +110,7 @@ export function Projects() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const projectsData = await ProjectService.getProjects();
+      const projectsData = await ProjectService.getProjects(undefined, { entity: true });
 
       const stats: Record<string, { total: number; paid: number; count: number }> = {};
       for (const project of projectsData) {
@@ -221,10 +221,10 @@ export function Projects() {
       toast('项目添加成功', 'success');
 
       await ProjectService.createAuditLog({
-        action: 'CREATE',
+        actionType: 'CREATE',
         entityType: 'BizProject',
         entityId: 'new',
-        remark: JSON.stringify({ name: formData.name }),
+        newValue: JSON.stringify({ name: formData.name }),
       });
     } catch (error) {
       console.error('[Projects] 添加项目失败:', error);
@@ -240,6 +240,28 @@ export function Projects() {
     } catch (error) {
       console.error('[Projects] 更新状态失败:', error);
       toast('更新失败，请重试', 'error');
+    }
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    try {
+      const stats = projectStats[projectId];
+      if (stats && stats.count > 0) {
+        toast(`该项目已关联 ${stats.count} 笔销售订单，无法删除`, 'warning');
+        return;
+      }
+
+      const confirmed = window.confirm('确定要删除该项目吗？此操作不可恢复。');
+      if (!confirmed) {
+        return;
+      }
+
+      await ProjectService.deleteProject(projectId);
+      loadData();
+      toast('项目删除成功', 'success');
+    } catch (error) {
+      console.error('[Projects] 删除项目失败:', error);
+      toast('删除失败，请重试', 'error');
     }
   };
 
@@ -369,9 +391,19 @@ export function Projects() {
                     </TableCell>
                     <TableCell className="text-slate-500 max-w-[100px] truncate">{project.remark || '-'}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Button variant="ghost" size="sm" onClick={() => handleViewProject(project)}>
-                        详情
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => handleViewProject(project)}>
+                          详情
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-500 hover:text-red-600"
+                          onClick={() => handleDeleteProject(project.id)}
+                        >
+                          删除
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

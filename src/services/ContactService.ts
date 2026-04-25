@@ -33,10 +33,16 @@ export interface CustomerScoreResult {
 
 export const ContactService = {
   async createContact(data: CreateContactDTO, phones?: CreatePhoneDTO[]) {
+    const generateCode = () => {
+      const timestamp = Date.now().toString(36).toUpperCase();
+      const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+      return `C${timestamp}${random}`;
+    };
+
     const contact = await db.contact.create({
       data: {
         name: data.name,
-        code: data.code || `C${Date.now().toString(36).toUpperCase()}`,
+        code: data.code || generateCode(),
         contactType: data.contactType || 'customer',
         primaryPhone: data.primaryPhone,
         address: data.address,

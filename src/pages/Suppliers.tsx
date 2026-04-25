@@ -160,23 +160,17 @@ export function Suppliers() {
       toast('请填写供应商名称', 'warning');
       return;
     }
-    if (!formData.code.trim()) {
-      toast('请填写供应商编码', 'warning');
-      return;
-    }
 
     try {
-      const existing = await db.supplier.findFirst({
-        where: { code: formData.code },
-      });
-      if (existing) {
-        toast('供应商编码已存在', 'warning');
-        return;
-      }
+      const generateCode = () => {
+        const timestamp = Date.now().toString(36).toUpperCase();
+        const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+        return `S${timestamp}${random}`;
+      };
 
       await db.supplier.create({
         data: {
-          code: formData.code,
+          code: generateCode(),
           name: formData.name,
           contactId: formData.contactId || null,
           phone: formData.phone || null,
@@ -341,14 +335,6 @@ export function Suppliers() {
             <DialogTitle>添加供应商</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">供应商编码 *</label>
-              <Input
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                placeholder="例如：GYS001"
-              />
-            </div>
             <div>
               <label className="text-sm font-medium mb-2 block">供应商名称 *</label>
               <Input
