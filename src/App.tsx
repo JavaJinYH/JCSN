@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { MobileLayout } from './components/layout/MobileLayout';
 import { DesktopOnlyRoute } from './components/DesktopOnlyRoute';
@@ -49,7 +49,7 @@ const isMobile = typeof window !== 'undefined' && !!(window as any).Capacitor;
 
 function App() {
   return (
-    <BrowserRouter
+    <HashRouter
       future={{
         v7_startTransition: true,
         v7_relativeSplatPath: true,
@@ -112,7 +112,7 @@ function App() {
           <Route path="mobile/settings" element={<MobileSettings />} />
         </Route>
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 

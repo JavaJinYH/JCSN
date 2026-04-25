@@ -2,6 +2,7 @@
   "name": "jiancai-manager",
   "version": "1.0.0",
   "description": "折柳建材店管理系统",
+  "homepage": "./",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",

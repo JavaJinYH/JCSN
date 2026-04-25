@@ -3,51 +3,32 @@ appId: com.jiancai.manager
 productName: 折柳建材管理系统
 copyright: Copyright © 2024
 directories:
-  output: release
+  output: release-v4
+  buildResources: build
 files:
-  - package.json
   - dist/**/*
   - electron/**/*
+  - package.json
   - node_modules/**/*
-  - "!node_modules/.prisma/**/*"
-  - "!node_modules/@prisma/engines/**/*"
-  - prisma/**/*
-  - "!prisma/backups/**/*"
-  - "!prisma/migrations/**/*"
-  - "!prisma/*.db"
-  - photos/**/*
-  - "!**/*.{ts,tsx,map}"
-  - "!**/__tests__/**/*"
-  - "!**/.git/**/*"
+  - node_modules/.prisma/**/*
 extraResources:
   - from: prisma
     to: prisma
     filter:
       - schema.prisma
+      - dev.db
   - from: photos
     to: photos
     filter:
       - "**/*"
-asar: true
+asar: false
 compression: maximum
 win:
   target:
-    - nsis
     - portable
   signingHashAlgorithms:
     - sha256
   signAndEditExecutable: false
-nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
-  createDesktopShortcut: true
-  createStartMenuShortcut: true
-  shortcutName: 折柳建材管理系统
-  artifactName: 折柳建材管理系统-${version}-setup.exe
-  uninstallDisplayName: 折柳建材管理系统
-  allowElevation: true
-  deleteAppDataOnUninstall: false
-  runAfterFinish: true
 portable:
   artifactName: 折柳建材管理系统-${version}-portable.exe
   unpackDirName: 折柳建材管理系统
