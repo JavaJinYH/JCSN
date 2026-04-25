@@ -82,7 +82,7 @@ export function MobilePurchaseDetail() {
 
     try {
       setLoading(true);
-      const res = await MobileApiService.getPurchaseById(id, false);
+      const res = await MobileApiService.getPurchaseById(id, true);
       if (res.success && res.data) {
         setPurchase(res.data);
         setIsCached(res.isCached || false);

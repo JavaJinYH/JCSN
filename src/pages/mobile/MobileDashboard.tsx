@@ -13,6 +13,8 @@ export function MobileDashboard() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [downloadingAll, setDownloadingAll] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState('');
   const { apiUrl, setIsCached } = useMobileApi();
 
   const loadData = async () => {
@@ -41,6 +43,99 @@ export function MobileDashboard() {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownloadAll = async () => {
+    if (!MobileApiService.isOnline() || !apiUrl) {
+      return;
+    }
+    setDownloadingAll(true);
+    setDownloadProgress('准备下载...');
+    try {
+      // 1. 下载所有销售数据 + 详情
+      setDownloadProgress('正在下载销售数据...');
+      const allSales: any[] = [];
+      let currentPage = 1;
+      let hasMorePages = true;
+      while (hasMorePages) {
+        const res = await MobileApiService.getSales(currentPage, 100, '');
+        if (res.success && res.data) {
+          allSales.push(...res.data);
+          hasMorePages = res.data.length >= 100;
+          currentPage++;
+        } else {
+          hasMorePages = false;
+        }
+      }
+      // 预加载销售详情
+      const saleIds = allSales.map(s => s.id);
+      const batchSize = 5;
+      for (let i = 0; i < saleIds.length; i += batchSize) {
+        const batch = saleIds.slice(i, i + batchSize);
+        await MobileApiService.preloadAllSaleDetails(batch);
+        setDownloadProgress(`销售详情: ${Math.min(i + batchSize, saleIds.length)}/${saleIds.length}`);
+      }
+
+      // 2. 下载所有进货数据 + 详情
+      setDownloadProgress('正在下载进货数据...');
+      const allPurchases: any[] = [];
+      currentPage = 1;
+      hasMorePages = true;
+      while (hasMorePages) {
+        const res = await MobileApiService.getPurchases(currentPage, 100, '');
+        if (res.success && res.data) {
+          allPurchases.push(...res.data);
+          hasMorePages = res.data.length >= 100;
+          currentPage++;
+        } else {
+          hasMorePages = false;
+        }
+      }
+      // 预加载进货详情
+      const purchaseIds = allPurchases.map(p => p.id);
+      for (let i = 0; i < purchaseIds.length; i += batchSize) {
+        const batch = purchaseIds.slice(i, i + batchSize);
+        await MobileApiService.preloadAllPurchaseDetails(batch);
+        setDownloadProgress(`进货详情: ${Math.min(i + batchSize, purchaseIds.length)}/${purchaseIds.length}`);
+      }
+
+      // 3. 下载所有挂账数据 + 详情
+      setDownloadProgress('正在下载挂账数据...');
+      const allSettlements: any[] = [];
+      currentPage = 1;
+      hasMorePages = true;
+      while (hasMorePages) {
+        const res = await MobileApiService.getSettlements(currentPage, 100, '');
+        if (res.success && res.data) {
+          allSettlements.push(...res.data);
+          hasMorePages = res.data.length >= 100;
+          currentPage++;
+        } else {
+          hasMorePages = false;
+        }
+      }
+      // 预加载挂账详情
+      const settlementIds = allSettlements.map(s => s.id);
+      for (let i = 0; i < settlementIds.length; i += batchSize) {
+        const batch = settlementIds.slice(i, i + batchSize);
+        await MobileApiService.preloadAllSettlementDetails(batch);
+        setDownloadProgress(`挂账详情: ${Math.min(i + batchSize, settlementIds.length)}/${settlementIds.length}`);
+      }
+
+      // 4. 下载首页和库存数据
+      setDownloadProgress('正在下载首页和库存数据...');
+      await MobileApiService.getDashboard();
+      await MobileApiService.getInventory();
+
+      setDownloadProgress('下载完成！');
+      setTimeout(() => setDownloadProgress(''), 2000);
+    } catch (e) {
+      console.error('[Mobile Dashboard] Download all error:', e);
+      setDownloadProgress('下载失败，请重试');
+      setTimeout(() => setDownloadProgress(''), 2000);
+    } finally {
+      setDownloadingAll(false);
     }
   };
 
@@ -83,6 +178,22 @@ export function MobileDashboard() {
             <div className="text-amber-600 bg-amber-50 border border-amber-200">{error}</div>
           </div>
         )}
+
+        {/* 统一下载所有离线数据按钮 */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-blue-800 mb-3">📥 离线数据管理</h3>
+          <p className="text-xs text-blue-700 mb-3">一键下载所有销售、进货、挂账数据，离线后也能正常使用</p>
+          {downloadProgress && (
+            <div className="text-sm text-blue-600 mb-2">{downloadProgress}</div>
+          )}
+          <Button
+            className="w-full"
+            onClick={handleDownloadAll}
+            disabled={downloadingAll || !MobileApiService.isOnline()}
+          >
+            {downloadingAll ? '下载中...' : '下载所有离线数据'}
+          </Button>
+        </div>
 
         {loading ? (
           <div className="flex items-center justify-center h-64">

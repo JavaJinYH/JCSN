@@ -12,6 +12,7 @@ const formatCurrency = (amount: number) => {
 
 export function MobileSales() {
   const navigate = useNavigate();
+  const [allSales, setAllSales] = useState<any[]>([]); // 保存所有数据，用于离线搜索
   const [sales, setSales] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -23,7 +24,21 @@ export function MobileSales() {
   const [hasMore, setHasMore] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [preloadingAll, setPreloadingAll] = useState(false);
+  const [preloadingProgress, setPreloadingProgress] = useState(0);
   const apiUrl = MobileApiService.getBaseUrl();
+
+  const filterSalesOffline = (data: any[], search: string) => {
+    if (!search.trim()) return data;
+    const searchLower = search.toLowerCase();
+    return data.filter(sale => {
+      const buyerName = sale.buyer?.name?.toLowerCase() || '';
+      const invoiceNo = sale.invoiceNo?.toLowerCase() || '';
+      const id = sale.id?.toLowerCase() || '';
+      const remark = sale.remark?.toLowerCase() || '';
+      return buyerName.includes(searchLower) || invoiceNo.includes(searchLower) || id.includes(searchLower) || remark.includes(searchLower);
+    });
+  };
 
   const loadData = useCallback(async (pageNum = 1, append = false, search = '') => {
     if (!apiUrl) {
@@ -32,27 +47,91 @@ export function MobileSales() {
       return;
     }
 
+    // 如果离线，直接在本地数据中搜索
+    const isOffline = !MobileApiService.isOnline();
+    if (isOffline) {
+      try {
+        if (pageNum === 1) {
+          setLoading(true);
+        }
+        
+        // 如果是加载更多（append=true），直接返回，不做任何操作
+        if (append) {
+          setLoadingMore(false);
+          return;
+        }
+        
+        console.log('Offline mode - loading all data');
+        
+        // 优先使用本地保存的 allSales
+        if (allSales.length > 0) {
+          console.log('Using local allSales:', allSales.length);
+          const filteredSales = filterSalesOffline(allSales, search);
+          setSales(filteredSales);
+          setTotal(filteredSales.length);
+          setHasMore(false);
+          setIsCached(true);
+          setError('显示缓存数据，请连接 WiFi 查看最新');
+        } else {
+          // 否则从API获取所有数据（1000条/页）
+          console.log('Fetching all from cache API');
+          const res = await MobileApiService.getSales(1, 1000, search);
+          if (res.success) {
+            const newData = res.data || [];
+            console.log('Got from cache:', newData.length);
+            setSales(newData);
+            setAllSales(newData);
+            setPage(1);
+            setTotal(res.total || newData.length);
+            setHasMore(false);
+            setIsCached(true);
+            setError('显示缓存数据，请连接 WiFi 查看最新');
+          } else {
+            setError(res.error || '加载失败');
+          }
+        }
+      } catch (e) {
+        console.error('Offline load error:', e);
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+      return;
+    }
+
+    // 在线时的正常分页加载
     try {
       if (pageNum === 1) {
         setLoading(true);
       } else {
         setLoadingMore(true);
       }
-      const res = await MobileApiService.getSales(pageNum, pageSize, search);
+      const usePageSize = pageSize;
+      const res = await MobileApiService.getSales(pageNum, usePageSize, search);
       if (res.success) {
+        const newData = res.data || [];
         if (append) {
-          setSales(prev => [...prev, ...(res.data || [])]);
+          setSales(prev => [...prev, ...newData]);
         } else {
-          setSales(res.data || []);
+          setSales(newData);
+        }
+        // 保存所有数据用于离线搜索（只在第一页且无搜索时）
+        if (pageNum === 1 && !search.trim()) {
+          setAllSales(newData);
         }
         setPage(res.page || pageNum);
         setTotal(res.total || 0);
-        setHasMore((res.data?.length || 0) >= pageSize && (res.data?.length || 0) > 0);
+        setHasMore((newData.length) >= usePageSize && newData.length > 0);
         setIsCached(res.isCached || false);
         if (res.isCached) {
           setError('显示缓存数据，请连接 WiFi 查看最新');
         } else {
           setError('');
+        }
+        // 自动预加载前5条详情（如果在线且不是缓存数据）
+        if (!res.isCached && MobileApiService.isOnline()) {
+          const saleIds = newData.map(s => s.id);
+          MobileApiService.preloadSaleDetails(saleIds, 5);
         }
       } else {
         setError(res.error || '加载失败');
@@ -64,7 +143,7 @@ export function MobileSales() {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [apiUrl, pageSize]);
+  }, [apiUrl, pageSize]); // 移除allSales依赖，避免无限循环
 
   useEffect(() => {
     if (apiUrl) {
@@ -73,6 +152,59 @@ export function MobileSales() {
       setLoading(false);
     }
   }, [apiUrl, searchTerm, loadData]);
+
+  // 手动下载所有离线数据
+  const handleDownloadAll = async () => {
+    if (!MobileApiService.isOnline()) {
+      return;
+    }
+    setPreloadingAll(true);
+    setPreloadingProgress(0);
+    try {
+      // 1. 先加载所有页数据
+      const allSales: any[] = [];
+      let currentPage = 1;
+      let hasMorePages = true;
+      
+      while (hasMorePages) {
+        const res = await MobileApiService.getSales(currentPage, 100, searchTerm);
+        if (res.success && res.data) {
+          allSales.push(...res.data);
+          hasMorePages = res.data.length >= 100;
+          currentPage++;
+        } else {
+          hasMorePages = false;
+        }
+      }
+      
+      // 2. 更新列表显示所有数据
+      setSales(allSales);
+      setTotal(allSales.length);
+      setHasMore(false);
+      setPage(1);
+      
+      // 2. 更新列表显示所有数据，并保存到 allSales
+      setSales(allSales);
+      setAllSales(allSales);
+      setTotal(allSales.length);
+      setHasMore(false);
+      setPage(1);
+
+      // 3. 预加载所有详情
+      const saleIds = allSales.map(s => s.id);
+      const batchSize = 5;
+      for (let i = 0; i < saleIds.length; i += batchSize) {
+        const batch = saleIds.slice(i, i + batchSize);
+        await MobileApiService.preloadAllSaleDetails(batch);
+        setPreloadingProgress(Math.min(i + batchSize, saleIds.length));
+      }
+    } catch (e) {
+      console.error('[Mobile Sales] Preload all error:', e);
+    } finally {
+      setPreloadingAll(false);
+      setPreloadingProgress(0);
+    }
+  };
 
   const handleSearch = () => {
     setSearchTerm(searchInput);
@@ -156,7 +288,20 @@ export function MobileSales() {
       ) : (
         <>
           <MobileList className="pt-4">
-            <MobileSectionTitle>销售记录（{sales.length}/{total}）</MobileSectionTitle>
+            <div className="flex items-center justify-between mb-2 px-4">
+              <MobileSectionTitle>销售记录（{sales.length}/{total}）</MobileSectionTitle>
+              {MobileApiService.isOnline() && !isCached && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadAll}
+                  disabled={preloadingAll}
+                  className="text-xs h-8"
+                >
+                  {preloadingAll ? `下载中...${preloadingProgress}/${sales.length}` : '📥 下载离线数据'}
+                </Button>
+              )}
+            </div>
             {sales.map((sale) => (
               <SaleCard
                 key={sale.id}

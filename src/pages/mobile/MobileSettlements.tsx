@@ -24,6 +24,7 @@ const getEntityTypeLabel = (type: string) => {
 
 export function MobileSettlements() {
   const navigate = useNavigate();
+  const [allSettlements, setAllSettlements] = useState<any[]>([]); // 保存所有数据，用于离线搜索
   const [settlements, setSettlements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -35,7 +36,21 @@ export function MobileSettlements() {
   const [hasMore, setHasMore] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [preloadingAll, setPreloadingAll] = useState(false);
+  const [preloadingProgress, setPreloadingProgress] = useState(0);
   const apiUrl = MobileApiService.getBaseUrl();
+
+  const filterSettlementsOffline = (data: any[], search: string) => {
+    if (!search.trim()) return data;
+    const searchLower = search.toLowerCase();
+    return data.filter(settlement => {
+      const name = settlement.name?.toLowerCase() || '';
+      const contactName = settlement.contactName?.toLowerCase() || '';
+      const contactPhone = settlement.contactPhone?.toLowerCase() || '';
+      const id = settlement.id?.toLowerCase() || '';
+      return name.includes(searchLower) || contactName.includes(searchLower) || contactPhone.includes(searchLower) || id.includes(searchLower);
+    });
+  };
 
   const loadData = useCallback(async (pageNum = 1, append = false, search = '') => {
     if (!apiUrl) {
@@ -44,27 +59,91 @@ export function MobileSettlements() {
       return;
     }
 
+    // 如果离线，直接在本地数据中搜索
+    const isOffline = !MobileApiService.isOnline();
+    if (isOffline) {
+      try {
+        if (pageNum === 1) {
+          setLoading(true);
+        }
+        
+        // 如果是加载更多（append=true），直接返回，不做任何操作
+        if (append) {
+          setLoadingMore(false);
+          return;
+        }
+        
+        console.log('Offline mode - loading all data');
+        
+        // 优先使用本地保存的 allSettlements
+        if (allSettlements.length > 0) {
+          console.log('Using local allSettlements:', allSettlements.length);
+          const filteredSettlements = filterSettlementsOffline(allSettlements, search);
+          setSettlements(filteredSettlements);
+          setTotal(filteredSettlements.length);
+          setHasMore(false);
+          setIsCached(true);
+          setError('显示缓存数据，请连接 WiFi 查看最新');
+        } else {
+          // 否则从API获取所有数据（1000条/页）
+          console.log('Fetching all from cache API');
+          const res = await MobileApiService.getSettlements(1, 1000, search);
+          if (res.success) {
+            const newData = res.data || [];
+            console.log('Got from cache:', newData.length);
+            setSettlements(newData);
+            setAllSettlements(newData);
+            setPage(1);
+            setTotal(res.total || newData.length);
+            setHasMore(false);
+            setIsCached(true);
+            setError('显示缓存数据，请连接 WiFi 查看最新');
+          } else {
+            setError(res.error || '加载失败');
+          }
+        }
+      } catch (e) {
+        console.error('Offline load error:', e);
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+      return;
+    }
+
+    // 在线时的正常分页加载
     try {
       if (pageNum === 1) {
         setLoading(true);
       } else {
         setLoadingMore(true);
       }
-      const res = await MobileApiService.getSettlements(pageNum, pageSize, search);
+      const usePageSize = pageSize;
+      const res = await MobileApiService.getSettlements(pageNum, usePageSize, search);
       if (res.success) {
+        const newData = res.data || [];
         if (append) {
-          setSettlements(prev => [...prev, ...(res.data || [])]);
+          setSettlements(prev => [...prev, ...newData]);
         } else {
-          setSettlements(res.data || []);
+          setSettlements(newData);
+        }
+        // 保存所有数据用于离线搜索（只在第一页且无搜索时）
+        if (pageNum === 1 && !search.trim()) {
+          setAllSettlements(newData);
         }
         setPage(res.page || pageNum);
         setTotal(res.total || 0);
-        setHasMore((res.data?.length || 0) >= pageSize && (res.data?.length || 0) > 0);
+        setHasMore((newData.length) >= usePageSize && newData.length > 0);
         setIsCached(res.isCached || false);
         if (res.isCached) {
           setError('显示缓存数据，请连接 WiFi 查看最新');
         } else {
           setError('');
+        }
+        // 自动预加载前5条详情（如果在线且不是缓存数据）
+        if (!res.isCached && MobileApiService.isOnline()) {
+          const settlementIds = newData.map(s => s.id);
+          MobileApiService.preloadSettlementDetails(settlementIds, 5);
         }
       } else {
         setError(res.error || '加载失败');
@@ -76,7 +155,7 @@ export function MobileSettlements() {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [apiUrl, pageSize]);
+  }, [apiUrl, pageSize]); // 移除allSettlements依赖，避免无限循环
 
   useEffect(() => {
     if (apiUrl) {
@@ -85,6 +164,59 @@ export function MobileSettlements() {
       setLoading(false);
     }
   }, [apiUrl, searchTerm, loadData]);
+
+  // 手动下载所有离线数据
+  const handleDownloadAll = async () => {
+    if (!MobileApiService.isOnline()) {
+      return;
+    }
+    setPreloadingAll(true);
+    setPreloadingProgress(0);
+    try {
+      // 1. 先加载所有页数据
+      const allSettlements: any[] = [];
+      let currentPage = 1;
+      let hasMorePages = true;
+      
+      while (hasMorePages) {
+        const res = await MobileApiService.getSettlements(currentPage, 100, searchTerm);
+        if (res.success && res.data) {
+          allSettlements.push(...res.data);
+          hasMorePages = res.data.length >= 100;
+          currentPage++;
+        } else {
+          hasMorePages = false;
+        }
+      }
+      
+      // 2. 更新列表显示所有数据
+      setSettlements(allSettlements);
+      setTotal(allSettlements.length);
+      setHasMore(false);
+      setPage(1);
+      
+      // 2. 更新列表显示所有数据，并保存到 allSettlements
+      setSettlements(allSettlements);
+      setAllSettlements(allSettlements);
+      setTotal(allSettlements.length);
+      setHasMore(false);
+      setPage(1);
+
+      // 3. 预加载所有详情
+      const settlementIds = allSettlements.map(s => s.id);
+      const batchSize = 5;
+      for (let i = 0; i < settlementIds.length; i += batchSize) {
+        const batch = settlementIds.slice(i, i + batchSize);
+        await MobileApiService.preloadAllSettlementDetails(batch);
+        setPreloadingProgress(Math.min(i + batchSize, settlementIds.length));
+      }
+    } catch (e) {
+      console.error('[Mobile Settlements] Preload all error:', e);
+    } finally {
+      setPreloadingAll(false);
+      setPreloadingProgress(0);
+    }
+  };
 
   const handleSearch = () => {
     setSearchTerm(searchInput);
@@ -168,7 +300,20 @@ export function MobileSettlements() {
       ) : (
         <>
           <div className="px-4 pt-4">
-            <MobileSectionTitle>挂账主体（{settlements.length}/{total}）</MobileSectionTitle>
+            <div className="flex items-center justify-between mb-2">
+              <MobileSectionTitle>挂账主体（{settlements.length}/{total}）</MobileSectionTitle>
+              {MobileApiService.isOnline() && !isCached && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadAll}
+                  disabled={preloadingAll}
+                  className="text-xs h-8"
+                >
+                  {preloadingAll ? `下载中...${preloadingProgress}/${settlements.length}` : '📥 下载离线数据'}
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="px-4 space-y-3">

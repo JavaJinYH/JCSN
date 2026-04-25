@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 const API_BASE_URL_KEY = 'mobile_api_base_url';
 const CACHE_PREFIX = 'mobile_api_cache_';
-const CACHE_DURATION = 30 * 60 * 1000; // 30分钟
+const CACHE_DURATION = 100 * 365 * 24 * 60 * 60 * 1000; // 100年（永久保存）
 const HEALTH_CHECK_INTERVAL = 5000; // 5秒检测一次
 
 interface CacheEntry<T> {
@@ -311,6 +311,69 @@ export class MobileApiService {
       });
     } catch (e) {
       console.warn('[Mobile API] Clear cache error:', e);
+    }
+  }
+
+  // 预加载销售详情（自动预加载前N条）
+  static async preloadSaleDetails(saleIds: string[], limit = 5): Promise<void> {
+    try {
+      const idsToPreload = saleIds.slice(0, limit);
+      const promises = idsToPreload.map(id => this.getSaleById(id, true));
+      await Promise.all(promises);
+    } catch (e) {
+      console.warn('[Mobile API] Preload sale details error:', e);
+    }
+  }
+
+  // 预加载所有销售详情（手动下载）
+  static async preloadAllSaleDetails(saleIds: string[]): Promise<void> {
+    try {
+      const promises = saleIds.map(id => this.getSaleById(id, true));
+      await Promise.all(promises);
+    } catch (e) {
+      console.warn('[Mobile API] Preload all sale details error:', e);
+    }
+  }
+
+  // 预加载进货详情（自动预加载前N条）
+  static async preloadPurchaseDetails(purchaseIds: string[], limit = 5): Promise<void> {
+    try {
+      const idsToPreload = purchaseIds.slice(0, limit);
+      const promises = idsToPreload.map(id => this.getPurchaseById(id, true));
+      await Promise.all(promises);
+    } catch (e) {
+      console.warn('[Mobile API] Preload purchase details error:', e);
+    }
+  }
+
+  // 预加载所有进货详情（手动下载）
+  static async preloadAllPurchaseDetails(purchaseIds: string[]): Promise<void> {
+    try {
+      const promises = purchaseIds.map(id => this.getPurchaseById(id, true));
+      await Promise.all(promises);
+    } catch (e) {
+      console.warn('[Mobile API] Preload all purchase details error:', e);
+    }
+  }
+
+  // 预加载挂账详情（自动预加载前N条）
+  static async preloadSettlementDetails(settlementIds: string[], limit = 5): Promise<void> {
+    try {
+      const idsToPreload = settlementIds.slice(0, limit);
+      const promises = idsToPreload.map(id => this.getSettlementEntityDetail(id, true));
+      await Promise.all(promises);
+    } catch (e) {
+      console.warn('[Mobile API] Preload settlement details error:', e);
+    }
+  }
+
+  // 预加载所有挂账详情（手动下载）
+  static async preloadAllSettlementDetails(settlementIds: string[]): Promise<void> {
+    try {
+      const promises = settlementIds.map(id => this.getSettlementEntityDetail(id, true));
+      await Promise.all(promises);
+    } catch (e) {
+      console.warn('[Mobile API] Preload all settlement details error:', e);
     }
   }
 }
