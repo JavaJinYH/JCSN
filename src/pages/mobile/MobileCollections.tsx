@@ -49,9 +49,7 @@ export function MobileCollections() {
         setTotal(res.total || 0);
         setHasMore((res.data?.length || 0) >= pageSize && (res.data?.length || 0) > 0);
         setIsCached(res.isCached || false);
-        if (res.isCached) {
-          setError('显示缓存数据，请连接 WiFi 查看最新');
-        } else {
+        if (!res.isCached) {
           setError('');
         }
       } else {
