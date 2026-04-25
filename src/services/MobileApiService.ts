@@ -4,6 +4,7 @@ const API_BASE_URL_KEY = 'mobile_api_base_url';
 const CACHE_PREFIX = 'mobile_api_cache_';
 const CACHE_DURATION = 100 * 365 * 24 * 60 * 60 * 1000; // 100年（永久保存）
 const HEALTH_CHECK_INTERVAL = 5000; // 5秒检测一次
+const MAX_CACHE_SIZE = 10 * 1024 * 1024; // 10MB 最大缓存大小
 
 interface CacheEntry<T> {
   data: T;
@@ -210,9 +211,59 @@ export class MobileApiService {
         data,
         timestamp: Date.now(),
       };
-      localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(entry));
+      const entryStr = JSON.stringify(entry);
+      
+      // 检查缓存大小，如果超过限制先清理旧缓存
+      if (this.getCacheSize() + (entryStr.length * 2) > MAX_CACHE_SIZE) {
+        this.cleanOldCache();
+      }
+      
+      localStorage.setItem(CACHE_PREFIX + key, entryStr);
     } catch (e) {
       console.warn('[Mobile API] Cache save error:', e);
+      // 如果存储失败，尝试清理所有缓存再重试
+      try {
+        this.clearCache();
+        const entry: CacheEntry<T> = {
+          data,
+          timestamp: Date.now(),
+        };
+        localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(entry));
+      } catch (retryError) {
+        console.error('[Mobile API] Cache retry failed:', retryError);
+      }
+    }
+  }
+
+  // 清理旧缓存（按时间排序，删除一半）
+  private static cleanOldCache(): void {
+    try {
+      const keys: Array<{ key: string; timestamp: number }> = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(CACHE_PREFIX)) {
+          try {
+            const item = localStorage.getItem(key);
+            if (item) {
+              const parsed = JSON.parse(item);
+              keys.push({ key, timestamp: parsed.timestamp || 0 });
+            }
+          } catch {
+            // 如果解析失败，也加入清理列表
+            keys.push({ key, timestamp: 0 });
+          }
+        }
+      }
+      
+      // 按时间排序，删除较早的一半
+      keys.sort((a, b) => a.timestamp - b.timestamp);
+      const toDelete = keys.slice(0, Math.ceil(keys.length / 2));
+      toDelete.forEach(item => {
+        localStorage.removeItem(item.key);
+      });
+      console.log(`[Mobile API] Cleaned ${toDelete.length} old cache entries`);
+    } catch (e) {
+      console.warn('[Mobile API] Clean cache error:', e);
     }
   }
 
