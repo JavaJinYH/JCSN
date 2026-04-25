@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { MobileApiService } from '@/services/MobileApiService';
-import { MobilePageHeader, MobileLoadingState, MobileSectionTitle, MobileEmptyState } from '@/components/mobile/MobilePageHeader';
+import { MobilePageHeader, MobileSectionTitle, MobileEmptyState } from '@/components/mobile/MobilePageHeader';
+import { NetworkStatus } from '@/components/mobile/NetworkStatus';
+import { MobileSkeletonList, MobileSkeletonGrid } from '@/components/mobile/MobileSkeleton';
 
 const formatCurrency = (amount: number | null | undefined) => {
   if (amount == null) return '¥--';
@@ -38,6 +40,7 @@ export function MobileSettlements() {
   const [searchInput, setSearchInput] = useState('');
   const [preloadingAll, setPreloadingAll] = useState(false);
   const [preloadingProgress, setPreloadingProgress] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const apiUrl = MobileApiService.getBaseUrl();
 
   const filterSettlementsOffline = (data: any[], search: string) => {
@@ -97,6 +100,13 @@ export function MobileSettlements() {
             setTotal(res.total || newData.length);
             setHasMore(false);
             setIsCached(true);
+            // 保存更新时间
+            if (res.timestamp) {
+              setLastUpdated(res.timestamp);
+            } else {
+              const cachedTimestamp = MobileApiService.getCacheTimestamp(`/api/settlements?page=1&pageSize=1000`);
+              if (cachedTimestamp) setLastUpdated(cachedTimestamp);
+            }
             setError('显示缓存数据，请连接 WiFi 查看最新');
           } else {
             setError(res.error || '加载失败');
@@ -135,6 +145,13 @@ export function MobileSettlements() {
         setTotal(res.total || 0);
         setHasMore((newData.length) >= usePageSize && newData.length > 0);
         setIsCached(res.isCached || false);
+        // 保存更新时间
+        if (res.timestamp) {
+          setLastUpdated(res.timestamp);
+        } else if (res.isCached && pageNum === 1) {
+          const cachedTimestamp = MobileApiService.getCacheTimestamp(`/api/settlements?page=${pageNum}&pageSize=${usePageSize}`);
+          if (cachedTimestamp) setLastUpdated(cachedTimestamp);
+        }
         if (res.isCached) {
           setError('显示缓存数据，请连接 WiFi 查看最新');
         } else {
@@ -163,6 +180,22 @@ export function MobileSettlements() {
     } else {
       setLoading(false);
     }
+  }, [apiUrl, searchTerm, loadData]);
+
+  // 监听网络恢复事件，自动刷新数据
+  useEffect(() => {
+    const handleNetworkRecovered = () => {
+      console.log('[Mobile Settlements] 检测到网络恢复，开始刷新数据...');
+      if (apiUrl) {
+        loadData(1, false, searchTerm);
+      }
+    };
+
+    window.addEventListener('network-recovered', handleNetworkRecovered);
+
+    return () => {
+      window.removeEventListener('network-recovered', handleNetworkRecovered);
+    };
   }, [apiUrl, searchTerm, loadData]);
 
   // 手动下载所有离线数据
@@ -254,6 +287,10 @@ export function MobileSettlements() {
         subtitle="查看挂账主体（只读）"
         onRefresh={() => loadData(1, false, searchTerm)}
       />
+      
+      <div className="px-4 pt-2">
+        <NetworkStatus timestamp={lastUpdated || undefined} />
+      </div>
 
       {error && !isCached && (
         <div className="px-4 -mt-2">
@@ -294,7 +331,10 @@ export function MobileSettlements() {
       </div>
 
       {loading ? (
-        <MobileLoadingState />
+        <div className="px-4 pt-2 space-y-4">
+          <MobileSkeletonGrid count={2} />
+          <MobileSkeletonList count={5} />
+        </div>
       ) : settlements.length === 0 ? (
         <MobileEmptyState message={searchTerm ? '未找到匹配的挂账主体' : '暂无挂账记录'} />
       ) : (

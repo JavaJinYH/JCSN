@@ -56,6 +56,22 @@ export function MobileInventory() {
     }
   }, [apiUrl]);
 
+  // 监听网络恢复事件，自动刷新数据
+  useEffect(() => {
+    const handleNetworkRecovered = () => {
+      console.log('[Mobile Inventory] 检测到网络恢复，开始刷新数据...');
+      if (apiUrl) {
+        loadData();
+      }
+    };
+
+    window.addEventListener('network-recovered', handleNetworkRecovered);
+
+    return () => {
+      window.removeEventListener('network-recovered', handleNetworkRecovered);
+    };
+  }, [apiUrl]);
+
   const filteredProducts = products.filter(p => {
     if (!searchTerm) return true;
     return (

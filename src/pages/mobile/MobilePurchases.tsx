@@ -3,8 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MobileApiService } from '@/services/MobileApiService';
-import { MobilePageHeader, MobileList, MobileLoadingState, MobileSectionTitle, MobileCardGrid, MobileCardItem, MobileEmptyState } from '@/components/mobile/MobilePageHeader';
+import { MobilePageHeader, MobileList, MobileSectionTitle, MobileCardGrid, MobileCardItem, MobileEmptyState } from '@/components/mobile/MobilePageHeader';
 import { PurchaseCard } from '@/components/mobile/MobileCards';
+import { NetworkStatus } from '@/components/mobile/NetworkStatus';
+import { MobileSkeletonList, MobileSkeletonGrid } from '@/components/mobile/MobileSkeleton';
 
 const formatCurrency = (amount: number) => {
   return `¥${amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -26,6 +28,7 @@ export function MobilePurchases() {
   const [searchInput, setSearchInput] = useState('');
   const [preloadingAll, setPreloadingAll] = useState(false);
   const [preloadingProgress, setPreloadingProgress] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const apiUrl = MobileApiService.getBaseUrl();
 
   const filterPurchasesOffline = (data: any[], search: string) => {
@@ -85,6 +88,13 @@ export function MobilePurchases() {
             setTotal(res.total || newData.length);
             setHasMore(false);
             setIsCached(true);
+            // 保存更新时间
+            if (res.timestamp) {
+              setLastUpdated(res.timestamp);
+            } else {
+              const cachedTimestamp = MobileApiService.getCacheTimestamp(`/api/purchases?page=1&pageSize=1000`);
+              if (cachedTimestamp) setLastUpdated(cachedTimestamp);
+            }
             setError('显示缓存数据，请连接 WiFi 查看最新');
           } else {
             setError(res.error || '加载失败');
@@ -123,6 +133,13 @@ export function MobilePurchases() {
         setTotal(res.total || 0);
         setHasMore((newData.length) >= usePageSize && newData.length > 0);
         setIsCached(res.isCached || false);
+        // 保存更新时间
+        if (res.timestamp) {
+          setLastUpdated(res.timestamp);
+        } else if (res.isCached && pageNum === 1) {
+          const cachedTimestamp = MobileApiService.getCacheTimestamp(`/api/purchases?page=${pageNum}&pageSize=${usePageSize}`);
+          if (cachedTimestamp) setLastUpdated(cachedTimestamp);
+        }
         if (res.isCached) {
           setError('显示缓存数据，请连接 WiFi 查看最新');
         } else {
@@ -151,6 +168,22 @@ export function MobilePurchases() {
     } else {
       setLoading(false);
     }
+  }, [apiUrl, searchTerm, loadData]);
+
+  // 监听网络恢复事件，自动刷新数据
+  useEffect(() => {
+    const handleNetworkRecovered = () => {
+      console.log('[Mobile Purchases] 检测到网络恢复，开始刷新数据...');
+      if (apiUrl) {
+        loadData(1, false, searchTerm);
+      }
+    };
+
+    window.addEventListener('network-recovered', handleNetworkRecovered);
+
+    return () => {
+      window.removeEventListener('network-recovered', handleNetworkRecovered);
+    };
   }, [apiUrl, searchTerm, loadData]);
 
   // 手动下载所有离线数据
@@ -236,6 +269,10 @@ export function MobilePurchases() {
         subtitle="查看进货记录（只读）"
         onRefresh={() => loadData(1, false, searchTerm)}
       />
+      
+      <div className="px-4 pt-2">
+        <NetworkStatus timestamp={lastUpdated || undefined} />
+      </div>
 
       {error && !isCached && (
         <div className="px-4 -mt-2">
@@ -276,7 +313,10 @@ export function MobilePurchases() {
       </div>
 
       {loading ? (
-        <MobileLoadingState />
+        <div className="px-4 pt-2 space-y-4">
+          <MobileSkeletonGrid count={2} />
+          <MobileSkeletonList count={5} />
+        </div>
       ) : purchases.length === 0 ? (
         <MobileEmptyState message={searchTerm ? '未找到匹配的进货记录' : '暂无进货记录'} />
       ) : (

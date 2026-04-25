@@ -4,6 +4,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MobileApiService, useMobileApi } from '@/services/MobileApiService';
 import { MobilePageHeader } from '@/components/mobile/MobilePageHeader';
+import { NetworkStatus } from '@/components/mobile/NetworkStatus';
+import { MobileSkeletonGrid, MobileSkeletonList } from '@/components/mobile/MobileSkeleton';
 
 const formatCurrency = (amount: number) => {
   return `¥${amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -15,6 +17,7 @@ export function MobileDashboard() {
   const [error, setError] = useState('');
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState('');
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const { apiUrl, setIsCached } = useMobileApi();
 
   const loadData = async () => {
@@ -30,6 +33,14 @@ export function MobileDashboard() {
       if (res.success) {
         setData(res.data);
         setIsCached(res.isCached || false);
+        // 保存更新时间
+        if (res.timestamp) {
+          setLastUpdated(res.timestamp);
+        } else if (res.isCached) {
+          // 如果是缓存但没有timestamp，尝试从缓存获取
+          const cachedTimestamp = MobileApiService.getCacheTimestamp('/api/dashboard');
+          if (cachedTimestamp) setLastUpdated(cachedTimestamp);
+        }
         if (res.isCached) {
           setError('显示缓存数据，请连接 WiFi 查看最新');
         } else {
@@ -147,6 +158,22 @@ export function MobileDashboard() {
     }
   }, [apiUrl]);
 
+  // 监听网络恢复事件，自动刷新数据
+  useEffect(() => {
+    const handleNetworkRecovered = () => {
+      console.log('[Mobile Dashboard] 检测到网络恢复，开始刷新数据...');
+      if (apiUrl) {
+        loadData();
+      }
+    };
+
+    window.addEventListener('network-recovered', handleNetworkRecovered);
+
+    return () => {
+      window.removeEventListener('network-recovered', handleNetworkRecovered);
+    };
+  }, [apiUrl, loadData]);
+
   if (!apiUrl) {
     return (
       <div className="min-h-screen bg-slate-50">
@@ -172,6 +199,15 @@ export function MobileDashboard() {
         onRefresh={loadData}
       />
       
+      <div className="px-4 pt-2 space-y-2">
+        <NetworkStatus timestamp={lastUpdated || undefined} />
+        <Link to="/mobile/settings">
+          <Button variant="outline" className="w-full justify-start">
+            ⚙️ 设置
+          </Button>
+        </Link>
+      </div>
+      
       <div className="p-4 space-y-4">
         {error && (
           <div className="text-sm p-2 rounded">
@@ -183,6 +219,29 @@ export function MobileDashboard() {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <h3 className="text-sm font-semibold text-blue-800 mb-3">📥 离线数据管理</h3>
           <p className="text-xs text-blue-700 mb-3">一键下载所有销售、进货、挂账数据，离线后也能正常使用</p>
+          
+          {/* 缓存状态概览 */}
+          <div className="mb-4 space-y-2">
+            <div className="bg-white rounded-lg p-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-slate-600">当前缓存大小</span>
+                <span className="text-sm font-medium">
+                  {MobileApiService.formatFileSize(MobileApiService.getCacheSize())}
+                </span>
+              </div>
+            </div>
+            {lastUpdated && (
+              <div className="bg-white rounded-lg p-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-slate-600">最后更新时间</span>
+                  <span className="text-sm font-medium">
+                    {MobileApiService.formatTimestamp(lastUpdated)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
           {downloadProgress && (
             <div className="text-sm text-blue-600 mb-2">{downloadProgress}</div>
           )}
@@ -196,8 +255,11 @@ export function MobileDashboard() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-slate-500">加载中...</div>
+          <div className="space-y-4">
+            <MobileSkeletonGrid count={4} />
+            <div className="pt-4">
+              <MobileSkeletonList count={3} />
+            </div>
           </div>
         ) : !data ? null : (
           <div className="space-y-4">

@@ -43,6 +43,7 @@ import { MobileSales } from './pages/mobile/MobileSales';
 import { MobileSaleDetail } from './pages/mobile/MobileSaleDetail';
 import { MobilePurchases } from './pages/mobile/MobilePurchases';
 import { MobilePurchaseDetail } from './pages/mobile/MobilePurchaseDetail';
+import { MobileSettings } from './pages/mobile/MobileSettings';
 
 const isMobile = typeof window !== 'undefined' && !!(window as any).Capacitor;
 
@@ -108,6 +109,7 @@ function App() {
           <Route path="mobile/sale/:id" element={<MobileSaleDetail />} />
           <Route path="mobile/purchases" element={<MobilePurchases />} />
           <Route path="mobile/purchase/:id" element={<MobilePurchaseDetail />} />
+          <Route path="mobile/settings" element={<MobileSettings />} />
         </Route>
       </Routes>
     </BrowserRouter>

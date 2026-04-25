@@ -124,14 +124,14 @@ export class MobileApiService {
   }
 
   // 从缓存获取数据
-  private static getFromCache<T>(key: string): { success: boolean; data?: T; error?: string; isCached: boolean } {
+  private static getFromCache<T>(key: string): { success: boolean; data?: T; error?: string; isCached: boolean; timestamp?: number } {
     try {
       const cached = localStorage.getItem(CACHE_PREFIX + key);
       if (cached) {
         const entry: CacheEntry<T> = JSON.parse(cached);
         // 检查是否过期
         if (Date.now() - entry.timestamp < CACHE_DURATION) {
-          return { success: true, data: entry.data, isCached: true };
+          return { success: true, data: entry.data, isCached: true, timestamp: entry.timestamp };
         } else {
           // 过期了，删除缓存
           localStorage.removeItem(CACHE_PREFIX + key);
@@ -141,6 +141,66 @@ export class MobileApiService {
       console.warn('[Mobile API] Cache read error:', e);
     }
     return { success: false, isCached: false };
+  }
+
+  // 获取缓存的时间戳
+  static getCacheTimestamp(key: string): number | null {
+    try {
+      const cached = localStorage.getItem(CACHE_PREFIX + key);
+      if (cached) {
+        const entry: CacheEntry<any> = JSON.parse(cached);
+        return entry.timestamp;
+      }
+    } catch (e) {
+      console.warn('[Mobile API] Get cache timestamp error:', e);
+    }
+    return null;
+  }
+
+  // 格式化时间戳
+  static formatTimestamp(timestamp: number): string {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - timestamp;
+    
+    // 小于1分钟
+    if (diff < 60 * 1000) {
+      return '刚刚';
+    }
+    // 小于1小时
+    if (diff < 60 * 60 * 1000) {
+      return `${Math.floor(diff / (60 * 1000))}分钟前`;
+    }
+    // 小于24小时
+    if (diff < 24 * 60 * 60 * 1000) {
+      return `${Math.floor(diff / (60 * 60 * 1000))}小时前`;
+    }
+    // 显示日期
+    return `${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+  }
+
+  // 计算缓存大小
+  static getCacheSize(): number {
+    try {
+      let size = 0;
+      const keys = Object.keys(localStorage);
+      keys.forEach(key => {
+        if (key.startsWith(CACHE_PREFIX)) {
+          size += (localStorage.getItem(key)?.length || 0) * 2; // 每个字符占2字节
+        }
+      });
+      return size;
+    } catch (e) {
+      console.warn('[Mobile API] Get cache size error:', e);
+      return 0;
+    }
+  }
+
+  // 格式化文件大小
+  static formatFileSize(bytes: number): string {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
   // 保存到缓存
@@ -160,7 +220,7 @@ export class MobileApiService {
     endpoint: string,
     options: RequestInit = {},
     useCache = true
-  ): Promise<{ success: boolean; data?: T; error?: string; isCached?: boolean }> {
+  ): Promise<{ success: boolean; data?: T; error?: string; isCached?: boolean; timestamp?: number }> {
     const baseUrl = this.getBaseUrl();
     if (!baseUrl) {
       return { success: false, error: '请先设置 API 地址' };
@@ -213,7 +273,7 @@ export class MobileApiService {
         this.saveToCache(cacheKey, result.data);
       }
 
-      return { ...result, isCached: false };
+      return { ...result, isCached: false, timestamp: Date.now() };
     } catch (error: any) {
       console.error('[Mobile API] Request error:', error);
       // 网络请求失败，尝试返回缓存
@@ -232,11 +292,11 @@ export class MobileApiService {
     }
   }
 
-  static async getPendingDocuments(useCache = true): Promise<{ success: boolean; data?: PendingDocument[]; error?: string; isCached?: boolean }> {
+  static async getPendingDocuments(useCache = true): Promise<{ success: boolean; data?: PendingDocument[]; error?: string; isCached?: boolean; timestamp?: number }> {
     return this.request<PendingDocument[]>('/api/pending-documents', {}, useCache);
   }
 
-  static async getDocument(id: string, useCache = true): Promise<{ success: boolean; data?: DocumentDetail; error?: string; isCached?: boolean }> {
+  static async getDocument(id: string, useCache = true): Promise<{ success: boolean; data?: DocumentDetail; error?: string; isCached?: boolean; timestamp?: number }> {
     return this.request<DocumentDetail>(`/api/document/${id}`, {}, useCache);
   }
 
@@ -252,47 +312,47 @@ export class MobileApiService {
     return `${baseUrl}/api/photo/${relativePath}`;
   }
 
-  static async getDashboard(useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean }> {
+  static async getDashboard(useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean; timestamp?: number }> {
     return this.request('/api/dashboard', {}, useCache);
   }
 
-  static async getInventory(useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean }> {
+  static async getInventory(useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean; timestamp?: number }> {
     return this.request('/api/inventory', {}, useCache);
   }
 
-  static async getSales(page = 1, pageSize = 5, search = '', useCache = true): Promise<{ success: boolean; data?: any[]; error?: string; isCached?: boolean; page?: number; pageSize?: number; total?: number }> {
+  static async getSales(page = 1, pageSize = 5, search = '', useCache = true): Promise<{ success: boolean; data?: any[]; error?: string; isCached?: boolean; page?: number; pageSize?: number; total?: number; timestamp?: number }> {
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (search) params.append('search', search);
     return this.request(`/api/sales?${params}`, {}, useCache);
   }
 
-  static async getSaleById(id: string, useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean }> {
+  static async getSaleById(id: string, useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean; timestamp?: number }> {
     return this.request(`/api/sale/${id}`, {}, useCache);
   }
 
-  static async getPurchaseById(id: string, useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean }> {
+  static async getPurchaseById(id: string, useCache = true): Promise<{ success: boolean; data?: any; error?: string; isCached?: boolean; timestamp?: number }> {
     return this.request(`/api/purchase/${id}`, {}, useCache);
   }
 
-  static async getPurchases(page = 1, pageSize = 5, search = '', useCache = true): Promise<{ success: boolean; data?: any[]; error?: string; isCached?: boolean; page?: number; pageSize?: number; total?: number }> {
+  static async getPurchases(page = 1, pageSize = 5, search = '', useCache = true): Promise<{ success: boolean; data?: any[]; error?: string; isCached?: boolean; page?: number; pageSize?: number; total?: number; timestamp?: number }> {
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (search) params.append('search', search);
     return this.request(`/api/purchases?${params}`, {}, useCache);
   }
 
-  static async getCollections(page = 1, pageSize = 5, search = '', useCache = true): Promise<{ success: boolean; data?: CollectionRecord[]; error?: string; isCached?: boolean; page?: number; pageSize?: number; total?: number }> {
+  static async getCollections(page = 1, pageSize = 5, search = '', useCache = true): Promise<{ success: boolean; data?: CollectionRecord[]; error?: string; isCached?: boolean; page?: number; pageSize?: number; total?: number; timestamp?: number }> {
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (search) params.append('search', search);
     return this.request<CollectionRecord[]>(`/api/collections?${params}`, {}, useCache);
   }
 
-  static async getSettlements(page = 1, pageSize = 5, search = '', useCache = true): Promise<{ success: boolean; data?: SettlementEntity[]; error?: string; isCached?: boolean; page?: number; pageSize?: number; total?: number }> {
+  static async getSettlements(page = 1, pageSize = 5, search = '', useCache = true): Promise<{ success: boolean; data?: SettlementEntity[]; error?: string; isCached?: boolean; page?: number; pageSize?: number; total?: number; timestamp?: number }> {
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (search) params.append('search', search);
     return this.request<SettlementEntity[]>(`/api/settlements?${params}`, {}, useCache);
   }
 
-  static async getSettlementEntityDetail(id: string, useCache = true): Promise<{ success: boolean; data?: SettlementEntityDetail; error?: string; isCached?: boolean }> {
+  static async getSettlementEntityDetail(id: string, useCache = true): Promise<{ success: boolean; data?: SettlementEntityDetail; error?: string; isCached?: boolean; timestamp?: number }> {
     return this.request<SettlementEntityDetail>(`/api/settlements/entity/${id}`, {}, useCache);
   }
 
@@ -391,6 +451,8 @@ export function useMobileApi() {
   const [isChecking, setIsChecking] = useState(false);
   // 定时器引用
   const healthCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // 上一次的网络状态
+  const prevDeviceOnlineRef = useRef(deviceOnline);
 
   // 单独的健康检测函数
   const checkApiHealth = useCallback(async () => {
@@ -410,8 +472,12 @@ export function useMobileApi() {
 
   // 监听设备网络状态
   useEffect(() => {
-    const handleOnline = () => setDeviceOnline(true);
+    const handleOnline = () => {
+      console.log('[useMobileApi] 网络恢复在线');
+      setDeviceOnline(true);
+    };
     const handleOffline = () => {
+      console.log('[useMobileApi] 网络离线');
       setDeviceOnline(false);
       setApiAvailable(false);
     };
@@ -424,6 +490,17 @@ export function useMobileApi() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // 监听deviceOnline变化，触发网络恢复事件
+  useEffect(() => {
+    if (deviceOnline && !prevDeviceOnlineRef.current) {
+      console.log('[useMobileApi] 网络从离线恢复为在线！');
+      // 触发网络恢复事件
+      const event = new CustomEvent('network-recovered');
+      window.dispatchEvent(event);
+    }
+    prevDeviceOnlineRef.current = deviceOnline;
+  }, [deviceOnline]);
 
   // 当有 API 地址时，开始定期检测
   useEffect(() => {
