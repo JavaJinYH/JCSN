@@ -3,7 +3,6 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const log = require('electron-log');
-const { PrismaClient } = require('@prisma/client');
 const express = require('express');
 const cors = require('cors');
 
@@ -17,6 +16,50 @@ let expressServer;
 let localApiUrl;
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const API_PORT = 3456;
+
+// 获取数据库目录
+const getDatabaseDir = () => {
+  if (isDev) {
+    return path.join(__dirname, '..', 'prisma');
+  } else {
+    const userData = app.getPath('userData');
+    const dbDir = path.join(userData, 'database');
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+    return dbDir;
+  }
+};
+
+// 初始化数据库
+const initDatabase = async () => {
+  const dbDir = getDatabaseDir();
+  const dbPath = path.join(dbDir, 'dev.db');
+
+  // 开发模式直接使用现有路径
+  if (isDev) {
+    process.env.DATABASE_URL = `file:${path.join(__dirname, '..', 'prisma', 'dev.db')}`;
+    return;
+  }
+
+  // 生产模式：如果数据库不存在，就创建一个新的（Prisma会自动处理）
+  if (!fs.existsSync(dbPath)) {
+    try {
+      const resourceDbPath = path.join(process.resourcesPath, 'prisma', 'dev.db');
+      if (fs.existsSync(resourceDbPath)) {
+        fs.copyFileSync(resourceDbPath, dbPath);
+        log.info('Database copied from resources to userData:', dbPath);
+      } else {
+        log.info('No initial database found, will let Prisma create empty database');
+      }
+    } catch (err) {
+      log.error('Failed to initialize database:', err.message);
+    }
+  }
+
+  // 动态设置 Prisma 数据库 URL
+  process.env.DATABASE_URL = `file:${dbPath}`;
+};
 
 // 获取本机局域网 IP 地址
 const getLocalIP = () => {
@@ -771,7 +814,18 @@ const getPhotoPath = (relativePath) => {
 async function createWindow() {
   log.info('Creating main window...');
 
-  prisma = new PrismaClient();
+  await initDatabase();
+
+  // 动态导入 PrismaClient（必须在设置 DATABASE_URL 之后）
+  const { PrismaClient } = require('@prisma/client');
+  
+  prisma = new PrismaClient({
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL || `file:${path.join(getDatabaseDir(), 'dev.db')}`
+      }
+    }
+  });
 
   try {
     await prisma.$connect();
