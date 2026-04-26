@@ -115,6 +115,42 @@ export const SaleService = {
 
     const { seq: saleSeq } = await CounterService.getNextSaleSeq();
 
+    // 处理items，统一转换成小单位
+    const processedItems = data.items.map(item => {
+      const product = products.find(p => p.id === item.productId);
+      if (!product) {
+        throw new Error(`商品不存在: ${item.productId}`);
+      }
+      
+      const isLargeUnit = item.saleUnit === product.purchaseUnit;
+      const unitRatio = product.unitRatio || 1;
+      
+      // 转换价格：如果是大单位价格，转换成小单位单价
+      const smallUnitPrice = isLargeUnit ? item.unitPrice / unitRatio : item.unitPrice;
+      
+      // 转换成本价
+      const smallUnitCostPrice = isLargeUnit ? item.costPriceSnapshot / unitRatio : item.costPriceSnapshot;
+      
+      // 转换数量：如果是大单位数量，转换成小单位数量
+      const smallUnitQuantity = isLargeUnit ? item.quantity * unitRatio : item.quantity;
+      
+      // 计算小计
+      const subtotal = smallUnitPrice * smallUnitQuantity;
+      
+      return {
+        productId: item.productId,
+        quantity: smallUnitQuantity,
+        unitPrice: smallUnitPrice,
+        subtotal: subtotal,
+        costPriceSnapshot: smallUnitCostPrice,
+        sellingPriceSnapshot: item.sellingPriceSnapshot,
+        unitRatio: unitRatio,
+        saleUnit: item.saleUnit || product.unit,
+        // 保存记忆价格时用的小单位单价
+        memoryPrice: smallUnitPrice,
+      };
+    });
+
     const sale = await db.saleOrder.create({
       data: {
         invoiceNo: generateInvoiceNo(saleSeq),
@@ -134,13 +170,15 @@ export const SaleService = {
         deliveryAddress: data.needDelivery ? data.deliveryAddress : null,
         deliveryFee: data.needDelivery ? (data.deliveryFee || 0) : 0,
         items: {
-          create: data.items.map(item => ({
+          create: processedItems.map(item => ({
             productId: item.productId,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             subtotal: item.subtotal,
             costPriceSnapshot: item.costPriceSnapshot,
             sellingPriceSnapshot: item.sellingPriceSnapshot,
+            unitRatio: item.unitRatio,
+            saleUnit: item.saleUnit,
           })),
         },
         payments: data.payments && data.payments.length > 0 ? {
@@ -185,7 +223,7 @@ export const SaleService = {
       });
     }
 
-    for (const item of data.items) {
+    for (const item of processedItems) {
       await db.product.update({
         where: { id: item.productId },
         data: {
@@ -195,7 +233,7 @@ export const SaleService = {
         },
       });
 
-      // 更新挂靠主体的历史价格
+      // 更新挂靠主体的历史价格（小单位单价）
       if (data.paymentEntityId) {
         await db.entityPrice.upsert({
           where: {
@@ -207,11 +245,32 @@ export const SaleService = {
           create: {
             entityId: data.paymentEntityId,
             productId: item.productId,
-            lastPrice: item.unitPrice,
+            lastPrice: item.memoryPrice,
             transactionCount: 1,
           },
           update: {
-            lastPrice: item.unitPrice,
+            lastPrice: item.memoryPrice,
+            transactionCount: { increment: 1 },
+          },
+        });
+      }
+      // 更新买家（联系人）的历史价格（小单位单价）
+      if (buyerId) {
+        await db.contactPrice.upsert({
+          where: {
+            contactId_productId: {
+              contactId: buyerId,
+              productId: item.productId,
+            },
+          },
+          create: {
+            contactId: buyerId,
+            productId: item.productId,
+            lastPrice: item.memoryPrice,
+            transactionCount: 1,
+          },
+          update: {
+            lastPrice: item.memoryPrice,
             transactionCount: { increment: 1 },
           },
         });
@@ -514,7 +573,31 @@ export const SaleService = {
       entityId = cashEntity?.id || '';
     }
 
+    const productIds = slip.items.map(item => item.productId);
+    const products = await db.product.findMany({
+      where: { id: { in: productIds } },
+    });
+
     const { seq: saleSeq } = await CounterService.getNextSaleSeq();
+
+    const processedItems = slip.items.map(item => {
+      const product = products.find(p => p.id === item.productId);
+      const isLargeUnit = item.saleUnit === product?.purchaseUnit;
+      const unitRatio = item.unitRatio || 1;
+
+      const smallUnitPrice = isLargeUnit ? item.unitPrice / unitRatio : item.unitPrice;
+      const smallUnitQuantity = isLargeUnit ? item.quantity * unitRatio : item.quantity;
+
+      return {
+        productId: item.productId,
+        quantity: smallUnitQuantity,
+        unitPrice: item.unitPrice,
+        subtotal: item.subtotal,
+        unitRatio,
+        saleUnit: item.saleUnit || product?.unit,
+        memoryPrice: smallUnitPrice,
+      };
+    });
 
     const sale = await db.saleOrder.create({
       data: {
@@ -537,13 +620,15 @@ export const SaleService = {
         deliveryFee: slip.needDelivery ? (slip.deliveryFee || 0) : 0,
         status: 'completed',
         items: {
-          create: slip.items.map(item => ({
+          create: processedItems.map(item => ({
             productId: item.productId,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             subtotal: item.subtotal,
             costPriceSnapshot: 0,
             sellingPriceSnapshot: item.unitPrice,
+            unitRatio: item.unitRatio,
+            saleUnit: item.saleUnit,
           })),
         },
         payments: {
@@ -559,7 +644,7 @@ export const SaleService = {
       },
     });
 
-    for (const item of slip.items) {
+    for (const item of processedItems) {
       await db.product.update({
         where: { id: item.productId },
         data: {
@@ -568,6 +653,48 @@ export const SaleService = {
           },
         },
       });
+
+      if (entityId) {
+        await db.entityPrice.upsert({
+          where: {
+            entityId_productId: {
+              entityId: entityId,
+              productId: item.productId,
+            },
+          },
+          create: {
+            entityId: entityId,
+            productId: item.productId,
+            lastPrice: item.memoryPrice,
+            transactionCount: 1,
+          },
+          update: {
+            lastPrice: item.memoryPrice,
+            transactionCount: { increment: 1 },
+          },
+        });
+      }
+
+      if (slip.buyerId) {
+        await db.contactPrice.upsert({
+          where: {
+            contactId_productId: {
+              contactId: slip.buyerId,
+              productId: item.productId,
+            },
+          },
+          create: {
+            contactId: slip.buyerId,
+            productId: item.productId,
+            lastPrice: item.memoryPrice,
+            transactionCount: 1,
+          },
+          update: {
+            lastPrice: item.memoryPrice,
+            transactionCount: { increment: 1 },
+          },
+        });
+      }
     }
 
     await db.saleSlip.update({
@@ -575,7 +702,7 @@ export const SaleService = {
       data: { status: 'completed' },
     });
 
-    return { sale, items: slip.items };
+    return { sale, items: processedItems };
   },
 
   async deleteSaleDraft(slipId: string) {
