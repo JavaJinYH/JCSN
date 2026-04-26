@@ -37,6 +37,7 @@ prisma/dev.db-journal
 # Build files
 build/
 release/
+release-new/
 
 # Electron
 #main.js

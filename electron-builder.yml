@@ -11,6 +11,7 @@ files:
   - package.json
   - node_modules/**/*
   - node_modules/.prisma/**/*
+afterPack: ./electron/afterPack.js
 extraResources:
   - from: prisma
     to: prisma
@@ -22,13 +23,10 @@ extraResources:
     filter:
       - "**/*"
 asar: false
-compression: maximum
+compression: store
 win:
   target:
     - target: nsis
-      arch:
-        - x64
-    - target: portable
       arch:
         - x64
   signingHashAlgorithms:
