@@ -277,6 +277,7 @@ export function SaleNew() {
     const updatedCart = cart.map(item => {
       const historicalPrice = getHistoricalPriceForProduct(item.product.id);
       if (historicalPrice !== undefined) {
+        // 记忆价格本身就是小单位单价，直接用
         return { ...item, unitPrice: historicalPrice };
       }
       return item;
@@ -301,17 +302,22 @@ export function SaleNew() {
       }
     } else {
       const historicalPrice = getHistoricalPriceForProduct(product.id);
+      const unitRatio = product.unitRatio || 1;
+      // 记忆价格本身就是小单位单价，直接用
+      const unitPrice = historicalPrice !== undefined 
+        ? historicalPrice 
+        : product.referencePrice || 0;
       setCart([
         ...cart,
         {
           product,
           quantity: 1,
-          unitPrice: historicalPrice || product.referencePrice || 0,
-          costPrice: (product.lastPurchasePrice || 0) / (product.unitRatio || 1),
+          unitPrice,
+          costPrice: (product.lastPurchasePrice || 0) / unitRatio,
           salePrice: product.referencePrice || 0,
           purchaseUnit: product.purchaseUnit || null,
           saleUnit: product.unit,
-          unitRatio: product.unitRatio || 1,
+          unitRatio,
         },
       ]);
     }
@@ -438,6 +444,8 @@ export function SaleNew() {
           subtotal: item.unitPrice * item.quantity,
           costPriceSnapshot: item.costPrice,
           sellingPriceSnapshot: item.salePrice,
+          unitRatio: item.unitRatio,
+          saleUnit: item.saleUnit,
         })),
         payments: payments.filter(p => p.amount > 0).map(p => ({
           method: p.method,
@@ -502,6 +510,8 @@ export function SaleNew() {
           subtotal: item.unitPrice * item.quantity,
           costPriceSnapshot: item.costPrice,
           sellingPriceSnapshot: item.salePrice,
+          unitRatio: item.unitRatio,
+          saleUnit: item.saleUnit,
         })),
         payments: payments.filter(p => p.amount > 0).map(p => ({
           method: p.method,

@@ -17,8 +17,8 @@ async function clearAll() {
     await prisma.saleReturn.deleteMany();
     await prisma.orderPayment.deleteMany();
     await prisma.supplierPayment.deleteMany();
-    await prisma.purchasePhoto.deleteMany();
     await prisma.saleOrderPhoto.deleteMany();
+    await prisma.purchaseOrderPhoto.deleteMany();
     await prisma.inventoryCheckItem.deleteMany();
     await prisma.inventoryCheck.deleteMany();
     await prisma.contactPhone.deleteMany();

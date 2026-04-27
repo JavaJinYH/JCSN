@@ -105,7 +105,9 @@ export function SaleProductSelect({
                     </span>
                     {historicalPrices.has(product.id) && (
                       <span className="text-xs text-slate-400">
-                        上次: {formatCurrency(historicalPrices.get(product.id)!)}
+                        上次: {product.purchaseUnit 
+                          ? formatCurrency(historicalPrices.get(product.id)! * (product.unitRatio || 1)) + `/${product.purchaseUnit}` 
+                          : formatCurrency(historicalPrices.get(product.id)!) + `/${product.unit}`}
                       </span>
                     )}
                   </div>
