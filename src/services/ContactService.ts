@@ -34,16 +34,26 @@ export interface CustomerScoreResult {
 
 export const ContactService = {
   async createContact(data: CreateContactDTO, phones?: CreatePhoneDTO[]) {
-    const generateCode = () => {
-      const timestamp = Date.now().toString(36).toUpperCase();
-      const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-      return `C${timestamp}${random}`;
+    const generateCode = async () => {
+      let code;
+      let attempts = 0;
+      do {
+        const timestamp = Date.now().toString(36).toUpperCase();
+        const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+        code = `C${timestamp}${random}`;
+        attempts++;
+        if (attempts > 10) {
+          code = `C${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+          break;
+        }
+      } while (await db.contact.findFirst({ where: { code } }));
+      return code;
     };
 
     const contact = await db.contact.create({
       data: {
         name: data.name,
-        code: data.code || generateCode(),
+        code: data.code || await generateCode(),
         contactType: data.contactType || 'customer',
         primaryPhone: data.primaryPhone,
         address: data.address,
@@ -290,11 +300,9 @@ export const ContactService = {
   async ensureWalkInCustomer() {
     let walkInCustomer = await this.findWalkInCustomer();
     if (!walkInCustomer) {
-      const contactCount = await db.contact.count();
       walkInCustomer = await db.contact.create({
         data: {
           name: '散客',
-          code: `C${String(contactCount + 1).padStart(3, '0')}`,
           contactType: 'customer',
           primaryPhone: '00000000000',
           remark: '系统内置散客账户，用于无联系人销售单',
